@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'voyage_programme.dart';
 
 // Couleur définie en dehors de la classe pour éviter les problèmes de const
 const Color srtbBlue = Color(0xFF1A3F7A);
@@ -37,13 +38,19 @@ class _LoginPageState extends State<LoginPage> {
         setState(() => _isLoading = false);
         if (!mounted) return;
 
-        if (data['success'] == true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Bienvenue ${data['employe']['nom']} !'),
-              backgroundColor: Colors.green,
-            ),
-          );
+      if (data['success'] == true) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text('Bienvenue ${data['employe']['prenom']} ${data['employe']['nom']} !'),
+      backgroundColor: Colors.green,
+    ),
+  );
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => VoyageProgrammePage(agent: data['employe']), // ← employe not agent
+    ),
+  );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
