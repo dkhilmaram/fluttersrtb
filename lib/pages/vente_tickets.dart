@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'nouveauticketPage.dart';
+import 'HistoriquePage.dart';
 import 'cloture_voyage.dart';
 import 'segment_page.dart';
 
@@ -269,18 +269,21 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
 
                        
 
+                        
                         // ── Historique ──
-                        _actionButton(
-                          context,
-                          icon: Icons.history,
-                          label: 'Historique',
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text('Historique en cours de développement')),
-                            );
-                          },
-                        ),
+_actionButton(
+  context,
+  icon: Icons.history,
+  label: 'Historique',
+  onTap: !hasId ? null : () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => HistoriquePage(voyage: widget.voyage),
+      ),
+    );
+  },
+),
                         const SizedBox(height: 14),
 
                         // ── Fin du Voyage ──

@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 from database import get_db
+from datetime import datetime
 
 router = APIRouter()
 
@@ -392,4 +393,70 @@ def get_segments(id_vente: int):
             "date_cloture":    str(s["date_cloture"])   if s["date_cloture"]   else None,
         }
         for s in segments
+    ]}
+# ── Enregistrer un ticket vendu ──
+@router.post("/tickets/vendre")
+def vendre_ticket(data: dict):
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO billetterie.ticket_vendu
+            (id_vente, id_segment, point_depart, point_arrivee,
+             type_tarif, quantite, prix_unitaire, montant_total,
+             date_heure, matricule_agent)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            data['id_vente'], data['id_segment'],
+            data['point_depart'], data['point_arrivee'],
+            data['type_tarif'], data['quantite'],
+            data['prix_unitaire'], data['montant_total'],
+            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            data['matricule_agent']
+        ))
+        conn.commit()
+        return {"success": True, "id_ticket": cursor.lastrowid}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        conn.close()
+
+# ── Historique tickets d'un voyage ──
+@router.get("/voyages/{id_vente}/tickets")
+def get_tickets_voyage(id_vente: int):
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT t.id_ticket, t.point_depart, t.point_arrivee,
+               t.type_tarif, t.quantite, t.prix_unitaire,
+               t.montant_total, t.date_heure,
+               t.id_segment,
+               sv.ordre AS segment_ordre,
+               l.nom_ligne,
+               a.nom, a.prenom
+        FROM billetterie.ticket_vendu t
+        JOIN billetterie.segment_voyage sv ON t.id_segment = sv.id_segment
+        JOIN billetterie.vente v ON t.id_vente = v.id_vente
+        JOIN billetterie.ligne l ON v.id_ligne = l.id_ligne
+        LEFT JOIN base_globale.agent a ON t.matricule_agent = a.matricule_agent
+        WHERE t.id_vente = %s
+        ORDER BY t.date_heure DESC
+    """, (id_vente,))
+    rows = cursor.fetchall()
+    conn.close()
+    return {"success": True, "tickets": [
+        {
+            "id_ticket":      r["id_ticket"],
+            "point_depart":   r["point_depart"],
+            "point_arrivee":  r["point_arrivee"],
+            "type_tarif":     r["type_tarif"],
+            "quantite":       r["quantite"],
+            "prix_unitaire":  r["prix_unitaire"],
+            "montant_total":  r["montant_total"],
+            "date_heure":     str(r["date_heure"]),
+            "segment_ordre":  r["segment_ordre"],
+            "nom_ligne":      r["nom_ligne"],
+            "agent":          f"{r['prenom']} {r['nom']}" if r["nom"] else None,
+        }
+        for r in rows
     ]}
