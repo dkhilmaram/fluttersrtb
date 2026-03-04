@@ -50,7 +50,7 @@ def get_ventes_programmees(matricule_agent: int):
                l.nom_ligne, l.point_depart, l.point_arrive,
                a.nom, a.prenom
         FROM billetterie.vente v
-        JOIN billetterie.ligne l ON v.id_ligne = l.id_ligne
+        JOIN base_globale.ligne l ON v.id_ligne = l.id_ligne
         JOIN base_globale.agent a ON v.matricule_agent = a.matricule_agent
         WHERE v.type = 'programmé' AND v.matricule_agent = %s
         ORDER BY v.date_heure DESC
@@ -85,7 +85,7 @@ def get_ventes_agent(matricule_agent: int):
         SELECT v.id_vente, v.id_ligne, v.quantite, v.montant_total, v.date_heure, v.type,
                l.nom_ligne, l.point_depart, l.point_arrive
         FROM billetterie.vente v
-        JOIN billetterie.ligne l ON v.id_ligne = l.id_ligne
+        JOIN base_globale.ligne l ON v.id_ligne = l.id_ligne
         WHERE v.matricule_agent = %s
         ORDER BY v.date_heure
     """, (matricule_agent,))
@@ -127,7 +127,7 @@ def get_prix_ligne(id_ligne: int):
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
         SELECT l.point_depart, l.point_arrive, b.prix
-        FROM billetterie.ligne l
+        FROM base_globale.ligne l
         JOIN billetterie.billet b ON l.id_billet = b.id_billet
         WHERE l.id_ligne = %s
     """, (id_ligne,))
@@ -186,7 +186,6 @@ def get_statut_voyage(id_vente: int):
         return {"success": True, "statut": row["statut"]}
     return {"success": False, "message": "Voyage introuvable"}
 
-# ── Clôturer un voyage + auto-créer le suivant dans 24h ──
 # ── Clôturer un voyage ──
 @router.put("/vente/{id_vente}/cloturer")
 def cloturer_voyage(id_vente: int):
@@ -235,7 +234,7 @@ def get_segment_actif(id_vente: int):
             "success": True,
             "segment": None,
             "prochain": {
-                "id_segment":  prochain["id_segment"],
+                "id_segment":   prochain["id_segment"],
                 "point_depart": prochain["point_depart"],
                 "point_arrivee": prochain["point_arrivee"],
                 "ordre":        prochain["ordre"],
@@ -292,7 +291,6 @@ def ouvrir_segment(id_vente: int):
         if not row:
             return {"success": False, "message": "Aucun segment disponible"}
 
-        from datetime import datetime
         cursor.execute("""
             UPDATE billetterie.segment_voyage
             SET statut = 'actif', date_ouverture = %s
@@ -321,7 +319,6 @@ def cloturer_segment(id_vente: int, id_segment: int):
         if row["statut"] != 'actif':
             return {"success": False, "message": "Ce segment n'est pas actif"}
 
-        from datetime import datetime
         cursor.execute("""
             UPDATE billetterie.segment_voyage
             SET statut = 'cloture', date_cloture = %s
@@ -335,7 +332,6 @@ def cloturer_segment(id_vente: int, id_segment: int):
         conn.close()
 
 # ── Tous les segments d'un voyage ──
-# Joins vente to get id_ligne/matricule_agent since segment_voyage doesn't have those columns
 @router.get("/voyages/{id_vente}/segments")
 def get_segments(id_vente: int):
     conn = get_db()
@@ -349,7 +345,7 @@ def get_segments(id_vente: int):
                a.nom, a.prenom
         FROM billetterie.segment_voyage sv
         JOIN  billetterie.vente v  ON sv.id_vente = v.id_vente
-        JOIN  billetterie.ligne l  ON v.id_ligne  = l.id_ligne
+        JOIN  base_globale.ligne l  ON v.id_ligne  = l.id_ligne
         LEFT JOIN base_globale.agent a ON v.matricule_agent = a.matricule_agent
         WHERE sv.id_vente = %s
         ORDER BY sv.ordre
@@ -372,6 +368,7 @@ def get_segments(id_vente: int):
         }
         for s in segments
     ]}
+
 # ── Enregistrer un ticket vendu ──
 @router.post("/tickets/vendre")
 def vendre_ticket(data: dict):
@@ -415,7 +412,7 @@ def get_tickets_voyage(id_vente: int):
         FROM billetterie.ticket_vendu t
         JOIN billetterie.segment_voyage sv ON t.id_segment = sv.id_segment
         JOIN billetterie.vente v ON t.id_vente = v.id_vente
-        JOIN billetterie.ligne l ON v.id_ligne = l.id_ligne
+        JOIN base_globale.ligne l ON v.id_ligne = l.id_ligne
         LEFT JOIN base_globale.agent a ON t.matricule_agent = a.matricule_agent
         WHERE t.id_vente = %s
         ORDER BY t.date_heure DESC

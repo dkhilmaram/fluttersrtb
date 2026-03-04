@@ -10,12 +10,21 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
-def verify_password(password: str, hashed: str) -> bool:
-    return pwd_context.verify(password, hashed)
+def verify_password(plain: str, stored: str) -> bool:
+    """
+    Accepts both hashed (new) and plain-text (legacy) passwords.
+    First tries bcrypt verify; if the stored value isn't a valid
+    bcrypt hash it falls back to a plain-text comparison.
+    """
+    try:
+        return pwd_context.verify(plain, stored)
+    except Exception:
+        # Legacy plain-text fallback
+        return plain == stored
 
 # ── Modèles ──
 class LoginData(BaseModel):
-    matricule: str        # ← keep as str, frontend doesn't change
+    matricule: str
     mot_de_passe: str
 
 class AgentData(BaseModel):
@@ -34,18 +43,19 @@ class AgentUpdateData(BaseModel):
 def login(data: LoginData):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
+    # Fetch by matricule only — password check is done in Python
     cursor.execute(
-        "SELECT * FROM agent WHERE matricule_agent=%s AND mot_de_passe=%s",
-        (data.matricule, data.mot_de_passe)
+        "SELECT * FROM agent WHERE matricule_agent=%s",
+        (data.matricule,)
     )
     agent = cursor.fetchone()
     conn.close()
 
-    if agent:
+    if agent and verify_password(data.mot_de_passe, agent["mot_de_passe"]):
         return {"success": True, "employe": {
             "id": agent["matricule_agent"],
             "matricule": str(agent["matricule_agent"]),
-            "matricule_agent": agent["matricule_agent"],  # ← added so VoyageProgrammePage finds it
+            "matricule_agent": agent["matricule_agent"],
             "nom": agent["nom"],
             "prenom": agent["prenom"]
         }}
@@ -57,9 +67,10 @@ def ajouter_agent(data: AgentData):
     conn = get_db()
     cursor = conn.cursor()
     try:
+        hashed = hash_password(data.mot_de_passe)   # ← hash before storing
         cursor.execute(
             "INSERT INTO agent (matricule_agent, mot_de_passe, nom, prenom) VALUES (%s, %s, %s, %s)",
-            (data.matricule, data.mot_de_passe, data.nom, data.prenom)
+            (data.matricule, hashed, data.nom, data.prenom)
         )
         conn.commit()
         return {"success": True}
@@ -99,9 +110,10 @@ def modifier_agent(matricule: str, data: AgentUpdateData):
     cursor = conn.cursor()
     try:
         if data.mot_de_passe:
+            hashed = hash_password(data.mot_de_passe)   # ← hash before storing
             cursor.execute(
                 "UPDATE agent SET nom=%s, prenom=%s, mot_de_passe=%s WHERE matricule_agent=%s",
-                (data.nom, data.prenom, data.mot_de_passe, matricule)
+                (data.nom, data.prenom, hashed, matricule)
             )
         else:
             cursor.execute(
