@@ -44,13 +44,22 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success']) {
+          final rawArrets = List<String>.from(data['arrets']);
           setState(() {
-            arrets = List<String>.from(data['arrets']);
-            prixMap = Map<String, int>.from(
+            // Store arrets in the direction matching this voyage
+            arrets    = _orderArretsByDirection(rawArrets);
+            prixMap   = Map<String, int>.from(
               (data['prix_map'] as Map).map((k, v) => MapEntry(k.toString(), v as int)),
             );
             tarifTypes = List<Map<String, dynamic>>.from(data['tarif_types']);
-            isLoading = false;
+            isLoading  = false;
+
+            // ── Default type tarif = "Normal" ──
+            final normalTarif = tarifTypes.firstWhere(
+              (t) => (t['type_tarif'] as String).toLowerCase() == 'normal',
+              orElse: () => tarifTypes.isNotEmpty ? tarifTypes.first : {},
+            );
+            if (normalTarif.isNotEmpty) typeTarif = normalTarif['type_tarif'] as String;
           });
         }
       }
@@ -62,9 +71,35 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
     }
   }
 
+  /// Returns arrets ordered to match the voyage direction.
+  /// If the voyage depart matches the last stop of the API list, we reverse it.
+  List<String> _orderArretsByDirection(List<String> raw) {
+    if (raw.isEmpty) return raw;
+    final voyageDepart = widget.voyage['depart'] as String? ?? '';
+    // If the voyage's departure is the LAST item in the raw list, reverse
+    if (raw.last.trim().toLowerCase() == voyageDepart.trim().toLowerCase()) {
+      return raw.reversed.toList();
+    }
+    return raw;
+  }
+
+  /// Stops available as departure: all stops except the last one
+  List<String> get _departureArrets => arrets.isEmpty ? [] : arrets.sublist(0, arrets.length - 1);
+
+  /// Stops available as arrival: only stops that come AFTER the selected departure
+  List<String> get _arrivalArrets {
+    if (pointDepart == null) return [];
+    final idx = arrets.indexOf(pointDepart!);
+    if (idx == -1 || idx >= arrets.length - 1) return [];
+    return arrets.sublist(idx + 1);
+  }
+
+  // ── Prix helpers ──
+
   int? get _prixNormal {
     if (pointDepart == null || pointArrivee == null || pointDepart == pointArrivee) return null;
-    return prixMap['$pointDepart|$pointArrivee'];
+    // Try both directions in prixMap
+    return prixMap['$pointDepart|$pointArrivee'] ?? prixMap['$pointArrivee|$pointDepart'];
   }
 
   int? get _prixUnitaire {
@@ -130,7 +165,7 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
           montantTotal  += prixT;
           pointDepart  = null;
           pointArrivee = null;
-          typeTarif    = null;
+          // keep typeTarif at current selection (don't reset)
           quantite     = 1;
         });
         _showSnack(
@@ -220,32 +255,61 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
 
   @override
   Widget build(BuildContext context) {
+    final voyageDepart  = widget.voyage['depart']  ?? '?';
+    final voyageArrivee = widget.voyage['arrivee'] ?? '?';
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SingleChildScrollView(
         child: Column(children: [
+
+          // ── Header ──
           Container(
             width: double.infinity, color: srtbBlue,
             padding: const EdgeInsets.symmetric(vertical: 60, horizontal: 24),
             child: Column(children: [
-              Align(alignment: Alignment.topLeft,
-                child: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
-                    onPressed: () => Navigator.pop(context))),
-              Container(width: 120, height: 120,
+              Align(
+                alignment: Alignment.topLeft,
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+              Container(
+                width: 120, height: 120,
                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
                 padding: const EdgeInsets.all(8),
                 child: Image.asset('assets/images/logo_srtb.png', fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const Icon(Icons.directions_bus, size: 80, color: srtbBlue))),
+                    errorBuilder: (_, __, ___) => const Icon(Icons.directions_bus, size: 80, color: srtbBlue)),
+              ),
               const SizedBox(height: 16),
-              const Text('S R T B', style: TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.bold, letterSpacing: 6)),
+              const Text('S R T B',
+                  style: TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.bold, letterSpacing: 6)),
               const SizedBox(height: 8),
-              const Text('Nouveau Ticket', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+              const Text('Nouveau Ticket',
+                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
               const SizedBox(height: 4),
-              Text('${widget.voyage['depart']} -> ${widget.voyage['arrivee']}',
-                  style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              // ── Voyage direction badge ──
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white.withOpacity(0.4)),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.route, color: Colors.white70, size: 14),
+                  const SizedBox(width: 6),
+                  Text(
+                    '$voyageDepart  →  $voyageArrivee',
+                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                ]),
+              ),
             ]),
           ),
 
+          // ── Counter bar ──
           Container(
             color: const Color(0xFFE8F1FF),
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
@@ -259,21 +323,32 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
           Padding(
             padding: const EdgeInsets.all(24),
             child: isLoading
-                ? const Center(child: Padding(padding: EdgeInsets.only(top: 60),
-                    child: CircularProgressIndicator(color: srtbBlue)))
+                ? const Center(child: Padding(
+                    padding: EdgeInsets.only(top: 60),
+                    child: CircularProgressIndicator(color: srtbBlue),
+                  ))
                 : errorMessage != null
                     ? Center(child: Text(errorMessage!, style: const TextStyle(color: Colors.red)))
                     : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-                        const Text('Type de tarif', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: srtbBlue)),
+                        // ── Type de tarif ──
+                        const Text('Type de tarif',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: srtbBlue)),
                         const SizedBox(height: 10),
-                        Wrap(spacing: 8, runSpacing: 8,
+                        Wrap(
+                          spacing: 8, runSpacing: 8,
                           children: tarifTypes.map((t) {
-                            final type = t['type_tarif'] as String;
-                            final pct  = t['pourcentage'] as int;
+                            final type     = t['type_tarif'] as String;
+                            final pct      = t['pourcentage'] as int;
                             final discount = 100 - pct;
                             final isSelected = typeTarif == type;
-                            final color = pct == 0 ? Colors.green : pct <= 25 ? Colors.purple : pct <= 50 ? Colors.orange : srtbBlue;
+                            final color = pct == 0
+                                ? Colors.green
+                                : pct <= 25
+                                    ? Colors.purple
+                                    : pct <= 50
+                                        ? Colors.orange
+                                        : srtbBlue;
                             return GestureDetector(
                               onTap: () => setState(() => typeTarif = type),
                               child: Container(
@@ -285,11 +360,14 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                                   border: Border.all(color: color, width: 1.5),
                                 ),
                                 child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                  Icon(pct == 0 ? Icons.card_giftcard : discount > 0 ? Icons.discount : Icons.person,
-                                      color: isSelected ? Colors.white : color, size: 18),
+                                  Icon(
+                                    pct == 0 ? Icons.card_giftcard : discount > 0 ? Icons.discount : Icons.person,
+                                    color: isSelected ? Colors.white : color, size: 18,
+                                  ),
                                   const SizedBox(width: 6),
                                   Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                    Text(type, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold,
+                                    Text(type, style: TextStyle(
+                                        fontSize: 13, fontWeight: FontWeight.bold,
                                         color: isSelected ? Colors.white : color)),
                                     if (discount > 0 && pct > 0)
                                       Text('-$discount%', style: TextStyle(fontSize: 11,
@@ -305,80 +383,127 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                         ),
 
                         const SizedBox(height: 24),
-                        const Text('Point de montee', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: srtbBlue)),
+
+                        // ── Point de montée ──
+                        const Text('Point de montee',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: srtbBlue)),
                         const SizedBox(height: 8),
-                        _dropdownCard(icon: Icons.location_on, hint: 'Choisir le point de montee',
-                          value: pointDepart, items: arrets,
-                          onChanged: (v) => setState(() { pointDepart = v; if (pointArrivee == v) pointArrivee = null; })),
+                        _dropdownCard(
+                          icon: Icons.location_on,
+                          hint: 'Choisir le point de montee',
+                          value: pointDepart,
+                          items: _departureArrets,
+                          onChanged: (v) => setState(() {
+                            pointDepart  = v;
+                            pointArrivee = null; // reset arrival when departure changes
+                          }),
+                        ),
 
                         const SizedBox(height: 16),
-                        const Text('Point de descente', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: srtbBlue)),
+
+                        // ── Point de descente ──
+                        // Only shows stops that come AFTER the selected departure in this direction
+                        const Text('Point de descente',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: srtbBlue)),
                         const SizedBox(height: 8),
-                        _dropdownCard(icon: Icons.flag, hint: 'Choisir le point de descente',
-                          value: pointArrivee, items: arrets,
-                          onChanged: (v) => setState(() => pointArrivee = v)),
+                        _dropdownCard(
+                          icon: Icons.flag,
+                          hint: pointDepart == null
+                              ? 'Choisir d\'abord le point de montee'
+                              : 'Choisir le point de descente',
+                          value: pointArrivee,
+                          items: _arrivalArrets,
+                          onChanged: (v) => setState(() => pointArrivee = v),
+                        ),
 
                         const SizedBox(height: 24),
-                        const Text('Nombre de tickets', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: srtbBlue)),
+
+                        // ── Quantité ──
+                        const Text('Nombre de tickets',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: srtbBlue)),
                         const SizedBox(height: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          decoration: BoxDecoration(color: const Color(0xFFE8F1FF),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: srtbBlue.withOpacity(0.4), width: 1.5)),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8F1FF),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: srtbBlue.withOpacity(0.4), width: 1.5),
+                          ),
                           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                             GestureDetector(
                               onTap: quantite > 1 ? () => setState(() => quantite--) : null,
-                              child: Container(width: 40, height: 40,
-                                decoration: BoxDecoration(color: quantite > 1 ? srtbBlue : Colors.grey.shade300,
-                                    borderRadius: BorderRadius.circular(10)),
-                                child: const Icon(Icons.remove, color: Colors.white, size: 20)),
+                              child: Container(
+                                width: 40, height: 40,
+                                decoration: BoxDecoration(
+                                  color: quantite > 1 ? srtbBlue : Colors.grey.shade300,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.remove, color: Colors.white, size: 20),
+                              ),
                             ),
                             Column(children: [
-                              Text('$quantite', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: srtbBlue)),
-                              Text(quantite == 1 ? 'ticket' : 'tickets', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                              Text('$quantite', style: const TextStyle(
+                                  fontSize: 28, fontWeight: FontWeight.bold, color: srtbBlue)),
+                              Text(quantite == 1 ? 'ticket' : 'tickets',
+                                  style: const TextStyle(color: Colors.grey, fontSize: 12)),
                             ]),
                             GestureDetector(
                               onTap: () => setState(() => quantite++),
-                              child: Container(width: 40, height: 40,
+                              child: Container(
+                                width: 40, height: 40,
                                 decoration: BoxDecoration(color: srtbBlue, borderRadius: BorderRadius.circular(10)),
-                                child: const Icon(Icons.add, color: Colors.white, size: 20)),
+                                child: const Icon(Icons.add, color: Colors.white, size: 20),
+                              ),
                             ),
                           ]),
                         ),
 
                         const SizedBox(height: 24),
 
+                        // ── Prix recap ──
                         if (_prixUnitaire != null)
                           Container(
-                            width: double.infinity, padding: const EdgeInsets.all(16),
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
                             margin: const EdgeInsets.only(bottom: 24),
-                            decoration: BoxDecoration(color: const Color(0xFFE8F1FF),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: srtbBlue.withOpacity(0.4), width: 1.5)),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE8F1FF),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: srtbBlue.withOpacity(0.4), width: 1.5),
+                            ),
                             child: Column(children: [
                               if (_discountPct > 0) ...[
                                 Text('${_prixNormal! * quantite} millimes',
-                                    style: const TextStyle(fontSize: 14, color: Colors.grey, decoration: TextDecoration.lineThrough)),
+                                    style: const TextStyle(
+                                        fontSize: 14, color: Colors.grey,
+                                        decoration: TextDecoration.lineThrough)),
                                 const SizedBox(height: 4),
                               ],
                               if (quantite > 1)
-                                Text('$quantite x $_prixUnitaire ms', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                                Text('$quantite x $_prixUnitaire ms',
+                                    style: const TextStyle(color: Colors.grey, fontSize: 13)),
                               const SizedBox(height: 4),
                               Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                Icon(Icons.monetization_on, color: _prixTotal == 0 ? Colors.green : srtbBlue, size: 28),
+                                Icon(Icons.monetization_on,
+                                    color: _prixTotal == 0 ? Colors.green : srtbBlue, size: 28),
                                 const SizedBox(width: 10),
-                                Text(_prixTotal == 0 ? 'GRATUIT' : '${_prixTotal} millimes',
-                                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold,
-                                        color: _prixTotal == 0 ? Colors.green : srtbBlue)),
+                                Text(
+                                  _prixTotal == 0 ? 'GRATUIT' : '${_prixTotal} millimes',
+                                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold,
+                                      color: _prixTotal == 0 ? Colors.green : srtbBlue),
+                                ),
                               ]),
                               if (_discountPct > 0)
-                                Padding(padding: const EdgeInsets.only(top: 6),
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 6),
                                   child: Text('Reduction de $_discountPct% appliquee',
-                                      style: const TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.w600))),
+                                      style: const TextStyle(
+                                          color: Colors.orange, fontSize: 12, fontWeight: FontWeight.w600)),
+                                ),
                             ]),
                           ),
 
+                        // ── Validate button ──
                         SizedBox(
                           width: double.infinity, height: 56,
                           child: ElevatedButton.icon(
@@ -388,12 +513,21 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                                     child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                                 : const Icon(Icons.confirmation_number, size: 22),
                             label: Text(
-                              isSaving ? 'Enregistrement...' : quantite > 1 ? 'Valider $quantite tickets' : 'Valider le ticket',
+                              isSaving
+                                  ? 'Enregistrement...'
+                                  : quantite > 1
+                                      ? 'Valider $quantite tickets'
+                                      : 'Valider le ticket',
                               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                             ),
-                            style: ElevatedButton.styleFrom(backgroundColor: srtbBlue, foregroundColor: Colors.white,
-                                disabledBackgroundColor: Colors.grey.shade300, disabledForegroundColor: Colors.grey.shade500,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 4),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: srtbBlue,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: Colors.grey.shade300,
+                              disabledForegroundColor: Colors.grey.shade500,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 4,
+                            ),
                           ),
                         ),
                       ]),
@@ -412,22 +546,39 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
     ]);
   }
 
-  Widget _dropdownCard({required IconData icon, required String hint, required String? value,
-      required List<String> items, required void Function(String?) onChanged}) {
+  Widget _dropdownCard({
+    required IconData icon,
+    required String hint,
+    required String? value,
+    required List<String> items,
+    required void Function(String?) onChanged,
+  }) {
+    // If current value is not in the available items list, treat as null
+    final effectiveValue = (value != null && items.contains(value)) ? value : null;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      decoration: BoxDecoration(color: const Color(0xFFE8F1FF), borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: srtbBlue.withOpacity(0.4), width: 1.5)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8F1FF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: srtbBlue.withOpacity(0.4), width: 1.5),
+      ),
       child: Row(children: [
         Icon(icon, color: srtbBlue),
         const SizedBox(width: 12),
-        Expanded(child: DropdownButtonHideUnderline(
-          child: DropdownButton<String>(value: value,
-            hint: Text(hint, style: const TextStyle(color: Colors.grey)), isExpanded: true,
-            items: items.map((a) => DropdownMenuItem(value: a,
-                child: Text(a, style: const TextStyle(color: srtbBlue)))).toList(),
-            onChanged: onChanged),
-        )),
+        Expanded(
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: effectiveValue,
+              hint: Text(hint, style: const TextStyle(color: Colors.grey)),
+              isExpanded: true,
+              items: items.map((a) => DropdownMenuItem(
+                value: a,
+                child: Text(a, style: const TextStyle(color: srtbBlue)),
+              )).toList(),
+              onChanged: onChanged,
+            ),
+          ),
+        ),
       ]),
     );
   }

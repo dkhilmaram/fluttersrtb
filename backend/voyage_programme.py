@@ -187,6 +187,7 @@ def get_statut_voyage(id_vente: int):
     return {"success": False, "message": "Voyage introuvable"}
 
 # ── Clôturer un voyage + auto-créer le suivant dans 24h ──
+# ── Clôturer un voyage ──
 @router.put("/vente/{id_vente}/cloturer")
 def cloturer_voyage(id_vente: int):
     conn = get_db()
@@ -199,35 +200,12 @@ def cloturer_voyage(id_vente: int):
         if vente["statut"] == 'cloture':
             return {"success": False, "message": "Voyage déjà clôturé"}
 
-        cursor.execute("UPDATE billetterie.vente SET statut = 'cloture' WHERE id_vente = %s", (id_vente,))
-
-        from datetime import datetime, timedelta
-        next_date = (datetime.now() + timedelta(hours=24)).strftime('%Y-%m-%d %H:%M:%S')
-
-        cursor.execute("""
-            INSERT INTO billetterie.vente 
-            (id_ligne, id_appareil, id_billet, quantite, montant_total, 
-             date_heure, matricule_agent, code_agence, type, statut)
-            VALUES (%s, %s, %s, 0, 0, %s, %s, %s, 'programmé', 'actif')
-        """, (vente["id_ligne"], vente["id_appareil"], vente["id_billet"],
-              next_date, vente["matricule_agent"], vente["code_agence"]))
-        new_id = cursor.lastrowid
-
-        cursor.execute("""
-            SELECT nom_arret FROM billetterie.arret
-            WHERE id_ligne = %s ORDER BY ordre
-        """, (vente["id_ligne"],))
-        arrets = cursor.fetchall()
-
-        for i in range(len(arrets) - 1):
-            cursor.execute("""
-                INSERT INTO billetterie.segment_voyage 
-                (id_vente, point_depart, point_arrivee, ordre, statut)
-                VALUES (%s, %s, %s, %s, 'en_attente')
-            """, (new_id, arrets[i]["nom_arret"], arrets[i+1]["nom_arret"], i+1))
-
+        cursor.execute(
+            "UPDATE billetterie.vente SET statut = 'cloture' WHERE id_vente = %s",
+            (id_vente,)
+        )
         conn.commit()
-        return {"success": True, "message": "Voyage clôturé", "nouveau_voyage_id": new_id}
+        return {"success": True, "message": "Voyage clôturé"}
     except Exception as e:
         return {"success": False, "error": str(e)}
     finally:

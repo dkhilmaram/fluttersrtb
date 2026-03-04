@@ -90,27 +90,48 @@ class _SegmentPageState extends State<SegmentPage> {
   }
 
   Future<void> _cloturerSegmentActif() async {
-    if (segmentActif == null) return;
-    setState(() => isActioning = true);
-    try {
-      final id    = widget.voyage['id'] as int?;
-      final idSeg = segmentActif!['id_segment'] as int?;
-      final response = await http.put(
-        Uri.parse('http://127.0.0.1:8000/billetterie/voyages/$id/segments/$idSeg/cloturer'),
+  if (segmentActif == null) return;
+  setState(() => isActioning = true);
+  try {
+    final id    = widget.voyage['id'] as int?;
+    final idSeg = segmentActif!['id_segment'] as int?;
+
+    // ── Step 1: clôturer le segment actif ──
+    final response = await http.put(
+      Uri.parse('http://127.0.0.1:8000/billetterie/voyages/$id/segments/$idSeg/cloturer'),
+      headers: {'Content-Type': 'application/json'},
+    );
+    final data = jsonDecode(response.body);
+    if (data['success'] != true) {
+      _showSnack(data['message'] ?? 'Erreur', Colors.red);
+      setState(() => isActioning = false);
+      return;
+    }
+
+    _showSnack('Segment clôturé ✓', Colors.orange);
+
+    // ── Step 2: refresh to detect the next segment ──
+    await _fetchAll();
+
+    // ── Step 3: if next segment exists, open it automatically ──
+    if (!tousClotures && prochainSegment != null) {
+      final openResponse = await http.put(
+        Uri.parse('http://127.0.0.1:8000/billetterie/voyages/$id/segment/ouvrir'),
         headers: {'Content-Type': 'application/json'},
       );
-      final data = jsonDecode(response.body);
-      if (data['success'] == true) {
-        _showSnack('Segment clôturé ✓', Colors.orange);
+      final openData = jsonDecode(openResponse.body);
+      if (openData['success'] == true) {
+        _showSnack('Segment suivant ouvert ✓', Colors.green);
         await _fetchAll();
       } else {
-        _showSnack(data['message'] ?? 'Erreur', Colors.red);
+        _showSnack(openData['message'] ?? 'Erreur ouverture', Colors.red);
       }
-    } catch (e) {
-      _showSnack('Erreur : $e', Colors.red);
     }
-    setState(() => isActioning = false);
+  } catch (e) {
+    _showSnack('Erreur : $e', Colors.red);
   }
+  setState(() => isActioning = false);
+}
 
   void _showSnack(String msg, Color color) {
     ScaffoldMessenger.of(context)
@@ -143,9 +164,9 @@ class _SegmentPageState extends State<SegmentPage> {
           const Text('Clôturer ?', style: TextStyle(color: srtbBlue, fontSize: 18)),
         ]),
         content: Text(
-          '${segmentActif!['point_depart']} → ${segmentActif!['point_arrivee']}\n\nConfirmez-vous la clôture de ce segment ?',
-          style: const TextStyle(fontSize: 14, height: 1.5),
-        ),
+  '${segmentActif!['point_depart']} → ${segmentActif!['point_arrivee']}\n\nLe segment suivant s\'ouvrira automatiquement.',
+  style: const TextStyle(fontSize: 14, height: 1.5),
+),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -317,7 +338,7 @@ class _SegmentPageState extends State<SegmentPage> {
                                   // ── BIG Clôturer button ──
                                   _BigPrimaryButton(
                                     label: 'Clôturer ce segment',
-                                    sublabel: 'Terminer et passer au suivant',
+                                   sublabel: 'Le suivant s\'ouvrira automatiquement',
                                     icon: Icons.check_circle_outline_rounded,
                                     color: const Color(0xFFEA580C),
                                     onPressed: _confirmCloture,

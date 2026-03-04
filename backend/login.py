@@ -30,7 +30,6 @@ class AgentUpdateData(BaseModel):
     mot_de_passe: str = ""
 
 # ── Login ──
-# ── Login ──
 @router.post("/login")
 def login(data: LoginData):
     conn = get_db()
