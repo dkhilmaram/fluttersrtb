@@ -50,8 +50,8 @@ def get_ventes_programmees(matricule_agent: int):
                l.nom_ligne, l.point_depart, l.point_arrive,
                a.nom, a.prenom
         FROM billetterie.vente v
-        JOIN base_globale.ligne l ON v.id_ligne = l.id_ligne
-        JOIN base_globale.agent a ON v.matricule_agent = a.matricule_agent
+        JOIN base_global.ligne l ON v.id_ligne = l.id_ligne
+        JOIN base_global.agent a ON v.matricule_agent = a.matricule_agent
         WHERE v.type = 'programmé' AND v.matricule_agent = %s
         ORDER BY v.date_heure DESC
     """, (matricule_agent,))
@@ -85,7 +85,7 @@ def get_ventes_agent(matricule_agent: int):
         SELECT v.id_vente, v.id_ligne, v.quantite, v.montant_total, v.date_heure, v.type,
                l.nom_ligne, l.point_depart, l.point_arrive
         FROM billetterie.vente v
-        JOIN base_globale.ligne l ON v.id_ligne = l.id_ligne
+        JOIN base_global.ligne l ON v.id_ligne = l.id_ligne
         WHERE v.matricule_agent = %s
         ORDER BY v.date_heure
     """, (matricule_agent,))
@@ -127,7 +127,7 @@ def get_prix_ligne(id_ligne: int):
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
         SELECT l.point_depart, l.point_arrive, b.prix
-        FROM base_globale.ligne l
+        FROM base_global.ligne l
         JOIN billetterie.billet b ON l.id_billet = b.id_billet
         WHERE l.id_ligne = %s
     """, (id_ligne,))
@@ -345,8 +345,8 @@ def get_segments(id_vente: int):
                a.nom, a.prenom
         FROM billetterie.segment_voyage sv
         JOIN  billetterie.vente v  ON sv.id_vente = v.id_vente
-        JOIN  base_globale.ligne l  ON v.id_ligne  = l.id_ligne
-        LEFT JOIN base_globale.agent a ON v.matricule_agent = a.matricule_agent
+        JOIN  base_global.ligne l  ON v.id_ligne  = l.id_ligne
+        LEFT JOIN base_global.agent a ON v.matricule_agent = a.matricule_agent
         WHERE sv.id_vente = %s
         ORDER BY sv.ordre
     """, (id_vente,))
@@ -412,8 +412,8 @@ def get_tickets_voyage(id_vente: int):
         FROM billetterie.ticket_vendu t
         JOIN billetterie.segment_voyage sv ON t.id_segment = sv.id_segment
         JOIN billetterie.vente v ON t.id_vente = v.id_vente
-        JOIN base_globale.ligne l ON v.id_ligne = l.id_ligne
-        LEFT JOIN base_globale.agent a ON t.matricule_agent = a.matricule_agent
+        JOIN base_global.ligne l ON v.id_ligne = l.id_ligne
+        LEFT JOIN base_global.agent a ON t.matricule_agent = a.matricule_agent
         WHERE t.id_vente = %s
         ORDER BY t.date_heure DESC
     """, (id_vente,))
