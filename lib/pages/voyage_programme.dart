@@ -3,40 +3,25 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'vente_tickets.dart';
 
-const Color
-srtbBlue = Color(
-  0xFF1A3F7A,
-);
+// ── Color palette (same as NouveauTicketPage) ──
+const Color navyDark  = Color(0xFF0D1B3E);
+const Color navyMid   = Color(0xFF1A3260);
+const Color navyLight = Color(0xFF1E4080);
+const Color gold      = Color(0xFFD4A017);
+const Color goldLight = Color(0xFFF5C842);
+const Color surface   = Color(0xFFF2F5FB);
+const Color cardWhite = Color(0xFFFFFFFF);
 
-class VoyageProgrammePage
-    extends
-        StatefulWidget {
-  final Map<
-    String,
-    dynamic
-  >
-  agent;
-  const VoyageProgrammePage({
-    super.key,
-    required this.agent,
-  });
+class VoyageProgrammePage extends StatefulWidget {
+  final Map<String, dynamic> agent;
+  const VoyageProgrammePage({super.key, required this.agent});
 
   @override
-  State<
-    VoyageProgrammePage
-  >
-  createState() => _VoyageProgrammePageState();
+  State<VoyageProgrammePage> createState() => _VoyageProgrammePageState();
 }
 
-class _VoyageProgrammePageState
-    extends
-        State<
-          VoyageProgrammePage
-        > {
-  List<
-    dynamic
-  >
-  voyages = [];
+class _VoyageProgrammePageState extends State<VoyageProgrammePage> {
+  List<dynamic> voyages = [];
   bool isLoading = true;
   String? errorMessage;
 
@@ -46,499 +31,456 @@ class _VoyageProgrammePageState
     _fetchVoyages();
   }
 
-  Future<
-    void
-  >
-  _fetchVoyages() async {
-    setState(
-      () {
-        isLoading = true;
-        errorMessage = null;
-      },
-    );
-
+  Future<void> _fetchVoyages() async {
+    setState(() { isLoading = true; errorMessage = null; });
     try {
       final matricule =
-          widget.agent['matricule_agent'] ??
-          widget.agent['matricule'];
-
+          widget.agent['matricule_agent'] ?? widget.agent['matricule'];
       final response = await http.get(
-        Uri.parse(
-          'http://127.0.0.1:8000/billetterie/ventes/programmees/$matricule',
-        ),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        Uri.parse('http://127.0.0.1:8000/billetterie/ventes/programmees/$matricule'),
+        headers: {'Content-Type': 'application/json'},
       );
-
-      if (response.statusCode ==
-          200) {
-        final data = jsonDecode(
-          response.body,
-        );
-        setState(
-          () {
-            voyages = data['voyages'];
-            isLoading = false;
-          },
-        );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() { voyages = data['voyages']; isLoading = false; });
       } else {
-        setState(
-          () {
-            errorMessage = 'Erreur serveur : ${response.statusCode}';
-            isLoading = false;
-          },
-        );
-      }
-    } catch (
-      _
-    ) {
-      setState(
-        () {
-          errorMessage = 'Impossible de se connecter au serveur';
+        setState(() {
+          errorMessage = 'Erreur serveur : ${response.statusCode}';
           isLoading = false;
-        },
-      );
+        });
+      }
+    } catch (_) {
+      setState(() {
+        errorMessage = 'Impossible de se connecter au serveur';
+        isLoading = false;
+      });
     }
   }
 
-  String
-  _getDate(
-    String? dh,
-  ) =>
-      dh
-          ?.split(
-            ' ',
-          )
-          .first ??
-      '';
-  String
-  _getTime(
-    String? dh,
-  ) =>
-      dh !=
-              null &&
-          dh
-                  .split(
-                    ' ',
-                  )
-                  .length >
-              1
-      ? dh
-            .split(
-              ' ',
-            )[1]
-            .substring(
-              0,
-              5,
-            )
-      : '';
+  String _getDate(String? dh) => dh?.split(' ').first ?? '';
+  String _getTime(String? dh) =>
+      dh != null && dh.split(' ').length > 1
+          ? dh.split(' ')[1].substring(0, 5)
+          : '';
 
-  /// Index of the first voyage that is NOT clôturé — this is the only one
-  /// the agent can actively work on. All voyages before it are clôturé (history),
-  /// all voyages after it are locked (waiting).
   int get _activeIndex {
-    for (
-      int i = 0;
-      i <
-          voyages.length;
-      i++
-    ) {
-      if (voyages[i]['statut'] !=
-          'cloture')
-        return i;
+    for (int i = 0; i < voyages.length; i++) {
+      if (voyages[i]['statut'] != 'cloture') return i;
     }
-    return -1; // all done
+    return -1;
   }
 
-  void _openVoyage(
-    Map<
-      String,
-      dynamic
-    >
-    voyage,
-  ) {
+  void _openVoyage(Map<String, dynamic> voyage) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder:
-            (
-              _,
-            ) => VenteTicketsPage(
-              voyage: voyage,
-            ),
-      ),
-    ).then(
-      (
-        _,
-      ) => _fetchVoyages(),
-    );
+      MaterialPageRoute(builder: (_) => VenteTicketsPage(voyage: voyage)),
+    ).then((_) => _fetchVoyages());
   }
 
   void _showLockedSnack() {
-    ScaffoldMessenger.of(
-        context,
-      )
+    ScaffoldMessenger.of(context)
       ..removeCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: const Text(
-            'Terminez le voyage en cours avant d\'accéder à celui-ci',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
+      ..showSnackBar(SnackBar(
+        content: Row(children: [
+          const Icon(Icons.lock_outline, color: Colors.white, size: 17),
+          const SizedBox(width: 8),
+          const Flexible(
+            child: Text(
+              'Terminez le voyage en cours avant d\'accéder à celui-ci',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
             ),
           ),
-          backgroundColor: Colors.orange.shade700,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(
-              12,
-            ),
-          ),
-          duration: const Duration(
-            seconds: 3,
-          ),
-        ),
-      );
+        ]),
+        backgroundColor: Colors.orange.shade700,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(14),
+        duration: const Duration(seconds: 3),
+      ));
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     final activeIdx = _activeIndex;
+    final agent = widget.agent;
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: surface,
       body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // ── Header ──
-            Container(
-              width: double.infinity,
-              color: srtbBlue,
-              padding: const EdgeInsets.symmetric(
-                vertical: 60,
-                horizontal: 24,
-              ),
-              child: Column(
-                children: [
-                  Align(
-                    alignment: Alignment.topLeft,
-                    child: IconButton(
-                      icon: const Icon(
-                        Icons.arrow_back,
-                        color: Colors.white,
-                        size: 28,
-                      ),
-                      onPressed: () => Navigator.pop(
-                        context,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(
-                        12,
-                      ),
-                    ),
-                    padding: const EdgeInsets.all(
-                      8,
-                    ),
-                    child: Image.asset(
-                      'assets/images/logo_srtb.png',
-                      fit: BoxFit.contain,
-                      errorBuilder:
-                          (
-                            _,
-                            __,
-                            ___,
-                          ) => const Icon(
-                            Icons.directions_bus,
-                            size: 80,
-                            color: srtbBlue,
-                          ),
-                    ),
-                  ),
-                  const SizedBox(
-                    height: 16,
-                  ),
-                  const Text(
-                    'S R T B',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 34,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 6,
-                    ),
-                  ),
-                  const SizedBox(
-                    height: 8,
-                  ),
-                  const Text(
-                    'Voyages Programmés',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(
-                    height: 4,
-                  ),
-                  Text(
-                    '${widget.agent['prenom']} ${widget.agent['nom']}',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
+        child: Column(children: [
+
+          // ── Header (same gradient as NouveauTicketPage) ──
+          Container(
+            width: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [navyDark, navyMid, navyLight],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
             ),
-
-            // ── Content ──
-            Padding(
-              padding: const EdgeInsets.all(
-                24,
+            padding: const EdgeInsets.fromLTRB(20, 52, 20, 28),
+            child: Column(children: [
+              Align(
+                alignment: Alignment.topLeft,
+                child: GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.arrow_back_ios_new,
+                        color: Colors.white, size: 17),
+                  ),
+                ),
               ),
-              child: isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        color: srtbBlue,
-                      ),
-                    )
-                  : errorMessage !=
-                        null
-                  ? Center(
-                      child: Text(
-                        errorMessage!,
-                      ),
-                    )
-                  : voyages.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'Aucun voyage programmé disponible',
-                      ),
-                    )
-                  : Column(
-                      children: List.generate(
-                        voyages.length,
-                        (
-                          i,
-                        ) {
-                          final v =
-                              voyages[i]
-                                  as Map<
-                                    String,
-                                    dynamic
-                                  >;
-                          final isCloture =
-                              v['statut'] ==
-                              'cloture';
-                          final isActive =
-                              i ==
-                              activeIdx;
-                          final isLocked =
-                              !isCloture &&
-                              !isActive; // waiting in queue
-                          final dh =
-                              v['date_heure']
-                                  as String?;
+              const SizedBox(height: 18),
+              Container(
+                width: 72, height: 72,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 16, offset: const Offset(0, 6),
+                  )],
+                ),
+                padding: const EdgeInsets.all(8),
+                child: Image.asset('assets/images/logo_srtb.png',
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) =>
+                        const Icon(Icons.directions_bus, size: 44, color: navyMid)),
+              ),
+              const SizedBox(height: 12),
+              const Text('S R T B',
+                  style: TextStyle(color: Colors.white, fontSize: 20,
+                      fontWeight: FontWeight.bold, letterSpacing: 7)),
+              const SizedBox(height: 4),
+              Text('Voyages Programmés',
+                  style: TextStyle(color: Colors.white.withOpacity(0.7),
+                      fontSize: 12, letterSpacing: 1.5)),
+              const SizedBox(height: 10),
+              // ── Agent badge ──
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(color: Colors.white.withOpacity(0.2)),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Container(
+                    width: 7, height: 7,
+                    decoration: const BoxDecoration(
+                        color: goldLight, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${agent['prenom']} ${agent['nom']}',
+                    style: const TextStyle(
+                        color: Colors.white, fontSize: 13,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ]),
+              ),
+            ]),
+          ),
 
-                          // ── Visual state colours ──
-                          final Color borderColor;
-                          final Color bgColor;
-                          final Color iconColor;
-                          final Color textColor;
+          // ── Stats bar ──
+          if (!isLoading && errorMessage == null && voyages.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+              decoration: BoxDecoration(
+                color: cardWhite,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [BoxShadow(
+                  color: navyMid.withOpacity(0.07),
+                  blurRadius: 16, offset: const Offset(0, 3),
+                )],
+              ),
+              child: Row(children: [
+                _statTile(Icons.directions_bus_outlined, 'Total',
+                    '${voyages.length}', navyMid),
+                Container(width: 1, height: 36, color: Colors.grey.shade100),
+                _statTile(Icons.check_circle_outline, 'Clôturés',
+                    '${voyages.where((v) => v['statut'] == 'cloture').length}',
+                    Colors.grey),
+                Container(width: 1, height: 36, color: Colors.grey.shade100),
+                _statTile(Icons.play_circle_outline, 'En cours',
+                    activeIdx >= 0 ? '1' : '0',
+                    const Color(0xFF16A34A)),
+              ]),
+            ),
 
-                          if (isCloture) {
-                            borderColor = Colors.grey.shade400;
-                            bgColor = Colors.grey.shade100;
-                            iconColor = Colors.grey;
-                            textColor = Colors.grey;
-                          } else if (isActive) {
-                            borderColor = srtbBlue;
-                            bgColor = const Color(
-                              0xFFE8F1FF,
-                            );
-                            iconColor = srtbBlue;
-                            textColor = srtbBlue;
-                          } else {
-                            // locked
-                            borderColor = Colors.orange.shade200;
-                            bgColor = Colors.orange.shade50;
-                            iconColor = Colors.orange.shade400;
-                            textColor = Colors.orange.shade700;
-                          }
+          // ── Content ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 40),
+            child: isLoading
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.only(top: 60),
+                      child: CircularProgressIndicator(color: navyMid),
+                    ))
+                : errorMessage != null
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 60),
+                          child: Column(children: [
+                            Icon(Icons.wifi_off_rounded,
+                                size: 48, color: Colors.grey.shade300),
+                            const SizedBox(height: 12),
+                            Text(errorMessage!,
+                                style: TextStyle(color: Colors.grey.shade500)),
+                            const SizedBox(height: 16),
+                            TextButton.icon(
+                              onPressed: _fetchVoyages,
+                              icon: const Icon(Icons.refresh, size: 16),
+                              label: const Text('Réessayer'),
+                              style: TextButton.styleFrom(foregroundColor: navyMid),
+                            ),
+                          ]),
+                        ))
+                    : voyages.isEmpty
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 60),
+                              child: Column(children: [
+                                Icon(Icons.directions_bus_outlined,
+                                    size: 52, color: Colors.grey.shade200),
+                                const SizedBox(height: 14),
+                                Text('Aucun voyage programmé',
+                                    style: TextStyle(
+                                        color: Colors.grey.shade400,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600)),
+                              ]),
+                            ))
+                        : Column(
+                            children: List.generate(voyages.length, (i) {
+                              final v = voyages[i] as Map<String, dynamic>;
+                              final isCloture = v['statut'] == 'cloture';
+                              final isActive  = i == activeIdx;
+                              final isLocked  = !isCloture && !isActive;
+                              final dh = v['date_heure'] as String?;
 
-                          return GestureDetector(
-                            onTap: () {
-                              if (isLocked) {
-                                _showLockedSnack();
+                              // ── colours per state ──
+                              final Color accent;
+                              final Color bgColor;
+                              final Color borderColor;
+
+                              if (isCloture) {
+                                accent      = Colors.grey;
+                                bgColor     = Colors.grey.shade50;
+                                borderColor = Colors.grey.shade200;
+                              } else if (isActive) {
+                                accent      = navyMid;
+                                bgColor     = const Color(0xFFEBF0FF);
+                                borderColor = navyLight;
                               } else {
-                                // clôturé → opens history (handled inside VenteTicketsPage)
-                                // active  → opens normally
-                                _openVoyage(
-                                  v,
-                                );
+                                accent      = Colors.orange.shade700;
+                                bgColor     = Colors.orange.shade50;
+                                borderColor = Colors.orange.shade200;
                               }
-                            },
-                            child: Container(
-                              margin: const EdgeInsets.only(
-                                bottom: 14,
-                              ),
-                              padding: const EdgeInsets.all(
-                                18,
-                              ),
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: borderColor,
-                                  width: 1.5,
-                                ),
-                                borderRadius: BorderRadius.circular(
-                                  14,
-                                ),
-                                color: bgColor,
-                              ),
-                              child: Row(
-                                children: [
-                                  // ── Bus / lock icon ──
-                                  Stack(
-                                    clipBehavior: Clip.none,
-                                    children: [
-                                      Icon(
-                                        Icons.directions_bus,
-                                        color: iconColor,
-                                        size: 32,
+
+                              return GestureDetector(
+                                onTap: () => isLocked
+                                    ? _showLockedSnack()
+                                    : _openVoyage(v),
+                                child: Container(
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  decoration: BoxDecoration(
+                                    color: bgColor,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                        color: borderColor, width: 1.5),
+                                    boxShadow: [BoxShadow(
+                                      color: accent.withOpacity(
+                                          isCloture ? 0.04 : 0.08),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 3),
+                                    )],
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Row(children: [
+
+                                      // ── Icon circle ──
+                                      Stack(clipBehavior: Clip.none, children: [
+                                        Container(
+                                          width: 46, height: 46,
+                                          decoration: BoxDecoration(
+                                            color: accent.withOpacity(0.12),
+                                            borderRadius: BorderRadius.circular(13),
+                                          ),
+                                          child: Icon(Icons.directions_bus,
+                                              color: accent, size: 24),
+                                        ),
+                                        if (isLocked)
+                                          Positioned(
+                                            right: -4, bottom: -4,
+                                            child: Container(
+                                              width: 18, height: 18,
+                                              decoration: BoxDecoration(
+                                                color: Colors.orange.shade700,
+                                                shape: BoxShape.circle,
+                                                border: Border.all(
+                                                    color: cardWhite, width: 1.5),
+                                              ),
+                                              child: const Icon(Icons.lock,
+                                                  color: Colors.white, size: 10),
+                                            ),
+                                          ),
+                                        if (isActive)
+                                          Positioned(
+                                            right: -4, bottom: -4,
+                                            child: Container(
+                                              width: 18, height: 18,
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF16A34A),
+                                                shape: BoxShape.circle,
+                                                border: Border.all(
+                                                    color: cardWhite, width: 1.5),
+                                              ),
+                                              child: const Icon(Icons.play_arrow,
+                                                  color: Colors.white, size: 11),
+                                            ),
+                                          ),
+                                      ]),
+
+                                      const SizedBox(width: 14),
+
+                                      // ── Route info ──
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            // Route pill (same style as NouveauTicketPage header)
+                                            Row(children: [
+                                              Container(
+                                                width: 6, height: 6,
+                                                decoration: BoxDecoration(
+                                                  color: isActive
+                                                      ? goldLight
+                                                      : accent.withOpacity(0.6),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Flexible(
+                                                child: Text(
+                                                  '${v['depart']} → ${v['arrivee']}',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 14,
+                                                    color: isCloture
+                                                        ? Colors.grey.shade400
+                                                        : navyDark,
+                                                  ),
+                                                ),
+                                              ),
+                                            ]),
+                                            const SizedBox(height: 5),
+                                            Row(children: [
+                                              Icon(Icons.access_time_rounded,
+                                                  size: 11,
+                                                  color: Colors.grey.shade400),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                '${_getTime(dh)}  ·  ${_getDate(dh)}',
+                                                style: TextStyle(
+                                                  color: Colors.grey.shade400,
+                                                  fontSize: 11,
+                                                ),
+                                              ),
+                                            ]),
+                                            if (isLocked) ...[
+                                              const SizedBox(height: 5),
+                                              Text(
+                                                'En attente du voyage précédent',
+                                                style: TextStyle(
+                                                  color: Colors.orange.shade600,
+                                                  fontSize: 11,
+                                                  fontStyle: FontStyle.italic,
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
                                       ),
-                                      if (isLocked)
-                                        Positioned(
-                                          right: -6,
-                                          bottom: -4,
-                                          child: Container(
-                                            padding: const EdgeInsets.all(
-                                              2,
-                                            ),
+
+                                      const SizedBox(width: 10),
+
+                                      // ── Status badge ──
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.end,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 10, vertical: 4),
                                             decoration: BoxDecoration(
-                                              color: Colors.orange.shade700,
-                                              shape: BoxShape.circle,
+                                              color: accent.withOpacity(0.12),
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
+                                              border: Border.all(
+                                                  color: accent.withOpacity(0.25),
+                                                  width: 1),
                                             ),
-                                            child: const Icon(
-                                              Icons.lock,
-                                              color: Colors.white,
-                                              size: 10,
+                                            child: Text(
+                                              isCloture
+                                                  ? 'Clôturé'
+                                                  : isActive
+                                                      ? 'Actif'
+                                                      : 'En attente',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                                color: accent,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                    ],
-                                  ),
-
-                                  const SizedBox(
-                                    width: 14,
-                                  ),
-
-                                  // ── Route + time ──
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          '${v['depart']} → ${v['arrivee']}',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            color: textColor,
-                                          ),
-                                        ),
-                                        const SizedBox(
-                                          height: 4,
-                                        ),
-                                        Text(
-                                          '${_getTime(dh)} | ${_getDate(dh)}',
-                                          style: const TextStyle(
-                                            color: Colors.grey,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                        if (isLocked) ...[
-                                          const SizedBox(
-                                            height: 4,
-                                          ),
-                                          Text(
-                                            'En attente du voyage précédent',
-                                            style: TextStyle(
-                                              color: Colors.orange.shade600,
-                                              fontSize: 11,
-                                              fontStyle: FontStyle.italic,
-                                            ),
+                                          const SizedBox(height: 6),
+                                          Icon(
+                                            isLocked
+                                                ? Icons.lock_outline
+                                                : isCloture
+                                                    ? Icons.history
+                                                    : Icons.chevron_right,
+                                            color: accent.withOpacity(0.5),
+                                            size: 18,
                                           ),
                                         ],
-                                      ],
-                                    ),
+                                      ),
+                                    ]),
                                   ),
-
-                                  // ── Status badge ──
-                                  Column(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: isCloture
-                                              ? Colors.red.shade100
-                                              : isActive
-                                              ? Colors.green.shade100
-                                              : Colors.orange.shade100,
-                                          borderRadius: BorderRadius.circular(
-                                            20,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          isCloture
-                                              ? 'Clôturé'
-                                              : isActive
-                                              ? 'Actif'
-                                              : 'En attente',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            color: isCloture
-                                                ? Colors.red.shade700
-                                                : isActive
-                                                ? Colors.green.shade700
-                                                : Colors.orange.shade700,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(
-                                        height: 4,
-                                      ),
-                                      Icon(
-                                        isLocked
-                                            ? Icons.lock_outline
-                                            : Icons.chevron_right,
-                                        color: isLocked
-                                            ? Colors.orange.shade400
-                                            : Colors.grey,
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-            ),
-          ],
-        ),
+                                ),
+                              );
+                            }),
+                          ),
+          ),
+        ]),
       ),
+    );
+  }
+
+  Widget _statTile(IconData icon, String label, String value, Color color) {
+    return Expanded(
+      child: Column(children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(height: 4),
+        Text(value,
+            style: TextStyle(
+                fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+        Text(label,
+            style: TextStyle(
+                fontSize: 10,
+                color: Colors.grey.shade400,
+                letterSpacing: 0.3)),
+      ]),
     );
   }
 }
