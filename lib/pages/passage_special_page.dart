@@ -39,13 +39,13 @@ const List<Map<String, dynamic>> kCategories = [
 class PassageSpecialPage extends StatefulWidget {
   final Map<String, dynamic> voyage;
   final Map<String, dynamic> segment;
-  final bool embeddedMode; // ← ADDED
+  final bool embeddedMode;
 
   const PassageSpecialPage({
     super.key,
     required this.voyage,
     required this.segment,
-    this.embeddedMode = false, // ← ADDED
+    this.embeddedMode = false,
   });
 
   @override
@@ -82,7 +82,7 @@ class _PassageSpecialPageState extends State<PassageSpecialPage>
       backgroundColor: surface,
       body: Column(children: [
 
-        // ── Hide header in embedded mode ── ← CHANGED
+        // ── Hide header in embedded mode ──
         if (!widget.embeddedMode)
           _buildHeader(dep, arr),
 
@@ -242,6 +242,13 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
 
   bool get _canSave => selectedCategory != null;
 
+  // ── FIX 1: Build the correct type_tarif string ──
+  // Institutions get "Gratuit — <label>", Agent/Abonnement keep their own label.
+  String _buildTypeTarif(String category) {
+    if (category == 'Agent' || category == 'Abonnement') return category;
+    return 'Gratuit — $category';
+  }
+
   Future<void> _enregistrer() async {
     if (!_canSave) return;
     setState(() => isSaving = true);
@@ -251,7 +258,7 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
       'id_segment':      widget.segment['id_segment'] as int? ?? 0,
       'point_depart':    widget.segment['point_depart']  ?? widget.voyage['depart']  ?? '',
       'point_arrivee':   widget.segment['point_arrivee'] ?? widget.voyage['arrivee'] ?? '',
-      'type_tarif':      selectedCategory,
+      'type_tarif':      _buildTypeTarif(selectedCategory!), // ← FIX 1 applied here
       'quantite':        quantite,
       'prix_unitaire':   0,
       'montant_total':   0,
@@ -308,7 +315,8 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
         _SectionLabel('Institution / Agence', Icons.domain_rounded),
         const SizedBox(height: 10),
         _CategoryGrid(
-          items: kCategories.where((c) => !(c['label'] as String).startsWith(RegExp(r'Abonnement|Agent'))).toList(),
+          items: kCategories.where((c) =>
+              !(c['label'] as String).startsWith(RegExp(r'Abonnement|Agent'))).toList(),
           selected: selectedCategory,
           onSelect: (v) => setState(() => selectedCategory = v),
         ),
@@ -321,7 +329,8 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
         Row(children: [
           Expanded(
             child: _CategoryButton(
-              item: {'label': 'Abonnement', 'icon': Icons.confirmation_number_rounded, 'color': Color(0xFF0369A1)},
+              item: {'label': 'Abonnement', 'icon': Icons.confirmation_number_rounded,
+                     'color': const Color(0xFF0369A1)},
               selected: selectedCategory == 'Abonnement',
               onTap: () => setState(() => selectedCategory = 'Abonnement'),
             ),
@@ -329,7 +338,8 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
           const SizedBox(width: 10),
           Expanded(
             child: _CategoryButton(
-              item: {'label': 'Agent', 'icon': Icons.badge_rounded, 'color': Color(0xFF7C3AED)},
+              item: {'label': 'Agent', 'icon': Icons.badge_rounded,
+                     'color': const Color(0xFF7C3AED)},
               selected: selectedCategory == 'Agent',
               onTap: () => setState(() => selectedCategory = 'Agent'),
             ),
@@ -363,7 +373,7 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
               const Icon(Icons.info_outline_rounded, color: navyMid, size: 16),
               const SizedBox(width: 10),
               Expanded(child: Text(
-                '$quantite personne(s) · $selectedCategory',
+                '$quantite personne(s) · ${_buildTypeTarif(selectedCategory!)}',
                 style: const TextStyle(fontSize: 12, color: navyMid,
                     fontWeight: FontWeight.w600),
               )),
@@ -543,6 +553,10 @@ class _ScanTabState extends State<_ScanTab> {
     });
   }
 
+  // ── FIX 1 (scan): use a consistent "Scan <mode> — <type>" format ──
+  String _buildScanTypeTarif(String mode, String type) =>
+      'Scan $mode — $type';
+
   Future<void> _validerEtVendre() async {
     if (scannedData == null) return;
     setState(() => isSaving = true);
@@ -552,7 +566,10 @@ class _ScanTabState extends State<_ScanTab> {
       'id_segment':      widget.segment['id_segment'] as int? ?? 0,
       'point_depart':    widget.segment['point_depart']  ?? widget.voyage['depart']  ?? '',
       'point_arrivee':   widget.segment['point_arrivee'] ?? widget.voyage['arrivee'] ?? '',
-      'type_tarif':      'Scan ${scannedData!['mode']} — ${scannedData!['type']}',
+      'type_tarif':      _buildScanTypeTarif(
+                             scannedData!['mode'] as String,
+                             scannedData!['type'] as String,
+                         ),
       'quantite':        1,
       'prix_unitaire':   0,
       'montant_total':   0,
