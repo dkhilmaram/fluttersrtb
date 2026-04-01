@@ -2,20 +2,54 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from database import get_db
 from datetime import datetime
+from enum import Enum
 
 router = APIRouter()
 
-# ── Modèle ──
+# ── Modèles ──
 class VenteData(BaseModel):
     matricule_agent: int
     id_ligne: int
     id_appareil: int
     id_billet: int
-    quantite: int
-    montant_total: int
     date_heure: str
     code_agence: int
     type: str
+
+class TypePassageSpecial(str, Enum):
+    """Types of special passages (institutions, NFC, subscriptions)"""
+    GRATUIT_ARMEE = "Gratuit — Armée nationale"
+    GRATUIT_POLICE = "Gratuit — Police nationale"
+    GRATUIT_GARDE = "Gratuit — Garde nationale"
+    GRATUIT_MINISTERE = "Gratuit — Ministère"
+    GRATUIT_PREFECTURE = "Gratuit — Préfecture"
+    GRATUIT_MAIRIE = "Gratuit — Mairie"
+    GRATUIT_HOPITAL = "Gratuit — Hôpital"
+    GRATUIT_ECOLE = "Gratuit — École"
+    
+    TITRE_NFC = "Titre NFC"
+    TITRE_BARCODE = "Titre Code-barres"
+    
+    ABONNEMENT_MENSUEL = "Abonnement Mensuel"
+    ABONNEMENT_TRIMESTRIEL = "Abonnement Trimestriel"
+    ABONNEMENT_ANNUEL = "Abonnement Annuel"
+    ABONNEMENT_ETUDIANT = "Abonnement Étudiant"
+    ABONNEMENT_RETRAITE = "Abonnement Retraité"
+
+class TicketSpecialData(BaseModel):
+    """Enhanced ticket data with metadata support"""
+    id_vente: int
+    id_segment: int = 0
+    point_depart: str
+    point_arrivee: str
+    type_tarif: str  # Use enum or free string
+    quantite: int = 1
+    prix_unitaire: float = 0.0  # Always 0 for special passages
+    montant_total: float = 0.0  # Always 0 for special passages
+    matricule_agent: int
+    # Optional metadata fields
+    metadata: dict = None  # e.g. {"institution": "Armée", "card_id": "ABC123"}
+
 
 # ── Ajouter une vente ──
 @router.post("/ajouter_vente")
@@ -25,11 +59,10 @@ def ajouter_vente(data: VenteData):
     try:
         cursor.execute(
             """INSERT INTO billetterie.vente 
-               (id_ligne, id_appareil, id_billet, quantite, montant_total, date_heure, matricule_agent, code_agence, type)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+               (id_ligne, id_appareil, id_billet, date_heure, matricule_agent, code_agence, type)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
             (data.id_ligne, data.id_appareil, data.id_billet,
-             data.quantite, data.montant_total, data.date_heure,
-             data.matricule_agent, data.code_agence, data.type)
+             data.date_heure, data.matricule_agent, data.code_agence, data.type)
         )
         conn.commit()
         return {"success": True}
@@ -45,7 +78,7 @@ def get_ventes_programmees(matricule_agent: int):
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
         SELECT v.id_vente, v.id_ligne, v.id_appareil, v.id_billet,
-               v.quantite, v.montant_total, v.date_heure, v.type, v.statut,
+               v.date_heure, v.type, v.statut,
                v.matricule_agent, v.code_agence,
                l.nom_ligne, l.point_depart, l.point_arrive,
                a.nom, a.prenom
@@ -69,8 +102,6 @@ def get_ventes_programmees(matricule_agent: int):
             "arrivee": v["point_arrive"],
             "nom_ligne": v["nom_ligne"],
             "date_heure": str(v["date_heure"]),
-            "quantite": v["quantite"],
-            "montant_total": v["montant_total"],
             "statut": v["statut"]
         }
         for v in ventes
@@ -82,7 +113,7 @@ def get_ventes_agent(matricule_agent: int):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
-        SELECT v.id_vente, v.id_ligne, v.quantite, v.montant_total, v.date_heure, v.type,
+        SELECT v.id_vente, v.id_ligne, v.date_heure, v.type,
                l.nom_ligne, l.point_depart, l.point_arrive
         FROM billetterie.vente v
         JOIN base_global.ligne l ON v.id_ligne = l.id_ligne
@@ -98,8 +129,6 @@ def get_ventes_agent(matricule_agent: int):
             "depart": v["point_depart"],
             "arrivee": v["point_arrive"],
             "nom_ligne": v["nom_ligne"],
-            "quantite": v["quantite"],
-            "montant_total": v["montant_total"],
             "date_heure": str(v["date_heure"]),
             "type": v["type"]
         }
@@ -234,10 +263,10 @@ def get_segment_actif(id_vente: int):
             "success": True,
             "segment": None,
             "prochain": {
-                "id_segment":   prochain["id_segment"],
-                "point_depart": prochain["point_depart"],
+                "id_segment":    prochain["id_segment"],
+                "point_depart":  prochain["point_depart"],
                 "point_arrivee": prochain["point_arrivee"],
-                "ordre":        prochain["ordre"],
+                "ordre":         prochain["ordre"],
             } if prochain else None,
             "tous_clotures": prochain is None
         }
@@ -253,18 +282,18 @@ def get_segment_actif(id_vente: int):
     return {
         "success": True,
         "segment": {
-            "id_segment":    segment["id_segment"],
-            "point_depart":  segment["point_depart"],
-            "point_arrivee": segment["point_arrivee"],
-            "ordre":         segment["ordre"],
-            "statut":        segment["statut"],
+            "id_segment":     segment["id_segment"],
+            "point_depart":   segment["point_depart"],
+            "point_arrivee":  segment["point_arrivee"],
+            "ordre":          segment["ordre"],
+            "statut":         segment["statut"],
             "date_ouverture": str(segment["date_ouverture"]) if segment["date_ouverture"] else None,
         },
         "prochain": {
-            "id_segment":   prochain["id_segment"],
-            "point_depart": prochain["point_depart"],
+            "id_segment":    prochain["id_segment"],
+            "point_depart":  prochain["point_depart"],
             "point_arrivee": prochain["point_arrivee"],
-            "ordre":        prochain["ordre"],
+            "ordre":         prochain["ordre"],
         } if prochain else None,
         "tous_clotures": False
     }
@@ -369,12 +398,62 @@ def get_segments(id_vente: int):
         for s in segments
     ]}
 
-# ── Enregistrer un ticket vendu ──
+# ── ENHANCED: Enregistrer un ticket vendu (with special passage validation) ──
 @router.post("/tickets/vendre")
 def vendre_ticket(data: dict):
     conn = get_db()
     cursor = conn.cursor()
     try:
+        id_vente = data.get('id_vente')
+        id_segment = data.get('id_segment', 0)
+        type_tarif = data.get('type_tarif', '')
+        prix_unitaire = float(data.get('prix_unitaire', 0))
+        montant_total = float(data.get('montant_total', 0))
+        quantite = int(data.get('quantite', 1))
+        
+        # ── Validation for free passages (Gratuit/NFC/Abonnement) ──
+        is_special_passage = (
+            'Gratuit' in type_tarif or 
+            'NFC' in type_tarif or 
+            'Barcode' in type_tarif or
+            'Abonnement' in type_tarif
+        )
+        
+        if is_special_passage:
+            # Enforce zero pricing for special passages
+            if prix_unitaire != 0 or montant_total != 0:
+                return {
+                    "success": False, 
+                    "error": f"Passage spécial '{type_tarif}' doit avoir prix=0"
+                }
+        
+        # ── Handle id_segment=0 (offline tickets saved without active segment) ──
+        if id_segment == 0:
+            # Try to find the currently active segment for this voyage
+            cursor.execute("""
+                SELECT id_segment FROM billetterie.segment_voyage
+                WHERE id_vente = %s AND statut = 'actif'
+                ORDER BY ordre LIMIT 1
+            """, (id_vente,))
+            row = cursor.fetchone()
+            
+            if row:
+                id_segment = row[0]
+            else:
+                # Fall back to the last segment (either closed or last in sequence)
+                cursor.execute("""
+                    SELECT id_segment FROM billetterie.segment_voyage
+                    WHERE id_vente = %s
+                    ORDER BY ordre DESC LIMIT 1
+                """, (id_vente,))
+                row = cursor.fetchone()
+                if row:
+                    id_segment = row[0]
+                else:
+                    # No segments found — return error
+                    return {"success": False, "error": "Aucun segment trouvé pour ce voyage"}
+        
+        # ── Insert the ticket with resolved id_segment ──
         cursor.execute("""
             INSERT INTO billetterie.ticket_vendu
             (id_vente, id_segment, point_depart, point_arrivee,
@@ -382,21 +461,33 @@ def vendre_ticket(data: dict):
              date_heure, matricule_agent)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
-            data['id_vente'], data['id_segment'],
-            data['point_depart'], data['point_arrivee'],
-            data['type_tarif'], data['quantite'],
-            data['prix_unitaire'], data['montant_total'],
+            id_vente, 
+            id_segment,
+            data.get('point_depart'),
+            data.get('point_arrivee'),
+            type_tarif,
+            quantite,
+            prix_unitaire,
+            montant_total,
             datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            data['matricule_agent']
+            data.get('matricule_agent')
         ))
         conn.commit()
-        return {"success": True, "id_ticket": cursor.lastrowid}
+        
+        last_id = cursor.lastrowid
+        passage_type = "Gratuit" if is_special_passage else "Ticket normal"
+        print(f'✅ {passage_type} saved: id={last_id}, voyage={id_vente}, '
+              f'segment={id_segment}, type={type_tarif}, qty={quantite}')
+        
+        return {"success": True, "id_ticket": last_id}
     except Exception as e:
+        print(f'❌ Ticket save error: {e}')
         return {"success": False, "error": str(e)}
     finally:
         conn.close()
 
-# ── Historique tickets d'un voyage ──
+
+# ── CLEAN: Historique tickets d'un voyage (LEFT JOINs to handle NULL segment) ──
 @router.get("/voyages/{id_vente}/tickets")
 def get_tickets_voyage(id_vente: int):
     conn = get_db()
@@ -410,9 +501,9 @@ def get_tickets_voyage(id_vente: int):
                l.nom_ligne,
                a.nom, a.prenom
         FROM billetterie.ticket_vendu t
-        JOIN billetterie.segment_voyage sv ON t.id_segment = sv.id_segment
-        JOIN billetterie.vente v ON t.id_vente = v.id_vente
-        JOIN base_global.ligne l ON v.id_ligne = l.id_ligne
+        LEFT JOIN billetterie.segment_voyage sv ON t.id_segment = sv.id_segment
+        LEFT JOIN billetterie.vente v ON t.id_vente = v.id_vente
+        LEFT JOIN base_global.ligne l ON v.id_ligne = l.id_ligne
         LEFT JOIN base_global.agent a ON t.matricule_agent = a.matricule_agent
         WHERE t.id_vente = %s
         ORDER BY t.date_heure DESC
@@ -432,6 +523,42 @@ def get_tickets_voyage(id_vente: int):
             "segment_ordre":  r["segment_ordre"],
             "nom_ligne":      r["nom_ligne"],
             "agent":          f"{r['prenom']} {r['nom']}" if r["nom"] else None,
+            # Added field to help identify special passages
+            "is_free":        r["prix_unitaire"] == 0,
         }
         for r in rows
     ]}
+
+# ── NEW: Get statistics on special passages (Gratuit/NFC/Abonnement) ──
+@router.get("/voyages/{id_vente}/passages-speciaux/stats")
+def get_special_passages_stats(id_vente: int):
+    """Statistics on free/special passages for a voyage"""
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    cursor.execute("""
+        SELECT 
+            type_tarif,
+            COUNT(*) as count,
+            SUM(quantite) as total_quantite
+        FROM billetterie.ticket_vendu
+        WHERE id_vente = %s AND prix_unitaire = 0
+        GROUP BY type_tarif
+        ORDER BY count DESC
+    """, (id_vente,))
+    
+    stats = cursor.fetchall()
+    conn.close()
+    
+    return {
+        "success": True,
+        "id_vente": id_vente,
+        "passages_speciaux": [
+            {
+                "type": s["type_tarif"],
+                "nombre": s["count"],
+                "quantite_totale": s["total_quantite"]
+            }
+            for s in stats
+        ]
+    }

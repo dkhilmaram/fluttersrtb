@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../local_database.dart';
+import 'ticketing_page.dart'; // ← replaces direct imports of ticket/passage pages
 
-import 'nouveauticketPage.dart';
-
-// ── Color palette (matches NouveauTicketPage) ──
 const Color
 navyDark = Color(
   0xFF0D1B3E,
@@ -74,6 +73,7 @@ class _SegmentPageState
   bool tousClotures = false;
   bool isLoading = true;
   bool isActioning = false;
+  bool isOffline = false;
   String? errorMessage;
 
   late AnimationController _animCtrl;
@@ -124,6 +124,8 @@ class _SegmentPageState
     super.dispose();
   }
 
+  // ── Data fetching ───────────────────────────────────────────────────────────
+
   Future<
     void
   >
@@ -134,6 +136,7 @@ class _SegmentPageState
         errorMessage = null;
       },
     );
+
     try {
       final id =
           widget.voyage['id']
@@ -144,83 +147,204 @@ class _SegmentPageState
           "ID du voyage manquant",
         );
 
-      final r1 = await http.get(
-        Uri.parse(
-          'http://127.0.0.1:8000/billetterie/voyages/$id/segment/actif',
-        ),
-      );
-      final r2 = await http.get(
-        Uri.parse(
-          'http://127.0.0.1:8000/billetterie/voyages/$id/segments',
-        ),
-      );
+      final r1 = await http
+          .get(
+            Uri.parse(
+              'http://127.0.0.1:8000/billetterie/voyages/$id/segment/actif',
+            ),
+          )
+          .timeout(
+            const Duration(
+              seconds: 6,
+            ),
+          );
+      final r2 = await http
+          .get(
+            Uri.parse(
+              'http://127.0.0.1:8000/billetterie/voyages/$id/segments',
+            ),
+          )
+          .timeout(
+            const Duration(
+              seconds: 6,
+            ),
+          );
+
+      dynamic d1, d2;
+      try {
+        d1 = jsonDecode(
+          r1.body,
+        );
+      } catch (
+        _
+      ) {}
+      try {
+        d2 = jsonDecode(
+          r2.body,
+        );
+      } catch (
+        _
+      ) {}
 
       if (r1.statusCode ==
               200 &&
           r2.statusCode ==
               200) {
-        final d1 = jsonDecode(
-          r1.body,
-        );
-        final d2 = jsonDecode(
-          r2.body,
-        );
-        if (d1['success'] ==
-            true) {
+        if (d1 !=
+                null &&
+            d1['success'] ==
+                true) {
+          final actif =
+              d1['segment']
+                  as Map<
+                    String,
+                    dynamic
+                  >?;
+          final prochain =
+              d1['prochain']
+                  as Map<
+                    String,
+                    dynamic
+                  >?;
+          final segments =
+              d2?['segments']
+                  as List<
+                    dynamic
+                  >? ??
+              [];
+          final clotures =
+              d1['tous_clotures'] ==
+              true;
+
+          await LocalDatabase.saveSegments(
+            idVente: id,
+            actifSegment: actif,
+            prochainSegment: prochain,
+            tousSecteurs: segments,
+            tousClotures: clotures,
+          );
+
           setState(
             () {
-              secteurActif =
-                  d1['segment']
-                      as Map<
-                        String,
-                        dynamic
-                      >?;
-              prochainSecteur =
-                  d1['prochain']
-                      as Map<
-                        String,
-                        dynamic
-                      >?;
-              tousClotures =
-                  d1['tous_clotures'] ==
-                  true;
-              tousSecteurs =
-                  d2['segments']
-                      as List<
-                        dynamic
-                      >? ??
-                  [];
+              secteurActif = actif;
+              prochainSecteur = prochain;
+              tousSecteurs = segments;
+              tousClotures = clotures;
+              isOffline = false;
               isLoading = false;
             },
           );
           _animCtrl.forward(
             from: 0,
           );
-        } else {
-          throw Exception(
-            d1['message'] ??
-                'Erreur inconnue',
-          );
+          return;
         }
-      } else {
-        throw Exception(
-          'Erreur serveur (${r1.statusCode})',
+      }
+
+      String errorMsg = 'Erreur serveur (${r1.statusCode})';
+      if (d1 !=
+              null &&
+          d1['message'] !=
+              null)
+        errorMsg = d1['message'];
+      throw Exception(
+        errorMsg,
+      );
+    } catch (
+      _
+    ) {
+      // Offline fallback
+      try {
+        final id =
+            widget.voyage['id']
+                as int?;
+        if (id ==
+            null)
+          throw Exception(
+            "ID du voyage manquant",
+          );
+
+        final cached = await LocalDatabase.getSegments(
+          id,
+        );
+        if (cached !=
+            null) {
+          setState(
+            () {
+              secteurActif = cached['segment'];
+              prochainSecteur = cached['prochain'];
+              tousSecteurs = cached['segments'];
+              tousClotures =
+                  cached['tous_clotures'] ??
+                  false;
+              isOffline = true;
+              isLoading = false;
+            },
+          );
+          _animCtrl.forward(
+            from: 0,
+          );
+
+          if (mounted) {
+            WidgetsBinding.instance.addPostFrameCallback(
+              (
+                _,
+              ) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(
+                  SnackBar(
+                    content: const Row(
+                      children: [
+                        Icon(
+                          Icons.offline_bolt,
+                          color: Colors.white,
+                          size: 15,
+                        ),
+                        SizedBox(
+                          width: 8,
+                        ),
+                        Flexible(
+                          child: Text(
+                            '📡 Mode hors-ligne — données en cache',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    backgroundColor: Colors.orange,
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(
+                      seconds: 4,
+                    ),
+                  ),
+                );
+              },
+            );
+          }
+          return;
+        }
+      } catch (
+        e
+      ) {
+        print(
+          '❌ Cache error: $e',
         );
       }
-    } catch (
-      e
-    ) {
+
       setState(
         () {
-          errorMessage = e.toString().replaceFirst(
-            'Exception: ',
-            '',
-          );
+          errorMessage = 'Hors-ligne — aucune donnée en cache.\nConnectez-vous une première fois.';
           isLoading = false;
         },
       );
     }
   }
+
+  // ── Actions ─────────────────────────────────────────────────────────────────
 
   Future<
     void
@@ -233,14 +357,21 @@ class _SegmentPageState
       final id =
           widget.voyage['id']
               as int?;
-      final response = await http.put(
-        Uri.parse(
-          'http://127.0.0.1:8000/billetterie/voyages/$id/segment/ouvrir',
-        ),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      );
+      final response = await http
+          .put(
+            Uri.parse(
+              'http://127.0.0.1:8000/billetterie/voyages/$id/segment/ouvrir',
+            ),
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          )
+          .timeout(
+            const Duration(
+              seconds: 6,
+            ),
+          );
+
       final data = jsonDecode(
         response.body,
       );
@@ -288,14 +419,21 @@ class _SegmentPageState
           secteurActif!['id_segment']
               as int?;
 
-      final response = await http.put(
-        Uri.parse(
-          'http://127.0.0.1:8000/billetterie/voyages/$id/segments/$idSeg/cloturer',
-        ),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      );
+      final response = await http
+          .put(
+            Uri.parse(
+              'http://127.0.0.1:8000/billetterie/voyages/$id/segments/$idSeg/cloturer',
+            ),
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          )
+          .timeout(
+            const Duration(
+              seconds: 6,
+            ),
+          );
+
       final data = jsonDecode(
         response.body,
       );
@@ -321,44 +459,27 @@ class _SegmentPageState
       if (!tousClotures &&
           prochainSecteur !=
               null) {
-        final openResponse = await http.put(
-          Uri.parse(
-            'http://127.0.0.1:8000/billetterie/voyages/$id/segment/ouvrir',
-          ),
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        );
+        final openResponse = await http
+            .put(
+              Uri.parse(
+                'http://127.0.0.1:8000/billetterie/voyages/$id/segment/ouvrir',
+              ),
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            )
+            .timeout(
+              const Duration(
+                seconds: 6,
+              ),
+            );
+
         final openData = jsonDecode(
           openResponse.body,
         );
         if (openData['success'] ==
             true) {
           await _fetchAll();
-          if (secteurActif !=
-                  null &&
-              mounted) {
-            final idLigne =
-                widget.voyage['id_ligne']
-                    as int?;
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder:
-                    (
-                      _,
-                    ) => NouveauTicketPage(
-                      voyage: {
-                        ...widget.voyage,
-                        'depart': secteurActif!['point_depart'],
-                        'arrivee': secteurActif!['point_arrivee'],
-                        'id_segment': secteurActif!['id_segment'],
-                        'id_ligne': idLigne,
-                      },
-                    ),
-              ),
-            );
-          }
         } else {
           _showSnack(
             openData['message'] ??
@@ -379,6 +500,34 @@ class _SegmentPageState
       () => isActioning = false,
     );
   }
+
+  // ── Navigation ──────────────────────────────────────────────────────────────
+
+  /// Opens the unified ticketing page with 2 tabs
+  void _goToTicketing() {
+    if (secteurActif ==
+        null) {
+      _showSnack(
+        "Aucun secteur actif",
+        isError: true,
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (
+              _,
+            ) => TicketingPage(
+              voyage: widget.voyage,
+              segment: secteurActif!,
+            ),
+      ),
+    );
+  }
+
+  // ── Helpers ─────────────────────────────────────────────────────────────────
 
   void _showSnack(
     String msg, {
@@ -612,45 +761,6 @@ class _SegmentPageState
     );
   }
 
-  void _goToSellTickets() {
-    if (secteurActif ==
-        null) {
-      _showSnack(
-        "Aucun secteur actif",
-        isError: true,
-      );
-      return;
-    }
-    final idLigne =
-        widget.voyage['id_ligne']
-            as int?;
-    if (idLigne ==
-        null) {
-      _showSnack(
-        "Ligne introuvable",
-        isError: true,
-      );
-      return;
-    }
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder:
-            (
-              _,
-            ) => NouveauTicketPage(
-              voyage: {
-                ...widget.voyage,
-                'depart': secteurActif!['point_depart'],
-                'arrivee': secteurActif!['point_arrivee'],
-                'id_segment': secteurActif!['id_segment'],
-                'id_ligne': idLigne,
-              },
-            ),
-      ),
-    );
-  }
-
   Color _statutColor(
     String s,
   ) {
@@ -691,6 +801,8 @@ class _SegmentPageState
         return Icons.radio_button_unchecked_rounded;
     }
   }
+
+  // ── Build ────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(
@@ -747,7 +859,6 @@ class _SegmentPageState
     );
   }
 
-  // ── Header (mirrors NouveauTicketPage header exactly) ──
   Widget _buildHeader(
     String depart,
     String arrivee,
@@ -773,7 +884,6 @@ class _SegmentPageState
       ),
       child: Column(
         children: [
-          // Back + refresh row
           Row(
             children: [
               GestureDetector(
@@ -800,6 +910,44 @@ class _SegmentPageState
                 ),
               ),
               const Spacer(),
+              if (isOffline)
+                Container(
+                  margin: const EdgeInsets.only(
+                    right: 8,
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade700,
+                    borderRadius: BorderRadius.circular(
+                      20,
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.offline_bolt,
+                        color: Colors.white,
+                        size: 10,
+                      ),
+                      SizedBox(
+                        width: 4,
+                      ),
+                      Text(
+                        'HORS-LIGNE',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               GestureDetector(
                 onTap: _fetchAll,
                 child: Container(
@@ -823,10 +971,10 @@ class _SegmentPageState
               ),
             ],
           ),
+
           const SizedBox(
             height: 18,
           ),
-          // Logo
           Container(
             width: 72,
             height: 72,
@@ -866,6 +1014,7 @@ class _SegmentPageState
                   ),
             ),
           ),
+
           const SizedBox(
             height: 12,
           ),
@@ -894,7 +1043,7 @@ class _SegmentPageState
           const SizedBox(
             height: 14,
           ),
-          // Route pill
+
           Container(
             padding: const EdgeInsets.symmetric(
               horizontal: 14,
@@ -1011,21 +1160,25 @@ class _SegmentPageState
             note: 'Ouvert',
           ),
           const SizedBox(
-            height: 12,
+            height: 14,
           ),
+
+          // ── SINGLE ENTRY BUTTON ──
           _actionBtn(
-            label: 'Nouveau Ticket',
-            sublabel: '${secteurActif!['point_depart']} → ${secteurActif!['point_arrivee']}',
+            label: 'Billetterie',
+            sublabel: 'Vente de tickets & passages spéciaux',
             icon: Icons.confirmation_number_rounded,
             colors: [
               navyDark,
               navyLight,
             ],
-            onPressed: _goToSellTickets,
+            onPressed: _goToTicketing,
           ),
           const SizedBox(
             height: 10,
           ),
+
+          // ── Clôturer ──
           _actionBtn(
             label: 'Clôturer ce secteur',
             sublabel: 'Le secteur suivant s\'ouvrira automatiquement',
@@ -1046,7 +1199,7 @@ class _SegmentPageState
           ),
         ],
 
-        // ── Prochain secteur ──
+        // ── Prochain secteur (no actif yet) ──
         if (secteurActif ==
                 null &&
             !tousClotures &&
@@ -1120,7 +1273,8 @@ class _SegmentPageState
     );
   }
 
-  // ── Status card (matches NouveauTicketPage card style) ──
+  // ── Reusable widgets ─────────────────────────────────────────────────────────
+
   Widget _buildStatusCard({
     required String depart,
     required String arrivee,
@@ -1160,7 +1314,6 @@ class _SegmentPageState
       ),
       child: Row(
         children: [
-          // Left accent bar
           Container(
             width: 4,
             height: 52,
@@ -1174,7 +1327,6 @@ class _SegmentPageState
           const SizedBox(
             width: 14,
           ),
-          // Icon box
           Container(
             width: 44,
             height: 44,
@@ -1264,7 +1416,6 @@ class _SegmentPageState
           const SizedBox(
             width: 8,
           ),
-          // Badge
           Container(
             padding: const EdgeInsets.symmetric(
               horizontal: 9,
@@ -1298,7 +1449,6 @@ class _SegmentPageState
     );
   }
 
-  // ── Action button (same as NouveauTicketPage _actionBtn) ──
   Widget _actionBtn({
     required String label,
     required String sublabel,
@@ -1310,7 +1460,7 @@ class _SegmentPageState
     required VoidCallback onPressed,
     bool isLoading = false,
   }) {
-    final bool enabled = !isLoading;
+    final enabled = !isLoading;
     return SizedBox(
       width: double.infinity,
       child: Material(
@@ -1439,7 +1589,6 @@ class _SegmentPageState
     );
   }
 
-  // ── Timeline ──
   Widget _buildTimeline() {
     return Container(
       decoration: BoxDecoration(
@@ -1508,7 +1657,6 @@ class _SegmentPageState
                     ),
                     child: Row(
                       children: [
-                        // Order circle
                         Container(
                           width: 32,
                           height: 32,
@@ -1699,7 +1847,7 @@ class _SegmentPageState
         ),
         Text(
           label,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
             color: navyDark,
