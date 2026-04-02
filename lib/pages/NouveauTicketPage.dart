@@ -3,9 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../ticket_repository.dart';
 import '../local_database.dart';
-import 'HistoriquePage.dart';
-import 'cloture_voyage.dart';
-import 'segment_page.dart';
+import 'passage_special_page.dart';
 
 const Color navyDark = Color(0xFF0D1B3E);
 const Color navyMid = Color(0xFF1A3260);
@@ -607,435 +605,411 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final voyageDepart = widget.voyage['depart'] ?? '?';
-    final voyageArrivee = widget.voyage['arrivee'] ?? '?';
+Widget build(BuildContext context) {
+  final voyageDepart = widget.voyage['depart'] ?? '?';
+  final voyageArrivee = widget.voyage['arrivee'] ?? '?';
 
-    return Scaffold(
-      backgroundColor: surface,
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // ── Header (hidden in embedded mode) ──
-            if (!widget.embeddedMode)
-              Container(
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [navyDark, navyMid, navyLight],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+  return Scaffold(
+    backgroundColor: surface,
+    body: SingleChildScrollView(
+      child: Column(
+        children: [
+          // ── Header (hidden in embedded mode) ──
+          if (!widget.embeddedMode)
+            Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [navyDark, navyMid, navyLight],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                padding: const EdgeInsets.fromLTRB(20, 52, 20, 28),
-                child: Column(
-                  children: [
-                    Align(
-                      alignment: Alignment.topLeft,
-                      child: GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(Icons.arrow_back_ios_new,
-                              color: Colors.white, size: 17),
+              ),
+              padding: const EdgeInsets.fromLTRB(20, 52, 20, 28),
+              child: Column(
+                children: [
+                  Align(
+                    alignment: Alignment.topLeft,
+                    child: GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
                         ),
+                        child: const Icon(Icons.arrow_back_ios_new,
+                            color: Colors.white, size: 17),
                       ),
                     ),
-                    const SizedBox(height: 18),
-                    Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(18),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.3),
-                            blurRadius: 16,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      padding: const EdgeInsets.all(8),
-                      child: Image.asset(
-                        'assets/images/logo_srtb.png',
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) =>
-                            const Icon(Icons.directions_bus, size: 44, color: navyMid),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text('S R T B',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 7)),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text('Nouveau Ticket',
-                            style: TextStyle(
-                                color: Colors.white.withOpacity(0.7),
-                                fontSize: 12,
-                                letterSpacing: 1.5)),
-                        if (isOffline) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.shade700,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.offline_bolt, color: Colors.white, size: 10),
-                                SizedBox(width: 4),
-                                Text('HORS-LIGNE',
-                                    style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 0.5)),
-                              ],
-                            ),
-                          ),
-                        ],
+                  ),
+                  const SizedBox(height: 18),
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 14),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(30),
-                        border: Border.all(color: Colors.white.withOpacity(0.2)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 7,
-                            height: 7,
-                            decoration:
-                                const BoxDecoration(color: goldLight, shape: BoxShape.circle),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(voyageDepart,
-                              style: const TextStyle(
-                                  color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            child: Icon(Icons.arrow_forward,
-                                color: Colors.white.withOpacity(0.4), size: 13),
-                          ),
-                          Container(
-                            width: 7,
-                            height: 7,
-                            decoration: BoxDecoration(
-                              color: Colors.transparent,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: goldLight, width: 2),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(voyageArrivee,
-                              style: const TextStyle(
-                                  color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-                        ],
-                      ),
+                    padding: const EdgeInsets.all(8),
+                    child: Image.asset(
+                      'assets/images/logo_srtb.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) =>
+                          const Icon(Icons.directions_bus, size: 44, color: navyMid),
                     ),
-                  ],
-                ),
-              ),
-
-            // ── Counter bar ──
-            Container(
-              margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-              decoration: BoxDecoration(
-                color: cardWhite,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: navyMid.withOpacity(0.07),
-                    blurRadius: 16,
-                    offset: const Offset(0, 3),
                   ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _counterTile(Icons.confirmation_number_outlined, 'Tickets vendus',
-                        '$ticketsVendus', navyMid),
+                  const SizedBox(height: 12),
+                  const Text('S R T B',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 7)),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text('Nouveau Ticket',
+                          style: TextStyle(
+                              color: Colors.white.withOpacity(0.7),
+                              fontSize: 12,
+                              letterSpacing: 1.5)),
+                      if (isOffline) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade700,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.offline_bolt, color: Colors.white, size: 10),
+                              SizedBox(width: 4),
+                              Text('HORS-LIGNE',
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                  Container(width: 1, height: 36, color: Colors.grey.shade100),
-                  Expanded(
-                    child: _counterTile(Icons.account_balance_wallet_outlined, 'Total collecté',
-                        '$montantTotal ms', const Color(0xFF16A34A)),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(color: Colors.white.withOpacity(0.2)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration:
+                              const BoxDecoration(color: goldLight, shape: BoxShape.circle),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(voyageDepart,
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          child: Icon(Icons.arrow_forward,
+                              color: Colors.white.withOpacity(0.4), size: 13),
+                        ),
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: Colors.transparent,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: goldLight, width: 2),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(voyageArrivee,
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
 
-            // ── Body ──
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 18, 16, 40),
-              child: isLoading
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.only(top: 60),
-                        child: CircularProgressIndicator(color: navyMid),
-                      ),
-                    )
-                  : errorMessage != null
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 60),
+          // ── Counter bar ──
+          Container(
+            margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+            decoration: BoxDecoration(
+              color: cardWhite,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: navyMid.withOpacity(0.07),
+                  blurRadius: 16,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _counterTile(Icons.confirmation_number_outlined, 'Tickets vendus',
+                      '$ticketsVendus', navyMid),
+                ),
+                Container(width: 1, height: 36, color: Colors.grey.shade100),
+                Expanded(
+                  child: _counterTile(Icons.account_balance_wallet_outlined, 'Total collecté',
+                      '$montantTotal ms', const Color(0xFF16A34A)),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Body ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 18, 16, 40),
+            child: isLoading
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.only(top: 60),
+                      child: CircularProgressIndicator(color: navyMid),
+                    ),
+                  )
+                : errorMessage != null
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 60),
+                          child: Column(
+                            children: [
+                              Icon(Icons.wifi_off_rounded,
+                                  size: 52, color: Colors.orange.shade200),
+                              const SizedBox(height: 16),
+                              Text(errorMessage!,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                      color: Colors.grey.shade600, fontSize: 14, height: 1.6)),
+                              const SizedBox(height: 20),
+                              TextButton.icon(
+                                onPressed: () {
+                                  setState(() {
+                                    isLoading = true;
+                                    errorMessage = null;
+                                  });
+                                  _fetchData();
+                                },
+                                icon: const Icon(Icons.refresh, size: 16),
+                                label: const Text('Réessayer'),
+                                style: TextButton.styleFrom(foregroundColor: navyMid),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _label('Type de tarif'),
+                          const SizedBox(height: 10),
+                          GridView.builder(
+  shrinkWrap: true,
+  physics: const NeverScrollableScrollPhysics(),
+  itemCount: tarifTypes.where((t) => (t['pourcentage'] as int) != 0).toList().length,
+  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+    crossAxisCount: 2,
+    crossAxisSpacing: 8,
+    mainAxisSpacing: 8,
+    childAspectRatio: 3.8,
+  ),
+  itemBuilder: (_, i) {
+    final filteredTarifs = tarifTypes.where((t) => (t['pourcentage'] as int) != 0).toList();
+    final t = filteredTarifs[i];
+    final type = t['type_tarif'] as String;
+    final pct = t['pourcentage'] as int;
+    final discount = 100 - pct;
+    final isSelected = typeTarif == type;
+    final Color accent = pct <= 25
+        ? const Color(0xFF7C3AED)
+        : pct <= 50
+            ? const Color(0xFFD97706)
+            : navyMid;
+    return GestureDetector(
+      onTap: () => setState(() => typeTarif = type),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        decoration: BoxDecoration(
+          color: isSelected ? accent : cardWhite,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? accent : accent.withOpacity(0.3),
+            width: 1.5,
+          ),
+          boxShadow: isSelected
+              ? [BoxShadow(color: accent.withOpacity(0.25), blurRadius: 8, offset: const Offset(0, 3))]
+              : [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 4)],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Row(
+            children: [
+              Icon(
+                discount > 0 ? Icons.discount_rounded : Icons.person_rounded,
+                color: isSelected ? Colors.white : accent,
+                size: 16,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(type,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: isSelected ? Colors.white : Colors.grey.shade700,
+                    )),
+              ),
+              if (discount > 0) _tarifBadge('−$discount%', accent, isSelected),
+            ],
+          ),
+        ),
+      ),
+    );
+  },
+),
+                          const SizedBox(height: 22),
+                          _label('Trajet'),
+                          const SizedBox(height: 10),
+                          _card(
                             child: Column(
                               children: [
-                                Icon(Icons.wifi_off_rounded,
-                                    size: 52, color: Colors.orange.shade200),
-                                const SizedBox(height: 16),
-                                Text(errorMessage!,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                        color: Colors.grey.shade600, fontSize: 14, height: 1.6)),
-                                const SizedBox(height: 20),
-                                TextButton.icon(
-                                  onPressed: () {
-                                    setState(() {
-                                      isLoading = true;
-                                      errorMessage = null;
-                                    });
-                                    _fetchData();
-                                  },
-                                  icon: const Icon(Icons.refresh, size: 16),
-                                  label: const Text('Réessayer'),
-                                  style: TextButton.styleFrom(foregroundColor: navyMid),
+                                _dropdownRow(
+                                  icon: Icons.trip_origin,
+                                  iconColor: const Color(0xFF16A34A),
+                                  label: 'Point de montée',
+                                  hint: 'Choisir un arrêt',
+                                  value: pointDepart,
+                                  items: _departureArrets,
+                                  onChanged: (v) => setState(() {
+                                    pointDepart = v;
+                                    pointArrivee = null;
+                                  }),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 14),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 1.5,
+                                        height: 22,
+                                        color: Colors.grey.shade200,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                _dropdownRow(
+                                  icon: Icons.location_on,
+                                  iconColor: Colors.red.shade500,
+                                  label: 'Point de descente',
+                                  hint: pointDepart == null
+                                      ? 'Choisir d\'abord la montée'
+                                      : 'Choisir un arrêt',
+                                  value: pointArrivee,
+                                  items: _arrivalArrets,
+                                  onChanged: pointDepart == null
+                                      ? null
+                                      : (v) => setState(() => pointArrivee = v),
                                 ),
                               ],
                             ),
                           ),
-                        )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _label('Type de tarif'),
-                            const SizedBox(height: 10),
-                            GridView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: tarifTypes.length,
-                              gridDelegate:
-                                  const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                crossAxisSpacing: 8,
-                                mainAxisSpacing: 8,
-                                childAspectRatio: 3.8,
-                              ),
-                              itemBuilder: (_, i) {
-                                final t = tarifTypes[i];
-                                final type = t['type_tarif'] as String;
-                                final pct = t['pourcentage'] as int;
-                                final discount = 100 - pct;
-                                final isSelected = typeTarif == type;
-                                final Color accent = pct == 0
-                                    ? const Color(0xFF16A34A)
-                                    : pct <= 25
-                                        ? const Color(0xFF7C3AED)
-                                        : pct <= 50
-                                            ? const Color(0xFFD97706)
-                                            : navyMid;
-                                return GestureDetector(
-                                  onTap: () => setState(() => typeTarif = type),
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 180),
-                                    decoration: BoxDecoration(
-                                      color: isSelected ? accent : cardWhite,
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(
-                                        color: isSelected
-                                            ? accent
-                                            : accent.withOpacity(0.3),
-                                        width: 1.5,
-                                      ),
-                                      boxShadow: isSelected
-                                          ? [
-                                              BoxShadow(
-                                                color: accent.withOpacity(0.25),
-                                                blurRadius: 8,
-                                                offset: const Offset(0, 3),
-                                              ),
-                                            ]
-                                          : [
-                                              BoxShadow(
-                                                color: Colors.black.withOpacity(0.04),
-                                                blurRadius: 4,
-                                              ),
-                                            ],
-                                    ),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            pct == 0
-                                                ? Icons.card_giftcard_rounded
-                                                : discount > 0
-                                                    ? Icons.discount_rounded
-                                                    : Icons.person_rounded,
-                                            color: isSelected ? Colors.white : accent,
-                                            size: 16,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(type,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: isSelected
-                                                      ? Colors.white
-                                                      : Colors.grey.shade700,
-                                                )),
-                                          ),
-                                          if (pct == 0)
-                                            _tarifBadge('Gratuit', accent, isSelected)
-                                          else if (discount > 0)
-                                            _tarifBadge('−$discount%', accent, isSelected),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                            const SizedBox(height: 22),
-                            _label('Trajet'),
-                            const SizedBox(height: 10),
-                            _card(
-                              child: Column(
-                                children: [
-                                  _dropdownRow(
-                                    icon: Icons.trip_origin,
-                                    iconColor: const Color(0xFF16A34A),
-                                    label: 'Point de montée',
-                                    hint: 'Choisir un arrêt',
-                                    value: pointDepart,
-                                    items: _departureArrets,
-                                    onChanged: (v) => setState(() {
-                                      pointDepart = v;
-                                      pointArrivee = null;
-                                    }),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.only(left: 14),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 1.5,
-                                          height: 22,
-                                          color: Colors.grey.shade200,
+                          const SizedBox(height: 22),
+                          _label('Nombre de tickets'),
+                          const SizedBox(height: 10),
+                          _card(
+                            child: Row(
+                              children: [
+                                _qtyBtn(Icons.remove, quantite > 1,
+                                    () => setState(() => quantite--)),
+                                Expanded(
+                                  child: Column(
+                                    children: [
+                                      Text('$quantite',
+                                          style: const TextStyle(
+                                              fontSize: 30,
+                                              fontWeight: FontWeight.bold,
+                                              color: navyDark)),
+                                      Text(
+                                        quantite == 1 ? 'ticket' : 'tickets',
+                                        style: TextStyle(
+                                          color: Colors.grey.shade400,
+                                          fontSize: 11,
+                                          letterSpacing: 0.8,
                                         ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
-                                  _dropdownRow(
-                                    icon: Icons.location_on,
-                                    iconColor: Colors.red.shade500,
-                                    label: 'Point de descente',
-                                    hint: pointDepart == null
-                                        ? 'Choisir d\'abord la montée'
-                                        : 'Choisir un arrêt',
-                                    value: pointArrivee,
-                                    items: _arrivalArrets,
-                                    onChanged: pointDepart == null
-                                        ? null
-                                        : (v) => setState(() => pointArrivee = v),
-                                  ),
-                                ],
-                              ),
+                                ),
+                                _qtyBtn(Icons.add, true, () => setState(() => quantite++)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 22),
+                          if (_prixUnitaire != null) ...[
+                            _PriceCard(
+                              prixNormal: _prixNormal,
+                              prixUnitaire: _prixUnitaire!,
+                              prixTotal: _prixTotal!,
+                              quantite: quantite,
+                              discountPct: _discountPct,
                             ),
                             const SizedBox(height: 22),
-                            _label('Nombre de tickets'),
-                            const SizedBox(height: 10),
-                            _card(
-                              child: Row(
-                                children: [
-                                  _qtyBtn(Icons.remove, quantite > 1,
-                                      () => setState(() => quantite--)),
-                                  Expanded(
-                                    child: Column(
-                                      children: [
-                                        Text('$quantite',
-                                            style: const TextStyle(
-                                                fontSize: 30,
-                                                fontWeight: FontWeight.bold,
-                                                color: navyDark)),
-                                        Text(
-                                          quantite == 1 ? 'ticket' : 'tickets',
-                                          style: TextStyle(
-                                            color: Colors.grey.shade400,
-                                            fontSize: 11,
-                                            letterSpacing: 0.8,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  _qtyBtn(Icons.add, true, () => setState(() => quantite++)),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 22),
-                            if (_prixUnitaire != null) ...[
-                              _PriceCard(
-                                prixNormal: _prixNormal,
-                                prixUnitaire: _prixUnitaire!,
-                                prixTotal: _prixTotal!,
-                                quantite: quantite,
-                                discountPct: _discountPct,
-                              ),
-                              const SizedBox(height: 22),
-                            ],
-                            _actionBtn(
-                              label: isSaving
-                                  ? 'Enregistrement...'
-                                  : quantite > 1
-                                      ? 'Valider $quantite tickets'
-                                      : 'Valider le ticket',
-                              icon: isSaving ? null : Icons.confirmation_number_rounded,
-                              isLoading: isSaving,
-                              enabled: _canValidate && !isSaving && !isCloturing,
-                              colors: [navyDark, navyLight],
-                              onTap: _vendreTicket,
-                            ),
-                            const SizedBox(height: 10),
-                            _actionBtn(
-                              label: isCloturing ? 'Clôture en cours...' : 'Clôturer ce secteur',
-                              icon: isCloturing ? null : Icons.check_circle_outline_rounded,
-                              isLoading: isCloturing,
-                              enabled: !isSaving && !isCloturing,
-                              colors: [const Color(0xFFB45309), const Color(0xFFEA580C)],
-                              onTap: _confirmCloture,
-                            ),
                           ],
-                        ),
-            ),
-          ],
-        ),
+                          _actionBtn(
+                            label: isSaving
+                                ? 'Enregistrement...'
+                                : quantite > 1
+                                    ? 'Valider $quantite tickets'
+                                    : 'Valider le ticket',
+                            icon: isSaving ? null : Icons.confirmation_number_rounded,
+                            isLoading: isSaving,
+                            enabled: _canValidate && !isSaving && !isCloturing,
+                            colors: [navyDark, navyLight],
+                            onTap: _vendreTicket,
+                          ),
+                          const SizedBox(height: 10),
+                          _actionBtn(
+                            label: isCloturing ? 'Clôture en cours...' : 'Clôturer ce secteur',
+                            icon: isCloturing ? null : Icons.check_circle_outline_rounded,
+                            isLoading: isCloturing,
+                            enabled: !isSaving && !isCloturing,
+                            colors: [const Color(0xFFB45309), const Color(0xFFEA580C)],
+                            onTap: _confirmCloture,
+                          ),
+                        ],
+                      ),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _tarifBadge(String text, Color accent, bool isSelected) {
     return Container(
