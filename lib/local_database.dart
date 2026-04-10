@@ -19,7 +19,7 @@ class LocalDatabase {
     final path = join(await getDatabasesPath(), 'srtb_offline.db');
     final database = await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         print('📦 Creating new database (v$version)...');
         await _createTables(db);
@@ -97,6 +97,12 @@ class LocalDatabase {
         employe_data TEXT NOT NULL,
         cached_at    TEXT NOT NULL
       )''',
+      '''CREATE TABLE IF NOT EXISTS cloture_pending (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        id_vente    INTEGER NOT NULL UNIQUE,
+        created_at  TEXT NOT NULL,
+        statut_sync TEXT NOT NULL DEFAULT 'pending'
+      )''',
     ];
 
     for (final sql in tables) {
@@ -131,7 +137,6 @@ class LocalDatabase {
     }
   }
 
-  /// Returns only 'pending' tickets (not yet attempted to sync)
   static Future<List<Map<String, dynamic>>> getPendingTickets() async {
     final database = await db;
     await _ensureAllTablesExist(database);
@@ -144,8 +149,6 @@ class LocalDatabase {
     }
   }
 
-  /// Returns BOTH 'pending' AND 'failed' tickets — used by SyncService
-  /// so failed tickets are retried when internet is restored.
   static Future<List<Map<String, dynamic>>> getUnsyncedTickets() async {
     final database = await db;
     await _ensureAllTablesExist(database);
@@ -177,9 +180,12 @@ class LocalDatabase {
     final database = await db;
     await _ensureAllTablesExist(database);
     try {
-      await database.update('ticket_vendu_local',
-          {'statut_sync': 'synced', 'id_serveur': idServeur},
-          where: 'id = ?', whereArgs: [id]);
+      await database.update(
+        'ticket_vendu_local',
+        {'statut_sync': 'synced', 'id_serveur': idServeur},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
     } catch (e) {
       print('❌ Error marking synced: $e');
     }
@@ -265,13 +271,17 @@ class LocalDatabase {
     final database = await db;
     await _ensureAllTablesExist(database);
     try {
-      await database.insert('tarif_cache', {
-        'id_ligne': idLigne,
-        'arrets': jsonEncode(data['arrets']),
-        'prix_map': jsonEncode(data['prix_map']),
-        'tarif_types': jsonEncode(data['tarif_types']),
-        'cached_at': DateTime.now().toIso8601String(),
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await database.insert(
+        'tarif_cache',
+        {
+          'id_ligne': idLigne,
+          'arrets': jsonEncode(data['arrets']),
+          'prix_map': jsonEncode(data['prix_map']),
+          'tarif_types': jsonEncode(data['tarif_types']),
+          'cached_at': DateTime.now().toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
     } catch (e) {
       print('❌ Error saving tarifs: $e');
     }
@@ -305,11 +315,15 @@ class LocalDatabase {
     final database = await db;
     await _ensureAllTablesExist(database);
     try {
-      await database.insert('voyage_cache', {
-        'id_vente': idVente,
-        'statut': statut,
-        'cached_at': DateTime.now().toIso8601String(),
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await database.insert(
+        'voyage_cache',
+        {
+          'id_vente': idVente,
+          'statut': statut,
+          'cached_at': DateTime.now().toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
     } catch (e) {
       print('❌ Error saving voyage statut: $e');
     }
@@ -338,11 +352,15 @@ class LocalDatabase {
     final database = await db;
     await _ensureAllTablesExist(database);
     try {
-      await database.insert('voyages_cache', {
-        'matricule': matricule,
-        'data': jsonEncode(voyages),
-        'cached_at': DateTime.now().toIso8601String(),
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await database.insert(
+        'voyages_cache',
+        {
+          'matricule': matricule,
+          'data': jsonEncode(voyages),
+          'cached_at': DateTime.now().toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
       print('✓ Voyages saved successfully');
     } catch (e) {
       print('❌ Error saving voyages: $e');
@@ -383,16 +401,20 @@ class LocalDatabase {
     final database = await db;
     await _ensureAllTablesExist(database);
     try {
-      await database.insert('segment_cache', {
-        'id_vente': idVente,
-        'actif_segment':
-            actifSegment != null ? jsonEncode(actifSegment) : null,
-        'prochain_segment':
-            prochainSegment != null ? jsonEncode(prochainSegment) : null,
-        'tous_segments': jsonEncode(tousSecteurs),
-        'tous_clotures': tousClotures ? 1 : 0,
-        'cached_at': DateTime.now().toIso8601String(),
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await database.insert(
+        'segment_cache',
+        {
+          'id_vente': idVente,
+          'actif_segment':
+              actifSegment != null ? jsonEncode(actifSegment) : null,
+          'prochain_segment':
+              prochainSegment != null ? jsonEncode(prochainSegment) : null,
+          'tous_segments': jsonEncode(tousSecteurs),
+          'tous_clotures': tousClotures ? 1 : 0,
+          'cached_at': DateTime.now().toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
       print('✓ Segments cached successfully');
     } catch (e) {
       print('❌ Error saving segments: $e');
@@ -437,12 +459,16 @@ class LocalDatabase {
     final database = await db;
     await _ensureAllTablesExist(database);
     try {
-      await database.insert('agent_cache', {
-        'matricule': matricule,
-        'mot_de_passe': motDePasse,
-        'employe_data': jsonEncode(employeData),
-        'cached_at': DateTime.now().toIso8601String(),
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await database.insert(
+        'agent_cache',
+        {
+          'matricule': matricule,
+          'mot_de_passe': motDePasse,
+          'employe_data': jsonEncode(employeData),
+          'cached_at': DateTime.now().toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
       print('✓ Agent cached successfully');
     } catch (e) {
       print('❌ Error saving agent: $e');
@@ -465,6 +491,59 @@ class LocalDatabase {
     } catch (e) {
       print('❌ Error getting agent: $e');
       return null;
+    }
+  }
+
+  // ═══════════════════════════════════════════════
+  // ── CLÔTURE PENDING METHODS ──
+  // ═══════════════════════════════════════════════
+
+  static Future<void> saveCloturePending(int idVente) async {
+    final database = await db;
+    await _ensureAllTablesExist(database);
+    try {
+      await database.insert(
+        'cloture_pending',
+        {
+          'id_vente': idVente,
+          'created_at': DateTime.now().toIso8601String(),
+          'statut_sync': 'pending',
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      print('✓ Clôture pending saved for vente $idVente');
+    } catch (e) {
+      print('❌ Error saving clôture pending: $e');
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getPendingClotures() async {
+    final database = await db;
+    await _ensureAllTablesExist(database);
+    try {
+      return await database.query(
+        'cloture_pending',
+        where: "statut_sync = 'pending'",
+      );
+    } catch (e) {
+      print('❌ Error getting pending clôtures: $e');
+      return [];
+    }
+  }
+
+  static Future<void> markClotureSynced(int idVente) async {
+    final database = await db;
+    await _ensureAllTablesExist(database);
+    try {
+      await database.update(
+        'cloture_pending',
+        {'statut_sync': 'synced'},
+        where: 'id_vente = ?',
+        whereArgs: [idVente],
+      );
+      print('✓ Clôture marked synced for vente $idVente');
+    } catch (e) {
+      print('❌ Error marking clôture synced: $e');
     }
   }
 }

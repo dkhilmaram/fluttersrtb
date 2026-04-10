@@ -68,7 +68,7 @@ class _LoginPageState
       final response = await http
           .post(
             Uri.parse(
-              'http://127.0.0.1:8000/login',
+              'http://192.168.1.22:8000/login',
             ),
             headers: {
               'Content-Type': 'application/json',
