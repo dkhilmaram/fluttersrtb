@@ -1,15 +1,25 @@
-// pubspec.yaml — add this dependency:
+// pubspec.yaml — add these dependencies:
 //   mobile_scanner: ^5.2.3
+//   nfc_manager: ^3.3.0
 //
-// Android: add camera permission to AndroidManifest.xml
+// Android: add to AndroidManifest.xml
 //   <uses-permission android:name="android.permission.CAMERA"/>
+//   <uses-permission android:name="android.permission.NFC"/>
+//   <uses-feature android:name="android.hardware.nfc" android:required="false"/>
 // iOS: add to Info.plist
 //   <key>NSCameraUsageDescription</key>
 //   <string>Scan transport tickets</string>
+//   <key>NFCReaderUsageDescription</key>
+//   <string>Read transport NFC cards</string>
+// iOS: add to Runner.entitlements
+//   <key>com.apple.developer.nfc.readersession.formats</key>
+//   <array><string>TAG</string></array>
 
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:nfc_manager/nfc_manager.dart';
 import 'package:flutter/services.dart';
 import '../ticket_repository.dart';
 
@@ -21,7 +31,7 @@ const Color goldLight = Color(0xFFF5C842);
 const Color surface   = Color(0xFFF2F5FB);
 const Color cardWhite = Color(0xFFFFFFFF);
 
-// ── All categories: institutions + single abonnement + agent ──
+// ── All categories ──
 const List<Map<String, dynamic>> kCategories = [
   {'label': 'Armée nationale',        'icon': Icons.shield_rounded,            'color': Color(0xFF1E40AF)},
   {'label': 'Garde nationale',        'icon': Icons.security_rounded,          'color': Color(0xFF1D4ED8)},
@@ -123,10 +133,13 @@ class _PassageSpecialPageState extends State<PassageSpecialPage>
           Icon(icon, size: 16,
               color: selected ? Colors.white : Colors.grey.shade400),
           const SizedBox(width: 6),
-          Text(label,
-            style: TextStyle(
-              fontSize: 11, fontWeight: FontWeight.w700,
-              color: selected ? Colors.white : Colors.grey.shade400,
+          Flexible(
+            child: Text(label,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11, fontWeight: FontWeight.w700,
+                color: selected ? Colors.white : Colors.grey.shade400,
+              ),
             ),
           ),
         ]),
@@ -196,8 +209,11 @@ class _PassageSpecialPageState extends State<PassageSpecialPage>
                 decoration: const BoxDecoration(
                     color: goldLight, shape: BoxShape.circle)),
             const SizedBox(width: 8),
-            Text(dep, style: const TextStyle(color: Colors.white,
-                fontSize: 12, fontWeight: FontWeight.w600)),
+            Flexible(
+              child: Text(dep, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white,
+                      fontSize: 12, fontWeight: FontWeight.w600)),
+            ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Icon(Icons.arrow_forward,
@@ -208,8 +224,11 @@ class _PassageSpecialPageState extends State<PassageSpecialPage>
                     shape: BoxShape.circle,
                     border: Border.all(color: goldLight, width: 2))),
             const SizedBox(width: 8),
-            Text(arr, style: const TextStyle(color: Colors.white,
-                fontSize: 12, fontWeight: FontWeight.w600)),
+            Flexible(
+              child: Text(arr, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white,
+                      fontSize: 12, fontWeight: FontWeight.w600)),
+            ),
           ]),
         ),
       ]),
@@ -245,34 +264,22 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
     super.dispose();
   }
 
-  void _showToast(
-    String msg, {
-    bool isError   = false,
-    bool isWarning = false,
-  }) {
+  void _showToast(String msg, {bool isError = false, bool isWarning = false}) {
     _toastTimer?.cancel();
     _toastEntry?.remove();
     _toastEntry = null;
 
-    final color = isError
-        ? Colors.red.shade700
-        : isWarning
-            ? Colors.orange.shade700
-            : const Color(0xFF16A34A);
-
-    final icon = isError
-        ? Icons.error_outline
-        : isWarning
-            ? Icons.offline_bolt
-            : Icons.check_circle_outline;
+    final color = isError ? Colors.red.shade700
+        : isWarning ? Colors.orange.shade700
+        : const Color(0xFF16A34A);
+    final icon = isError ? Icons.error_outline
+        : isWarning ? Icons.offline_bolt
+        : Icons.check_circle_outline;
 
     final entry = OverlayEntry(
-      builder: (_) => _ToastWidget(msg: msg, color: color, icon: icon),
-    );
-
+        builder: (_) => _ToastWidget(msg: msg, color: color, icon: icon));
     _toastEntry = entry;
     Overlay.of(context).insert(entry);
-
     _toastTimer = Timer(const Duration(milliseconds: 2500), () {
       entry.remove();
       if (_toastEntry == entry) _toastEntry = null;
@@ -311,7 +318,7 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
       });
       _showToast('$saved passage(s) enregistré(s)');
     } else {
-      _showToast('Erreur : ${result.error ?? 'inconnue'}', isError: true);
+      _showToast('Erreur : ${result.error ?? "inconnue"}', isError: true);
     }
     setState(() => isSaving = false);
   }
@@ -321,13 +328,11 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-
         if (totalEnregistres > 0)
           _SessionBanner(
             icon: Icons.how_to_reg_rounded,
             text: '$totalEnregistres passage(s) enregistré(s) cette session',
           ),
-
         _SectionLabel('Institution / Agence', Icons.domain_rounded),
         const SizedBox(height: 10),
         _CategoryGrid(
@@ -336,33 +341,25 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
           selected: selectedCategory,
           onSelect: (v) => setState(() => selectedCategory = v),
         ),
-
         const SizedBox(height: 24),
-
         _SectionLabel('Type spécial', Icons.confirmation_number_rounded),
         const SizedBox(height: 10),
         Row(children: [
-          Expanded(
-            child: _CategoryButton(
-              item: {'label': 'Abonnement', 'icon': Icons.confirmation_number_rounded,
-                     'color': const Color(0xFF0369A1)},
-              selected: selectedCategory == 'Abonnement',
-              onTap: () => setState(() => selectedCategory = 'Abonnement'),
-            ),
-          ),
+          Expanded(child: _CategoryButton(
+            item: {'label': 'Abonnement', 'icon': Icons.confirmation_number_rounded,
+                   'color': const Color(0xFF0369A1)},
+            selected: selectedCategory == 'Abonnement',
+            onTap: () => setState(() => selectedCategory = 'Abonnement'),
+          )),
           const SizedBox(width: 10),
-          Expanded(
-            child: _CategoryButton(
-              item: {'label': 'Agent', 'icon': Icons.badge_rounded,
-                     'color': const Color(0xFF7C3AED)},
-              selected: selectedCategory == 'Agent',
-              onTap: () => setState(() => selectedCategory = 'Agent'),
-            ),
-          ),
+          Expanded(child: _CategoryButton(
+            item: {'label': 'Agent', 'icon': Icons.badge_rounded,
+                   'color': const Color(0xFF7C3AED)},
+            selected: selectedCategory == 'Agent',
+            onTap: () => setState(() => selectedCategory = 'Agent'),
+          )),
         ]),
-
         const SizedBox(height: 24),
-
         _SectionLabel('Nombre de personnes', Icons.people_rounded),
         const SizedBox(height: 10),
         _QuantiteCard(
@@ -370,9 +367,7 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
           onDec: quantite > 1 ? () => setState(() => quantite--) : null,
           onInc: () => setState(() => quantite++),
         ),
-
         const SizedBox(height: 16),
-
         if (_canSave) ...[
           Container(
             width: double.infinity,
@@ -394,7 +389,6 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
           ),
           const SizedBox(height: 16),
         ],
-
         _BigBtn(
           label: isSaving ? 'Enregistrement...' : 'Enregistrer le passage',
           icon: Icons.how_to_reg_rounded,
@@ -436,70 +430,201 @@ class _ScanTabState extends State<_ScanTab> {
   void dispose() {
     _toastTimer?.cancel();
     _toastEntry?.remove();
+    NfcManager.instance.stopSession().catchError((_) {});
     super.dispose();
   }
 
-  void _showToast(
-    String msg, {
-    bool isError   = false,
-    bool isWarning = false,
-  }) {
+  void _showToast(String msg, {bool isError = false, bool isWarning = false}) {
     _toastTimer?.cancel();
     _toastEntry?.remove();
     _toastEntry = null;
 
-    final color = isError
-        ? Colors.red.shade700
-        : isWarning
-            ? Colors.orange.shade700
-            : const Color(0xFF16A34A);
-
-    final icon = isError
-        ? Icons.error_outline
-        : isWarning
-            ? Icons.offline_bolt
-            : Icons.check_circle_outline;
+    final color = isError ? Colors.red.shade700
+        : isWarning ? Colors.orange.shade700
+        : const Color(0xFF16A34A);
+    final icon = isError ? Icons.error_outline
+        : isWarning ? Icons.offline_bolt
+        : Icons.check_circle_outline;
 
     final entry = OverlayEntry(
-      builder: (_) => _ToastWidget(msg: msg, color: color, icon: icon),
-    );
-
+        builder: (_) => _ToastWidget(msg: msg, color: color, icon: icon));
     _toastEntry = entry;
     Overlay.of(context).insert(entry);
-
     _toastTimer = Timer(const Duration(milliseconds: 2500), () {
       entry.remove();
       if (_toastEntry == entry) _toastEntry = null;
     });
   }
 
-  Future<void> _openScanner(String mode) async {
+  // ── BARCODE: open camera page ──
+  Future<void> _openBarcodeScanner() async {
     final raw = await Navigator.push<String>(
       context,
       MaterialPageRoute(
-        builder: (_) => _CameraScannerPage(mode: mode),
+        builder: (_) => const _CameraScannerPage(),
         fullscreenDialog: true,
       ),
     );
     if (raw == null) return;
-    _resolveCode(raw, mode);
+    _resolveCode(raw, 'Barcode');
+  }
+
+  // ── NFC: start foreground dispatch ──
+  Future<void> _startNfcScan() async {
+    final available = await NfcManager.instance.isAvailable();
+    if (!available) {
+      if (mounted) _showToast('NFC non disponible sur cet appareil', isWarning: true);
+      return;
+    }
+
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      isDismissible: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _NfcListeningSheet(),
+    ).then((_) {
+      NfcManager.instance.stopSession().catchError((_) {});
+    });
+
+    NfcManager.instance.startSession(
+      onDiscovered: (NfcTag tag) async {
+        try {
+          final raw = _extractRawFromTag(tag);
+          await NfcManager.instance.stopSession();
+          HapticFeedback.mediumImpact();
+
+          if (mounted) {
+            Navigator.of(context, rootNavigator: true).pop();
+          }
+
+          if (raw == null || raw.length < 4) {
+            if (mounted) setState(() {
+              scanState = _ScanState.error;
+              errorMsg  = 'Carte NFC illisible ou invalide';
+            });
+          } else {
+            _resolveCode(raw, 'NFC');
+          }
+        } catch (e) {
+          await NfcManager.instance
+              .stopSession(errorMessage: 'Erreur de lecture')
+              .catchError((_) {});
+          if (mounted) setState(() {
+            scanState = _ScanState.error;
+            errorMsg  = 'Erreur NFC : $e';
+          });
+        }
+      },
+      alertMessage: 'Approchez votre carte de transport',
+    );
+  }
+
+  /// Extracts a readable string from the NFC tag.
+  ///
+  /// Priority order:
+  ///   1. NDEF text record
+  ///   2. NDEF URI record
+  ///   3. NDEF generic payload (UTF-8)
+  ///   4. Identifier bytes from tag.data (MifareClassic, MifareUltralight,
+  ///      NFC-A/B, ISO-7816, FeliCa) — avoids platform-specific class imports
+  ///      that are absent in nfc_manager ^3.x on all platforms.
+  String? _extractRawFromTag(NfcTag tag) {
+    // 1. Try NDEF records
+    final ndef = Ndef.from(tag);
+    if (ndef != null && ndef.cachedMessage != null) {
+      for (final record in ndef.cachedMessage!.records) {
+        // Text record (TNF wellknown, type byte 'T' = 0x54)
+        if (record.typeNameFormat == NdefTypeNameFormat.nfcWellknown &&
+            record.type.isNotEmpty && record.type[0] == 0x54) {
+          final payload = record.payload;
+          if (payload.length > 1) {
+            final langLen = payload[0] & 0x3F;
+            if (payload.length > 1 + langLen) {
+              return utf8.decode(payload.sublist(1 + langLen));
+            }
+          }
+        }
+        // URI record (TNF wellknown, type byte 'U' = 0x55)
+        if (record.typeNameFormat == NdefTypeNameFormat.nfcWellknown &&
+            record.type.isNotEmpty && record.type[0] == 0x55) {
+          final payload = record.payload;
+          if (payload.length > 1) {
+            return utf8.decode(payload.sublist(1));
+          }
+        }
+        // Generic payload — try UTF-8
+        try {
+          final text = utf8.decode(record.payload, allowMalformed: false).trim();
+          if (text.isNotEmpty) return text;
+        } catch (_) {}
+      }
+    }
+
+    // 2. Identifier bytes from tag.data map
+    //    nfc_manager 3.x exposes raw tag data as nested maps keyed by
+    //    technology name (lowercase). We probe every known key that carries
+    //    an identifier / UID / IDm field.
+    final data = tag.data;
+
+    // Helper: turn a dynamic list field into a hex string.
+    String? hexFromField(dynamic field) {
+      if (field is List && field.isNotEmpty) {
+        final bytes = Uint8List.fromList(List<int>.from(field));
+        return bytes
+            .map((b) => b.toRadixString(16).padLeft(2, '0'))
+            .join()
+            .toUpperCase();
+      }
+      return null;
+    }
+
+    // Android ISO-A (includes Mifare Classic & Mifare Ultralight)
+    final hexA = hexFromField(data['nfca']?['identifier']);
+    if (hexA != null) return hexA;
+
+    // Android ISO-B
+    final hexB = hexFromField(data['nfcb']?['applicationData']);
+    if (hexB != null) return hexB;
+
+    // Android Mifare Classic (redundant with nfca but kept for clarity)
+    final hexMC = hexFromField(data['mifareClassic']?['identifier']);
+    if (hexMC != null) return hexMC;
+
+    // Android Mifare Ultralight
+    final hexMU = hexFromField(data['mifareUltralight']?['identifier']);
+    if (hexMU != null) return hexMU;
+
+    // iOS Core NFC / ISO-7816
+    final hexISO = hexFromField(data['iso7816']?['identifier']);
+    if (hexISO != null) return hexISO;
+
+    // FeliCa (Japan / some transit cards)
+    final hexFelica = hexFromField(data['feliCa']?['currentIdm']);
+    if (hexFelica != null) return hexFelica;
+
+    // Android NFC-F (FeliCa via nfcf key)
+    final hexF = hexFromField(data['nfcf']?['manufacturer']);
+    if (hexF != null) return hexF;
+
+    // Android NFC-V (ISO 15693)
+    final hexV = hexFromField(data['nfcv']?['identifier']);
+    if (hexV != null) return hexV;
+
+    return null;
   }
 
   void _resolveCode(String raw, String mode) {
-    if (raw.length < 4) {
-      setState(() {
-        scanState = _ScanState.error;
-        errorMsg  = 'Code illisible ou invalide';
-      });
-      return;
-    }
     String type = 'Inconnu';
-    if (raw.toUpperCase().contains('MEN')) type = 'Mensuel';
-    else if (raw.toUpperCase().contains('ANN')) type = 'Annuel';
-    else if (raw.toUpperCase().contains('ETU')) type = 'Étudiant';
-    else if (raw.toUpperCase().contains('RET')) type = 'Retraité';
-    else if (raw.toUpperCase().contains('TRI')) type = 'Trimestriel';
+    final up = raw.toUpperCase();
+    if (up.contains('MEN'))      type = 'Mensuel';
+    else if (up.contains('ANN')) type = 'Annuel';
+    else if (up.contains('ETU')) type = 'Étudiant';
+    else if (up.contains('RET')) type = 'Retraité';
+    else if (up.contains('TRI')) type = 'Trimestriel';
 
+    if (!mounted) return;
     setState(() {
       scanState   = _ScanState.success;
       scannedData = {
@@ -513,8 +638,7 @@ class _ScanTabState extends State<_ScanTab> {
     });
   }
 
-  String _buildScanTypeTarif(String mode, String type) =>
-      'Scan $mode — $type';
+  String _buildScanTypeTarif(String mode, String type) => 'Scan $mode — $type';
 
   Future<void> _validerEtVendre() async {
     if (scannedData == null) return;
@@ -527,8 +651,7 @@ class _ScanTabState extends State<_ScanTab> {
       'point_arrivee':   widget.segment['point_arrivee'] ?? widget.voyage['arrivee'] ?? '',
       'type_tarif':      _buildScanTypeTarif(
                              scannedData!['mode'] as String,
-                             scannedData!['type'] as String,
-                         ),
+                             scannedData!['type'] as String),
       'quantite':        1,
       'prix_unitaire':   0,
       'montant_total':   0,
@@ -553,35 +676,31 @@ class _ScanTabState extends State<_ScanTab> {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-
         if (totalScanned > 0)
           _SessionBanner(
             icon: Icons.qr_code_scanner_rounded,
             text: '$totalScanned titre(s) validé(s) cette session',
           ),
-
         _SectionLabel('Mode de lecture', Icons.tap_and_play_rounded),
         const SizedBox(height: 10),
         Row(children: [
           Expanded(child: _ScanModeBtn(
-            icon: Icons.nfc_rounded, label: 'NFC',
+            icon: Icons.nfc_rounded,
+            label: 'NFC',
             sublabel: 'Approcher la carte',
             color: const Color(0xFF1E40AF),
-            onTap: scanState == _ScanState.idle
-                ? () => _openScanner('NFC') : null,
+            onTap: scanState == _ScanState.idle ? _startNfcScan : null,
           )),
           const SizedBox(width: 10),
           Expanded(child: _ScanModeBtn(
-            icon: Icons.qr_code_2_rounded, label: 'Code-barres',
+            icon: Icons.qr_code_2_rounded,
+            label: 'Code-barres',
             sublabel: 'Scanner le QR / code',
             color: const Color(0xFF6B21A8),
-            onTap: scanState == _ScanState.idle
-                ? () => _openScanner('Barcode') : null,
+            onTap: scanState == _ScanState.idle ? _openBarcodeScanner : null,
           )),
         ]),
-
         const SizedBox(height: 24),
-
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 350),
           child: switch (scanState) {
@@ -608,10 +727,97 @@ class _ScanTabState extends State<_ScanTab> {
   }
 }
 
-// ── Full-screen camera page ──
+// ════════════════════════════════════════════════════
+// NFC listening bottom sheet
+// ════════════════════════════════════════════════════
+
+class _NfcListeningSheet extends StatefulWidget {
+  const _NfcListeningSheet();
+  @override
+  State<_NfcListeningSheet> createState() => _NfcListeningSheetState();
+}
+
+class _NfcListeningSheetState extends State<_NfcListeningSheet>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: cardWhite,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: navyDark.withOpacity(0.12),
+            blurRadius: 24, offset: const Offset(0, -4))],
+      ),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 40, height: 4,
+          margin: const EdgeInsets.only(bottom: 24),
+          decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(2)),
+        ),
+        AnimatedBuilder(
+          animation: _pulse,
+          builder: (_, child) => Container(
+            width: 90, height: 90,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFF1E40AF).withOpacity(0.08 + 0.08 * _pulse.value),
+              boxShadow: [BoxShadow(
+                color: const Color(0xFF1E40AF).withOpacity(0.15 + 0.15 * _pulse.value),
+                blurRadius: 24 + 12 * _pulse.value,
+                spreadRadius: 4 * _pulse.value,
+              )],
+            ),
+            child: child,
+          ),
+          child: const Icon(Icons.nfc_rounded, size: 48, color: Color(0xFF1E40AF)),
+        ),
+        const SizedBox(height: 20),
+        const Text('Approchez la carte NFC',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold,
+                color: navyDark)),
+        const SizedBox(height: 8),
+        Text('Maintenez la carte contre\nle dos de votre téléphone',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade500, height: 1.5)),
+        const SizedBox(height: 24),
+        TextButton.icon(
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.close, size: 16),
+          label: const Text('Annuler'),
+          style: TextButton.styleFrom(foregroundColor: Colors.grey.shade500),
+        ),
+      ]),
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════
+// Barcode camera scanner page
+// ════════════════════════════════════════════════════
+
 class _CameraScannerPage extends StatefulWidget {
-  final String mode;
-  const _CameraScannerPage({required this.mode});
+  const _CameraScannerPage();
   @override
   State<_CameraScannerPage> createState() => _CameraScannerPageState();
 }
@@ -658,29 +864,26 @@ class _CameraScannerPageState extends State<_CameraScannerPage> {
                 ),
               ),
               const SizedBox(width: 12),
-              Expanded(child: Text(
-                widget.mode == 'NFC'
-                    ? 'Approcher la carte NFC'
-                    : 'Scanner le code-barres / QR',
-                style: const TextStyle(color: Colors.white,
+              const Expanded(child: Text(
+                'Scanner le code-barres / QR',
+                style: TextStyle(color: Colors.white,
                     fontSize: 14, fontWeight: FontWeight.w600),
               )),
-              if (widget.mode == 'Barcode')
-                GestureDetector(
-                  onTap: () async {
-                    await _ctrl.toggleTorch();
-                    setState(() => _torchOn = !_torchOn);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                        color: _torchOn ? goldLight : Colors.black54,
-                        borderRadius: BorderRadius.circular(12)),
-                    child: Icon(
-                      _torchOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
-                      color: _torchOn ? navyDark : Colors.white, size: 20),
-                  ),
+              GestureDetector(
+                onTap: () async {
+                  await _ctrl.toggleTorch();
+                  setState(() => _torchOn = !_torchOn);
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                      color: _torchOn ? goldLight : Colors.black54,
+                      borderRadius: BorderRadius.circular(12)),
+                  child: Icon(
+                    _torchOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
+                    color: _torchOn ? navyDark : Colors.white, size: 20),
                 ),
+              ),
             ]),
           ),
         ),
@@ -693,16 +896,11 @@ class _CameraScannerPageState extends State<_CameraScannerPage> {
                   color: Colors.black54,
                   borderRadius: BorderRadius.circular(30)),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(
-                  widget.mode == 'NFC'
-                      ? Icons.nfc_rounded : Icons.qr_code_2_rounded,
-                  color: Colors.white70, size: 16),
+                const Icon(Icons.qr_code_2_rounded,
+                    color: Colors.white70, size: 16),
                 const SizedBox(width: 8),
-                Text(
-                  widget.mode == 'NFC'
-                      ? 'Maintenez la carte contre le téléphone'
-                      : 'Centrez le code dans le cadre',
-                  style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                const Flexible(child: Text('Centrez le code dans le cadre',
+                    style: TextStyle(color: Colors.white70, fontSize: 12))),
               ]),
             ),
           ),
@@ -722,8 +920,7 @@ class _ScanOverlay extends StatelessWidget {
     final top   = (sz.height - boxSz) / 2 - 40;
     return CustomPaint(
         size: sz,
-        painter: _OverlayPainter(
-            cutRect: Rect.fromLTWH(left, top, boxSz, boxSz)));
+        painter: _OverlayPainter(cutRect: Rect.fromLTWH(left, top, boxSz, boxSz)));
   });
 }
 
@@ -743,7 +940,7 @@ class _OverlayPainter extends CustomPainter {
       ..color = Colors.white ..strokeWidth = 3
       ..style = PaintingStyle.stroke ..strokeCap = StrokeCap.round;
     const arm = 24.0;
-    final r   = cutRect;
+    final r = cutRect;
     canvas.drawLine(Offset(r.left, r.top + arm), Offset(r.left, r.top), b);
     canvas.drawLine(Offset(r.left, r.top), Offset(r.left + arm, r.top), b);
     canvas.drawLine(Offset(r.right - arm, r.top), Offset(r.right, r.top), b);
@@ -777,8 +974,9 @@ class _SessionBanner extends StatelessWidget {
     child: Row(children: [
       Icon(icon, color: const Color(0xFF16A34A), size: 18),
       const SizedBox(width: 10),
-      Text(text, style: const TextStyle(color: Color(0xFF15803D),
-          fontSize: 13, fontWeight: FontWeight.w600)),
+      Expanded(child: Text(text,
+          style: const TextStyle(color: Color(0xFF15803D),
+              fontSize: 13, fontWeight: FontWeight.w600))),
     ]),
   );
 }
@@ -791,56 +989,39 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) => Row(children: [
     Icon(icon, size: 13, color: navyMid.withOpacity(0.6)),
     const SizedBox(width: 7),
-    Text(text, style: const TextStyle(fontSize: 12,
-        fontWeight: FontWeight.w700, color: navyDark, letterSpacing: 0.4)),
+    Flexible(child: Text(text,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+            color: navyDark, letterSpacing: 0.4))),
   ]);
 }
 
-// ── Category grid — renders institution buttons in a 2-column grid ──
 class _CategoryGrid extends StatelessWidget {
   final List<Map<String, dynamic>> items;
   final String? selected;
   final ValueChanged<String> onSelect;
-
-  const _CategoryGrid({
-    required this.items,
-    required this.selected,
-    required this.onSelect,
-  });
-
+  const _CategoryGrid({required this.items, required this.selected, required this.onSelect});
   @override
-  Widget build(BuildContext context) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: items.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-        childAspectRatio: 2.8,
-      ),
-      itemBuilder: (_, i) => _CategoryButton(
-        item: items[i],
-        selected: selected == items[i]['label'],
-        onTap: () => onSelect(items[i]['label'] as String),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => GridView.builder(
+    shrinkWrap: true,
+    physics: const NeverScrollableScrollPhysics(),
+    itemCount: items.length,
+    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+      crossAxisCount: 2, mainAxisSpacing: 10,
+      crossAxisSpacing: 10, childAspectRatio: 2.8,
+    ),
+    itemBuilder: (_, i) => _CategoryButton(
+      item: items[i],
+      selected: selected == items[i]['label'],
+      onTap: () => onSelect(items[i]['label'] as String),
+    ),
+  );
 }
 
-// ── Single category button — used both in the grid and the special row ──
 class _CategoryButton extends StatelessWidget {
   final Map<String, dynamic> item;
   final bool selected;
   final VoidCallback onTap;
-
-  const _CategoryButton({
-    required this.item,
-    required this.selected,
-    required this.onTap,
-  });
-
+  const _CategoryButton({required this.item, required this.selected, required this.onTap});
   @override
   Widget build(BuildContext context) {
     final color = item['color'] as Color;
@@ -857,36 +1038,17 @@ class _CategoryButton extends StatelessWidget {
             width: selected ? 0 : 1.5,
           ),
           boxShadow: selected
-              ? [BoxShadow(
-                  color: color.withOpacity(0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
-                )]
-              : [BoxShadow(
-                  color: navyMid.withOpacity(0.05),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                )],
+              ? [BoxShadow(color: color.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 3))]
+              : [BoxShadow(color: navyMid.withOpacity(0.05), blurRadius: 6, offset: const Offset(0, 2))],
         ),
         child: Row(children: [
-          Icon(
-            item['icon'] as IconData,
-            size: 16,
-            color: selected ? Colors.white : color,
-          ),
+          Icon(item['icon'] as IconData, size: 16,
+              color: selected ? Colors.white : color),
           const SizedBox(width: 7),
-          Expanded(
-            child: Text(
-              item['label'] as String,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: selected ? Colors.white : navyDark,
-              ),
-            ),
-          ),
+          Expanded(child: Text(item['label'] as String,
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                  color: selected ? Colors.white : navyDark))),
         ]),
       ),
     );
@@ -897,8 +1059,7 @@ class _QuantiteCard extends StatelessWidget {
   final int quantite;
   final VoidCallback? onDec;
   final VoidCallback onInc;
-  const _QuantiteCard(
-      {required this.quantite, this.onDec, required this.onInc});
+  const _QuantiteCard({required this.quantite, this.onDec, required this.onInc});
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -908,8 +1069,7 @@ class _QuantiteCard extends StatelessWidget {
           blurRadius: 10, offset: const Offset(0, 3))],
     ),
     child: Row(children: [
-      _QtyBtn(icon: Icons.remove, enabled: onDec != null,
-          onTap: onDec ?? () {}),
+      _QtyBtn(icon: Icons.remove, enabled: onDec != null, onTap: onDec ?? () {}),
       Expanded(child: Column(children: [
         Text('$quantite', style: const TextStyle(fontSize: 28,
             fontWeight: FontWeight.bold, color: navyDark)),
@@ -925,8 +1085,7 @@ class _QtyBtn extends StatelessWidget {
   final IconData icon;
   final bool enabled;
   final VoidCallback onTap;
-  const _QtyBtn(
-      {required this.icon, required this.enabled, required this.onTap});
+  const _QtyBtn({required this.icon, required this.enabled, required this.onTap});
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: enabled ? onTap : null,
@@ -937,8 +1096,7 @@ class _QtyBtn extends StatelessWidget {
         color: enabled ? navyMid : Colors.grey.shade100,
         borderRadius: BorderRadius.circular(12),
         boxShadow: enabled
-            ? [BoxShadow(color: navyMid.withOpacity(0.3), blurRadius: 6,
-                offset: const Offset(0, 2))]
+            ? [BoxShadow(color: navyMid.withOpacity(0.3), blurRadius: 6, offset: const Offset(0, 2))]
             : [],
       ),
       child: Icon(icon,
@@ -958,9 +1116,12 @@ class _InfoRow extends StatelessWidget {
       child: Row(children: [
         Icon(icon, size: 14, color: navyLight.withOpacity(0.5)),
         const SizedBox(width: 10),
-        Text('$label  ',
-            style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
-        Expanded(child: Text(value, textAlign: TextAlign.end,
+        Flexible(flex: 2, child: Text(label,
+            style: TextStyle(color: Colors.grey.shade400, fontSize: 12))),
+        const SizedBox(width: 4),
+        Flexible(flex: 3, child: Text(value,
+            textAlign: TextAlign.end, maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.w700,
                 fontSize: 13, color: navyDark))),
       ]),
@@ -981,16 +1142,14 @@ class _IdleWidget extends StatelessWidget {
           blurRadius: 12, offset: const Offset(0, 3))],
     ),
     child: Column(children: [
-      Icon(Icons.qr_code_scanner_rounded, size: 56,
-          color: Colors.grey.shade200),
+      Icon(Icons.qr_code_scanner_rounded, size: 56, color: Colors.grey.shade200),
       const SizedBox(height: 14),
       Text('Prêt à scanner', style: TextStyle(fontSize: 15,
           fontWeight: FontWeight.w700, color: Colors.grey.shade400)),
       const SizedBox(height: 6),
-      Text('Choisissez NFC ou Code-barres\npour lancer l\'appareil photo',
+      Text('Choisissez NFC ou Code-barres\npour lancer la lecture',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade300,
-              height: 1.5)),
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade300, height: 1.5)),
     ]),
   );
 }
@@ -999,10 +1158,8 @@ class _ScanResultWidget extends StatelessWidget {
   final Map<String, dynamic> data;
   final bool isSaving;
   final VoidCallback onCancel, onValidate;
-  const _ScanResultWidget({
-    super.key, required this.data, required this.isSaving,
-    required this.onCancel, required this.onValidate,
-  });
+  const _ScanResultWidget({super.key, required this.data, required this.isSaving,
+      required this.onCancel, required this.onValidate});
   @override
   Widget build(BuildContext context) => Container(
     width: double.infinity,
@@ -1029,8 +1186,8 @@ class _ScanResultWidget extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('Titre détecté', style: TextStyle(fontSize: 15,
                 fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
-            Text('Vérifiez et validez', style: TextStyle(
-                fontSize: 11, color: Color(0xFF16A34A))),
+            Text('Vérifiez et validez',
+                style: TextStyle(fontSize: 11, color: Color(0xFF16A34A))),
           ])),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -1046,51 +1203,42 @@ class _ScanResultWidget extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Column(children: [
           _InfoRow(Icons.confirmation_number_outlined, 'Code scanné', data['numero']),
-          _InfoRow(Icons.sell_outlined,  'Type',              data['type']),
-          _InfoRow(Icons.event_rounded,  'Valable jusqu\'au', data['valid_until']),
-          _InfoRow(Icons.route_rounded,  'Ligne',             data['ligne']),
+          _InfoRow(Icons.sell_outlined, 'Type', data['type']),
+          _InfoRow(Icons.event_rounded, "Valable jusqu'au", data['valid_until']),
+          _InfoRow(Icons.route_rounded, 'Ligne', data['ligne']),
         ]),
       ),
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         child: Row(children: [
-          Expanded(
-            child: OutlinedButton(
-              onPressed: onCancel,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.grey.shade500,
-                side: BorderSide(color: Colors.grey.shade300),
-                padding: const EdgeInsets.symmetric(vertical: 13),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              child: const Text('Annuler',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
+          Expanded(child: OutlinedButton(
+            onPressed: onCancel,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.grey.shade500,
+              side: BorderSide(color: Colors.grey.shade300),
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-          ),
+            child: const Text('Annuler',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+          )),
           const SizedBox(width: 10),
-          Expanded(flex: 2,
-            child: ElevatedButton.icon(
-              onPressed: isSaving ? null : onValidate,
-              icon: isSaving
-                  ? const SizedBox(width: 16, height: 16,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2))
-                  : const Icon(Icons.check_rounded, size: 18),
-              label: Text(
-                  isSaving ? 'Enregistrement...' : 'Valider & Enregistrer',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 13)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF16A34A),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 13),
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
+          Expanded(flex: 2, child: ElevatedButton.icon(
+            onPressed: isSaving ? null : onValidate,
+            icon: isSaving
+                ? const SizedBox(width: 16, height: 16,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                : const Icon(Icons.check_rounded, size: 18),
+            label: Text(isSaving ? 'Enregistrement...' : 'Valider & Enregistrer',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF16A34A),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-          ),
+          )),
         ]),
       ),
     ]),
@@ -1100,8 +1248,7 @@ class _ScanResultWidget extends StatelessWidget {
 class _ScanErrorWidget extends StatelessWidget {
   final String msg;
   final VoidCallback onRetry;
-  const _ScanErrorWidget(
-      {super.key, required this.msg, required this.onRetry});
+  const _ScanErrorWidget({super.key, required this.msg, required this.onRetry});
   @override
   Widget build(BuildContext context) => Container(
     width: double.infinity, padding: const EdgeInsets.all(28),
@@ -1111,10 +1258,8 @@ class _ScanErrorWidget extends StatelessWidget {
     ),
     child: Column(children: [
       Container(width: 56, height: 56,
-          decoration: BoxDecoration(
-              color: Colors.red.shade50, shape: BoxShape.circle),
-          child: Icon(Icons.cancel_rounded,
-              color: Colors.red.shade400, size: 30)),
+          decoration: BoxDecoration(color: Colors.red.shade50, shape: BoxShape.circle),
+          child: Icon(Icons.cancel_rounded, color: Colors.red.shade400, size: 30)),
       const SizedBox(height: 14),
       Text(msg, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
           color: Colors.red.shade700)),
@@ -1151,30 +1296,22 @@ class _ScanModeBtn extends StatelessWidget {
           decoration: BoxDecoration(
             gradient: enabled ? LinearGradient(
                 colors: [color, color.withOpacity(0.8)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight) : null,
+                begin: Alignment.topLeft, end: Alignment.bottomRight) : null,
             color: enabled ? null : Colors.grey.shade200,
             borderRadius: BorderRadius.circular(14),
             boxShadow: enabled
-                ? [BoxShadow(color: color.withOpacity(0.3), blurRadius: 10,
-                    offset: const Offset(0, 4))]
+                ? [BoxShadow(color: color.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))]
                 : [],
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           child: Row(children: [
-            Icon(icon,
-                color: enabled ? Colors.white : Colors.grey.shade400,
-                size: 26),
+            Icon(icon, color: enabled ? Colors.white : Colors.grey.shade400, size: 26),
             const SizedBox(width: 12),
-            Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(label, style: TextStyle(fontSize: 14,
-                  fontWeight: FontWeight.bold,
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold,
                   color: enabled ? Colors.white : Colors.grey.shade400)),
               Text(sublabel, style: TextStyle(fontSize: 10,
-                  color: enabled
-                      ? Colors.white.withOpacity(0.7)
-                      : Colors.grey.shade400)),
+                  color: enabled ? Colors.white.withOpacity(0.7) : Colors.grey.shade400)),
             ])),
           ]),
         ),
@@ -1203,8 +1340,7 @@ class _BigBtn extends StatelessWidget {
         child: Ink(
           decoration: BoxDecoration(
             gradient: enabled ? LinearGradient(colors: colors,
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight) : null,
+                begin: Alignment.topLeft, end: Alignment.bottomRight) : null,
             color: enabled ? null : Colors.grey.shade200,
             borderRadius: BorderRadius.circular(14),
             boxShadow: enabled
@@ -1215,16 +1351,14 @@ class _BigBtn extends StatelessWidget {
           child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             if (isLoading)
               const SizedBox(width: 20, height: 20,
-                  child: CircularProgressIndicator(
-                      color: Colors.white, strokeWidth: 2))
+                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
             else
-              Icon(icon,
-                  color: enabled ? Colors.white : Colors.grey.shade400,
-                  size: 20),
+              Icon(icon, color: enabled ? Colors.white : Colors.grey.shade400, size: 20),
             const SizedBox(width: 8),
-            Text(label, style: TextStyle(fontSize: 14,
-                fontWeight: FontWeight.bold, letterSpacing: 0.3,
-                color: enabled ? Colors.white : Colors.grey.shade400)),
+            Flexible(child: Text(label, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold,
+                    letterSpacing: 0.3,
+                    color: enabled ? Colors.white : Colors.grey.shade400))),
           ]),
         ),
       ),
@@ -1232,21 +1366,15 @@ class _BigBtn extends StatelessWidget {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// Toast widget — top-right, slides in from the right
-// ─────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════
+// Toast widget
+// ════════════════════════════════════════════════════
 
 class _ToastWidget extends StatefulWidget {
-  final String   msg;
-  final Color    color;
+  final String msg;
+  final Color color;
   final IconData icon;
-
-  const _ToastWidget({
-    required this.msg,
-    required this.color,
-    required this.icon,
-  });
-
+  const _ToastWidget({required this.msg, required this.color, required this.icon});
   @override
   State<_ToastWidget> createState() => _ToastWidgetState();
 }
@@ -1260,79 +1388,49 @@ class _ToastWidgetState extends State<_ToastWidget>
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 220),
-    );
+    _ctrl = AnimationController(vsync: this,
+        duration: const Duration(milliseconds: 220));
     _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
-    _slide   = Tween<Offset>(
-      begin: const Offset(1.0, 0),
-      end:   Offset.zero,
-    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
-
+    _slide   = Tween<Offset>(begin: const Offset(1.0, 0), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
     _ctrl.forward();
-
     Future.delayed(const Duration(milliseconds: 2100), () {
       if (mounted) _ctrl.reverse();
     });
   }
 
   @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
+  void dispose() { _ctrl.dispose(); super.dispose(); }
 
   @override
-  Widget build(BuildContext context) {
-    return Positioned(
-      top:   MediaQuery.of(context).padding.top + 16,
-      right: 16,
-      child: FadeTransition(
-        opacity: _opacity,
-        child: SlideTransition(
-          position: _slide,
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 300),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 18,
-                vertical: 11,
-              ),
-              decoration: BoxDecoration(
-                color: widget.color,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: widget.color.withOpacity(0.35),
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(widget.icon, color: Colors.white, size: 16),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      widget.msg,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        height: 1.3,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+  Widget build(BuildContext context) => Positioned(
+    top: MediaQuery.of(context).padding.top + 16,
+    right: 16,
+    child: FadeTransition(
+      opacity: _opacity,
+      child: SlideTransition(
+        position: _slide,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 300),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+            decoration: BoxDecoration(
+              color: widget.color,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [BoxShadow(color: widget.color.withOpacity(0.35),
+                  blurRadius: 16, offset: const Offset(0, 4))],
             ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(widget.icon, color: Colors.white, size: 16),
+              const SizedBox(width: 8),
+              Flexible(child: Text(widget.msg,
+                  style: const TextStyle(color: Colors.white, fontSize: 13,
+                      fontWeight: FontWeight.w600, height: 1.3))),
+            ]),
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
 }
