@@ -18,7 +18,6 @@ class VenteData(BaseModel):
 
 class TypePassageSpecial(str, Enum):
     """Types of special passages (institutions, NFC, subscriptions)"""
-    # Institutions — all prefixed with "Gratuit — " from the Flutter app
     GRATUIT_ARMEE      = "Gratuit — Armée nationale"
     GRATUIT_GARDE      = "Gratuit — Garde nationale"
     GRATUIT_POLICE     = "Gratuit — Police nationale"
@@ -27,13 +26,10 @@ class TypePassageSpecial(str, Enum):
     GRATUIT_MUNICIPAL  = "Gratuit — Municipalité"
     GRATUIT_SCOLAIRE   = "Gratuit — Établissement scolaire"
     GRATUIT_AUTRE      = "Gratuit — Autre institution"
-    # Special types (no prefix)
     ABONNEMENT         = "Abonnement"
     AGENT              = "Agent"
-    # Scan types (formatted as "Scan <mode> — <subtype>")
     TITRE_NFC          = "Titre NFC"
     TITRE_BARCODE      = "Titre Code-barres"
-    # Legacy / generic
     ABONNEMENT_MENSUEL      = "Abonnement Mensuel"
     ABONNEMENT_TRIMESTRIEL  = "Abonnement Trimestriel"
     ABONNEMENT_ANNUEL       = "Abonnement Annuel"
@@ -46,19 +42,16 @@ class TicketSpecialData(BaseModel):
     id_segment:       int   = 0
     point_depart:     str
     point_arrivee:    str
-    type_tarif:       str   # Use enum or free string
+    type_tarif:       str
     quantite:         int   = 1
-    prix_unitaire:    float = 0.0   # Always 0 for special passages
-    montant_total:    float = 0.0   # Always 0 for special passages
+    prix_unitaire:    float = 0.0
+    montant_total:    float = 0.0
     matricule_agent:  int
-    metadata:         dict  = None  # e.g. {"institution": "Armée", "card_id": "ABC123"}
+    metadata:         dict  = None
 
 
-# ── FIX 3: All keywords that identify a zero-price special passage ──
 _SPECIAL_KEYWORDS = [
-    # Gratuit prefix (used by Flutter for all institution types)
     "Gratuit",
-    # Individual institution names (fallback if prefix is missing)
     "Armée", "Armee",
     "Garde",
     "Police",
@@ -68,17 +61,14 @@ _SPECIAL_KEYWORDS = [
     "Scolaire",
     "Institution",
     "Autre",
-    # Special types
     "Abonnement",
     "Agent",
-    # Scan / NFC / barcode
     "NFC",
     "Barcode",
     "Scan",
 ]
 
 def _is_special_passage(type_tarif: str) -> bool:
-    """Return True if the ticket type should always have prix=0."""
     return any(kw.lower() in type_tarif.lower() for kw in _SPECIAL_KEYWORDS)
 
 
@@ -116,7 +106,9 @@ def get_ventes_programmees(matricule_agent: int):
                a.nom, a.prenom
         FROM billetterie.vente v
         JOIN base_global.ligne l ON v.id_ligne = l.id_ligne
-        JOIN base_global.agent a ON v.matricule_agent = a.matricule_agent
+        -- ✅ FIX: LEFT JOIN so a voyage is never excluded because its
+        --    matricule_agent has no matching row in base_global.agent
+        LEFT JOIN base_global.agent a ON v.matricule_agent = a.matricule_agent
         WHERE v.type = 'programmé' AND v.matricule_agent = %s
         ORDER BY v.date_heure DESC
     """, (matricule_agent,))
@@ -124,7 +116,10 @@ def get_ventes_programmees(matricule_agent: int):
     conn.close()
     return {"voyages": [
         {
+            # ✅ FIX: expose BOTH "id" and "id_vente" so Flutter
+            #    _mergeLocalStatuts (keyed on id_vente) works correctly
             "id":               v["id_vente"],
+            "id_vente":         v["id_vente"],
             "id_ligne":         v["id_ligne"],
             "id_appareil":      v["id_appareil"],
             "id_billet":        v["id_billet"],
@@ -134,19 +129,22 @@ def get_ventes_programmees(matricule_agent: int):
             "arrivee":          v["point_arrive"],
             "nom_ligne":        v["nom_ligne"],
             "date_heure":       str(v["date_heure"]),
-            "statut":           v["statut"],
+            "statut":           v["statut"],   # already present — kept as-is
         }
         for v in ventes
     ]}
 
 
-# ── Ventes d'un seul agent ──
+# ── Ventes d'un seul agent (programmés + non programmés) ──
 @router.get("/ventes/agent/{matricule_agent}")
 def get_ventes_agent(matricule_agent: int):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
         SELECT v.id_vente, v.id_ligne, v.date_heure, v.type,
+               v.statut,
+               v.id_appareil, v.id_billet, v.code_agence,
+               v.matricule_agent,
                l.nom_ligne, l.point_depart, l.point_arrive
         FROM billetterie.vente v
         JOIN base_global.ligne l ON v.id_ligne = l.id_ligne
@@ -157,13 +155,22 @@ def get_ventes_agent(matricule_agent: int):
     conn.close()
     return {"voyages": [
         {
-            "id":        v["id_vente"],
-            "id_ligne":  v["id_ligne"],
-            "depart":    v["point_depart"],
-            "arrivee":   v["point_arrive"],
-            "nom_ligne": v["nom_ligne"],
-            "date_heure": str(v["date_heure"]),
-            "type":      v["type"],
+            # ✅ FIX: expose BOTH "id" and "id_vente" so Flutter
+            #    _mergeLocalStatuts (keyed on id_vente) works correctly
+            "id":              v["id_vente"],
+            "id_vente":        v["id_vente"],
+            "id_ligne":        v["id_ligne"],
+            "id_appareil":     v["id_appareil"],
+            "id_billet":       v["id_billet"],
+            "code_agence":     v["code_agence"],
+            "matricule_agent": v["matricule_agent"],
+            "depart":          v["point_depart"],
+            "arrivee":         v["point_arrive"],
+            "nom_ligne":       v["nom_ligne"],
+            "date_heure":      str(v["date_heure"]),
+            "type":            v["type"],
+            # ✅ FIX: statut was completely missing — now included
+            "statut":          v["statut"],
         }
         for v in ventes
     ]}
@@ -450,7 +457,7 @@ def get_segments(id_vente: int):
     ]}
 
 
-# ── ENHANCED: Enregistrer un ticket vendu (with special passage validation) ──
+# ── Enregistrer un ticket vendu ──
 @router.post("/tickets/vendre")
 def vendre_ticket(data: dict):
     conn = get_db()
@@ -463,20 +470,16 @@ def vendre_ticket(data: dict):
         montant_total = float(data.get("montant_total", 0))
         quantite      = int(data.get("quantite", 1))
 
-        # ── FIX 3: Use the widened helper to detect all special passage types ──
         is_special = _is_special_passage(type_tarif)
 
         if is_special:
-            # Enforce zero pricing for all special passages
             if prix_unitaire != 0 or montant_total != 0:
                 return {
                     "success": False,
                     "error":   f"Passage spécial '{type_tarif}' doit avoir prix=0",
                 }
 
-        # ── Handle id_segment=0 (offline tickets saved without active segment) ──
         if id_segment == 0:
-            # Try to find the currently active segment for this voyage
             cursor.execute("""
                 SELECT id_segment FROM billetterie.segment_voyage
                 WHERE id_vente = %s AND statut = 'actif'
@@ -487,7 +490,6 @@ def vendre_ticket(data: dict):
             if row:
                 id_segment = row[0]
             else:
-                # Fall back to the last segment (closed or last in sequence)
                 cursor.execute("""
                     SELECT id_segment FROM billetterie.segment_voyage
                     WHERE id_vente = %s
@@ -500,7 +502,6 @@ def vendre_ticket(data: dict):
                     return {"success": False,
                             "error": "Aucun segment trouvé pour ce voyage"}
 
-        # ── Insert the ticket with resolved id_segment ──
         cursor.execute("""
             INSERT INTO billetterie.ticket_vendu
             (id_vente, id_segment, point_depart, point_arrivee,
@@ -537,7 +538,7 @@ def vendre_ticket(data: dict):
         conn.close()
 
 
-# ── CLEAN: Historique tickets d'un voyage (LEFT JOINs to handle NULL segment) ──
+# ── Historique tickets d'un voyage ──
 @router.get("/voyages/{id_vente}/tickets")
 def get_tickets_voyage(id_vente: int):
     conn = get_db()
@@ -573,17 +574,15 @@ def get_tickets_voyage(id_vente: int):
             "segment_ordre": r["segment_ordre"],
             "nom_ligne":     r["nom_ligne"],
             "agent":         f"{r['prenom']} {r['nom']}" if r["nom"] else None,
-            # FIX 3: use helper for consistent is_free detection
             "is_free":       _is_special_passage(r["type_tarif"] or ""),
         }
         for r in rows
     ]}
 
 
-# ── Statistics on special passages (Gratuit / NFC / Abonnement / Agent) ──
+# ── Statistiques passages spéciaux ──
 @router.get("/voyages/{id_vente}/passages-speciaux/stats")
 def get_special_passages_stats(id_vente: int):
-    """Statistics on free/special passages for a voyage."""
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""

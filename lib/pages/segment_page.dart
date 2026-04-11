@@ -24,23 +24,32 @@ class _SegmentPageState extends State<SegmentPage>
   Map<String, dynamic>? secteurActif;
   Map<String, dynamic>? prochainSecteur;
   List<dynamic> tousSecteurs = [];
-  bool tousClotures  = false;
-  bool isLoading     = true;
-  bool isActioning   = false;
-  bool isOffline     = false;
+  bool tousClotures = false;
+  bool isLoading    = true;
+  bool isActioning  = false;
+  bool isOffline    = false;
   String? errorMessage;
 
   late AnimationController _animCtrl;
   late Animation<double> _fadeAnim;
-  late Animation<Offset> _slideAnim;
+  late Animation<Offset>  _slideAnim;
+
+  // ── convenience getter — works whether API returns 'id' or 'id_vente' ──
+  int get _voyageId =>
+      (widget.voyage['id_vente'] ?? widget.voyage['id']) as int;
 
   @override
   void initState() {
     super.initState();
-    _animCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
+    _animCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
     _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut);
-    _slideAnim = Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut));
+    _slideAnim = Tween<Offset>(
+      begin: const Offset(0, 0.05),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut));
     _fetchAll();
   }
 
@@ -55,35 +64,43 @@ class _SegmentPageState extends State<SegmentPage>
   // ─────────────────────────────────────────────────────────────
 
   Future<void> _fetchAll() async {
-    setState(() { isLoading = true; errorMessage = null; });
+    setState(() {
+      isLoading    = true;
+      errorMessage = null;
+    });
 
     try {
-      final id = widget.voyage['id'] as int?;
-      if (id == null) throw Exception('ID du voyage manquant');
+      final id = _voyageId;
 
       final r1 = await http
-          .get(Uri.parse('http://192.168.1.22:8000/billetterie/voyages/$id/segment/actif'))
+          .get(Uri.parse(
+            'http://172.24.114.63:8000/billetterie/voyages/$id/segment/actif',
+          ))
           .timeout(const Duration(seconds: 6));
       final r2 = await http
-          .get(Uri.parse('http://192.168.1.22:8000/billetterie/voyages/$id/segments'))
+          .get(Uri.parse(
+            'http://172.24.114.63:8000/billetterie/voyages/$id/segments',
+          ))
           .timeout(const Duration(seconds: 6));
 
       dynamic d1, d2;
       try { d1 = jsonDecode(r1.body); } catch (_) {}
       try { d2 = jsonDecode(r2.body); } catch (_) {}
 
-      if (r1.statusCode == 200 && r2.statusCode == 200 && d1?['success'] == true) {
-        final actif    = d1['segment']       as Map<String, dynamic>?;
-        final prochain = d1['prochain']      as Map<String, dynamic>?;
-        final segments = d2?['segments']     as List<dynamic>? ?? [];
+      if (r1.statusCode == 200 &&
+          r2.statusCode == 200 &&
+          d1?['success'] == true) {
+        final actif    = d1['segment']      as Map<String, dynamic>?;
+        final prochain = d1['prochain']     as Map<String, dynamic>?;
+        final segments = d2?['segments']    as List<dynamic>? ?? [];
         final clotures = d1['tous_clotures'] == true;
 
         await LocalDatabase.saveSegments(
-          idVente: id,
-          actifSegment: actif,
+          idVente:         id,
+          actifSegment:    actif,
           prochainSegment: prochain,
-          tousSecteurs: segments,
-          tousClotures: clotures,
+          tousSecteurs:    segments,
+          tousClotures:    clotures,
         );
 
         setState(() {
@@ -98,15 +115,13 @@ class _SegmentPageState extends State<SegmentPage>
         return;
       }
 
-      final errorMsg = (d1?['message'] as String?) ?? 'Erreur serveur (${r1.statusCode})';
-      throw Exception(errorMsg);
+      throw Exception(
+        (d1?['message'] as String?) ?? 'Erreur serveur (${r1.statusCode})',
+      );
     } catch (_) {
-      // Offline fallback
+      // ── Offline fallback ──
       try {
-        final id = widget.voyage['id'] as int?;
-        if (id == null) throw Exception('ID du voyage manquant');
-
-        final cached = await LocalDatabase.getSegments(id);
+        final cached = await LocalDatabase.getSegments(_voyageId);
         if (cached != null) {
           setState(() {
             secteurActif    = cached['segment'];
@@ -123,8 +138,12 @@ class _SegmentPageState extends State<SegmentPage>
                 content: const Row(children: [
                   Icon(Icons.offline_bolt, color: Colors.white, size: 15),
                   SizedBox(width: 8),
-                  Flexible(child: Text('📡 Mode hors-ligne — données en cache',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+                  Flexible(
+                    child: Text(
+                      '📡 Mode hors-ligne — données en cache',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ),
                 ]),
                 backgroundColor: Colors.orange,
                 behavior: SnackBarBehavior.floating,
@@ -139,8 +158,9 @@ class _SegmentPageState extends State<SegmentPage>
       }
 
       setState(() {
-        errorMessage = 'Hors-ligne — aucune donnée en cache.\nConnectez-vous une première fois.';
-        isLoading    = false;
+        errorMessage =
+            'Hors-ligne — aucune donnée en cache.\nConnectez-vous une première fois.';
+        isLoading = false;
       });
     }
   }
@@ -152,10 +172,13 @@ class _SegmentPageState extends State<SegmentPage>
   Future<void> _ouvrirProchainSecteur() async {
     setState(() => isActioning = true);
     try {
-      final id = widget.voyage['id'] as int?;
       final response = await http
-          .put(Uri.parse('http://192.168.1.22:8000/billetterie/voyages/$id/segment/ouvrir'),
-              headers: {'Content-Type': 'application/json'})
+          .put(
+            Uri.parse(
+              'http://172.24.114.63:8000/billetterie/voyages/$_voyageId/segment/ouvrir',
+            ),
+            headers: {'Content-Type': 'application/json'},
+          )
           .timeout(const Duration(seconds: 6));
 
       final data = jsonDecode(response.body);
@@ -171,16 +194,27 @@ class _SegmentPageState extends State<SegmentPage>
     setState(() => isActioning = false);
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // ✅ Clôturer — online + offline
+  // ─────────────────────────────────────────────────────────────
+
   Future<void> _cloturerSecteurActif() async {
     if (secteurActif == null) return;
     setState(() => isActioning = true);
-    try {
-      final id    = widget.voyage['id'] as int?;
-      final idSeg = secteurActif!['id_segment'] as int?;
 
+    final id    = _voyageId;
+    final idSeg = secteurActif!['id_segment'] as int;
+    bool  clotureOk = false;
+
+    // ── 1. Try online ──
+    try {
       final response = await http
-          .put(Uri.parse('http://192.168.1.22:8000/billetterie/voyages/$id/segments/$idSeg/cloturer'),
-              headers: {'Content-Type': 'application/json'})
+          .put(
+            Uri.parse(
+              'http://172.24.114.63:8000/billetterie/voyages/$id/segments/$idSeg/cloturer',
+            ),
+            headers: {'Content-Type': 'application/json'},
+          )
           .timeout(const Duration(seconds: 6));
 
       final data = jsonDecode(response.body);
@@ -189,26 +223,121 @@ class _SegmentPageState extends State<SegmentPage>
         setState(() => isActioning = false);
         return;
       }
+      clotureOk = true;
+    } catch (_) {
+      // Network error → fall through to offline path
+    }
 
+    if (clotureOk) {
+      // ── Online success: refresh then auto-open next ──
       _showSnack('Secteur clôturé ✓', isWarning: true);
       await _fetchAll();
 
       if (!tousClotures && prochainSecteur != null) {
-        final openResponse = await http
-            .put(Uri.parse('http://192.168.1.22:8000/billetterie/voyages/$id/segment/ouvrir'),
-                headers: {'Content-Type': 'application/json'})
-            .timeout(const Duration(seconds: 6));
-        final openData = jsonDecode(openResponse.body);
-        if (openData['success'] == true) {
-          await _fetchAll();
-        } else {
-          _showSnack(openData['message'] ?? 'Erreur ouverture', isError: true);
+        try {
+          final openResponse = await http
+              .put(
+                Uri.parse(
+                  'http://172.24.114.63:8000/billetterie/voyages/$id/segment/ouvrir',
+                ),
+                headers: {'Content-Type': 'application/json'},
+              )
+              .timeout(const Duration(seconds: 6));
+          final openData = jsonDecode(openResponse.body);
+          if (openData['success'] == true) {
+            await _fetchAll();
+          } else {
+            _showSnack(openData['message'] ?? 'Erreur ouverture', isError: true);
+          }
+        } catch (e) {
+          _showSnack('Erreur ouverture : $e', isError: true);
         }
       }
-    } catch (e) {
-      _showSnack('Erreur : $e', isError: true);
+    } else {
+      // ── Offline: update local cache and queue for sync ──
+      await _handleOfflineCloture(id, idSeg);
     }
+
     setState(() => isActioning = false);
+  }
+
+  /// Apply the cloture locally and persist a pending record for later sync.
+  Future<void> _handleOfflineCloture(int idVente, int idSegment) async {
+    // Build updated segments list: mark current as cloture, next as actif
+    final nextPending = prochainSecteur;
+    final updatedSegments = tousSecteurs.map((s) {
+      final seg = Map<String, dynamic>.from(s as Map);
+      if (seg['id_segment'] == idSegment) {
+        seg['statut']        = 'cloture';
+        seg['date_cloture']  = DateTime.now().toString().substring(0, 19);
+      } else if (nextPending != null &&
+          seg['id_segment'] == nextPending['id_segment']) {
+        seg['statut']         = 'actif';
+        seg['date_ouverture'] = DateTime.now().toString().substring(0, 19);
+      }
+      return seg;
+    }).toList();
+
+    // Determine new actif / prochain from the updated list
+    Map<String, dynamic>? newActif;
+    Map<String, dynamic>? newProchain;
+
+    if (nextPending != null) {
+      // The "next" segment just became actif
+      newActif = Map<String, dynamic>.from(nextPending)
+        ..['statut']         = 'actif'
+        ..['date_ouverture'] = DateTime.now().toString().substring(0, 19);
+
+      // Find the one after that (still en_attente)
+      bool foundActif = false;
+      for (final s in updatedSegments) {
+        final seg = s as Map<String, dynamic>;
+        if (seg['id_segment'] == newActif['id_segment']) {
+          foundActif = true;
+          continue;
+        }
+        if (foundActif && seg['statut'] == 'en_attente') {
+          newProchain = seg;
+          break;
+        }
+      }
+    }
+
+    final allDone = nextPending == null ||
+        updatedSegments.every((s) =>
+            (s as Map<String, dynamic>)['statut'] == 'cloture');
+
+    // Persist updated state to cache
+    await LocalDatabase.saveSegments(
+      idVente:         idVente,
+      actifSegment:    allDone ? null : newActif,
+      prochainSegment: allDone ? null : newProchain,
+      tousSecteurs:    updatedSegments,
+      tousClotures:    allDone,
+    );
+
+    // Queue cloture (and auto-open of next) for later sync
+    await LocalDatabase.saveSegmentCloturePending(
+      idVente:   idVente,
+      idSegment: idSegment,
+      openNext:  !allDone && nextPending != null,
+    );
+
+    // Update UI immediately
+    setState(() {
+      secteurActif    = allDone ? null : newActif;
+      prochainSecteur = allDone ? null : newProchain;
+      tousSecteurs    = updatedSegments;
+      tousClotures    = allDone;
+      isOffline       = true;
+    });
+
+    _showSnack(
+      allDone
+          ? 'Tous secteurs clôturés hors-ligne ✓ (sync auto dès réseau)'
+          : 'Secteur clôturé hors-ligne ✓ (sync auto dès réseau)',
+      isWarning: true,
+    );
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -222,7 +351,12 @@ class _SegmentPageState extends State<SegmentPage>
     }
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => TicketingPage(voyage: widget.voyage, segment: secteurActif!)),
+      MaterialPageRoute(
+        builder: (_) => TicketingPage(
+          voyage:  widget.voyage,
+          segment: secteurActif!,
+        ),
+      ),
     );
   }
 
@@ -230,24 +364,42 @@ class _SegmentPageState extends State<SegmentPage>
   // Helpers
   // ─────────────────────────────────────────────────────────────
 
-  void _showSnack(String msg, {bool isError = false, bool isWarning = false}) {
-    final color = isError   ? Colors.red.shade700
-                : isWarning ? Colors.orange.shade700
-                            : const Color(0xFF16A34A);
+  void _showSnack(
+    String msg, {
+    bool isError   = false,
+    bool isWarning = false,
+  }) {
+    final color = isError
+        ? Colors.red.shade700
+        : isWarning
+            ? Colors.orange.shade700
+            : const Color(0xFF16A34A);
     ScaffoldMessenger.of(context)
       ..removeCurrentSnackBar()
       ..showSnackBar(SnackBar(
         content: Row(children: [
-          Icon(isError ? Icons.error_outline : isWarning ? Icons.info_outline : Icons.check_circle_outline,
-              color: Colors.white, size: 17),
+          Icon(
+            isError
+                ? Icons.error_outline
+                : isWarning
+                    ? Icons.info_outline
+                    : Icons.check_circle_outline,
+            color: Colors.white,
+            size: 17,
+          ),
           const SizedBox(width: 8),
-          Flexible(child: Text(msg, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
+          Flexible(
+            child: Text(
+              msg,
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+          ),
         ]),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(14),
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 4),
       ));
   }
 
@@ -265,19 +417,27 @@ class _SegmentPageState extends State<SegmentPage>
               Container(
                 width: 52, height: 52,
                 decoration: BoxDecoration(
-                  color: Colors.orange.shade50, shape: BoxShape.circle,
+                  color: Colors.orange.shade50,
+                  shape: BoxShape.circle,
                   border: Border.all(color: Colors.orange.shade200, width: 1.5),
                 ),
-                child: Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 28),
+                child: Icon(Icons.warning_amber_rounded,
+                    color: Colors.orange.shade700, size: 28),
               ),
               const SizedBox(height: 14),
-              const Text('Clôturer ce secteur ?',
-                  style: TextStyle(color: navyDark, fontSize: 17, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center),
+              const Text(
+                'Clôturer ce secteur ?',
+                style: TextStyle(
+                    color: navyDark, fontSize: 17, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                decoration: BoxDecoration(color: surface, borderRadius: BorderRadius.circular(10)),
+                decoration: BoxDecoration(
+                  color: surface,
+                  borderRadius: BorderRadius.circular(10),
+                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -286,7 +446,10 @@ class _SegmentPageState extends State<SegmentPage>
                     Flexible(
                       child: Text(
                         '${secteurActif!['point_depart']}  →  ${secteurActif!['point_arrivee']}',
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: navyMid),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: navyMid),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -294,9 +457,39 @@ class _SegmentPageState extends State<SegmentPage>
                 ),
               ),
               const SizedBox(height: 10),
-              Text("Le secteur suivant s'ouvrira automatiquement.",
-                  style: TextStyle(fontSize: 13, color: Colors.grey.shade500, height: 1.5),
-                  textAlign: TextAlign.center),
+              // ✅ Show offline warning in dialog if already offline
+              if (isOffline)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border:
+                        Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.offline_bolt,
+                          size: 13, color: Colors.orange.shade700),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          'Hors-ligne — sera synchronisé dès la reconnexion',
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.orange.shade700),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              Text(
+                "Le secteur suivant s'ouvrira automatiquement.",
+                style: TextStyle(
+                    fontSize: 13, color: Colors.grey.shade500, height: 1.5),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 22),
               Row(
                 children: [
@@ -307,23 +500,30 @@ class _SegmentPageState extends State<SegmentPage>
                         foregroundColor: Colors.grey.shade500,
                         side: BorderSide(color: Colors.grey.shade300),
                         padding: const EdgeInsets.symmetric(vertical: 13),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: const Text('Annuler', style: TextStyle(fontWeight: FontWeight.w600)),
+                      child: const Text('Annuler',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () { Navigator.pop(context); _cloturerSecteurActif(); },
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _cloturerSecteurActif();
+                      },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.orange.shade700,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 13),
                         elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: const Text('Clôturer', style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: const Text('Clôturer',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
@@ -335,9 +535,21 @@ class _SegmentPageState extends State<SegmentPage>
     );
   }
 
-  Color    _statutColor(String s) => s == 'actif' ? const Color(0xFF16A34A) : s == 'cloture' ? Colors.grey.shade400 : Colors.orange.shade600;
-  String   _statutLabel(String s) => s == 'actif' ? 'ACTIF' : s == 'cloture' ? 'CLÔTURÉ' : 'EN ATTENTE';
-  IconData _statutIcon(String s)  => s == 'actif' ? Icons.radio_button_checked_rounded : s == 'cloture' ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded;
+  Color   _statutColor(String s) => s == 'actif'
+      ? const Color(0xFF16A34A)
+      : s == 'cloture'
+          ? Colors.grey.shade400
+          : Colors.orange.shade600;
+  String  _statutLabel(String s) => s == 'actif'
+      ? 'ACTIF'
+      : s == 'cloture'
+          ? 'CLÔTURÉ'
+          : 'EN ATTENTE';
+  IconData _statutIcon(String s) => s == 'actif'
+      ? Icons.radio_button_checked_rounded
+      : s == 'cloture'
+          ? Icons.check_circle_rounded
+          : Icons.radio_button_unchecked_rounded;
 
   // ─────────────────────────────────────────────────────────────
   // Build
@@ -353,7 +565,9 @@ class _SegmentPageState extends State<SegmentPage>
       body: isLoading
           ? Column(children: [
               _buildHeader(depart, arrivee),
-              const Expanded(child: Center(child: CircularProgressIndicator(color: navyMid))),
+              const Expanded(
+                child: Center(child: CircularProgressIndicator(color: navyMid)),
+              ),
             ])
           : errorMessage != null
               ? Column(children: [
@@ -370,11 +584,14 @@ class _SegmentPageState extends State<SegmentPage>
                       child: CustomScrollView(
                         physics: const AlwaysScrollableScrollPhysics(),
                         slivers: [
-                          SliverToBoxAdapter(child: _buildHeader(depart, arrivee)),
+                          SliverToBoxAdapter(
+                              child: _buildHeader(depart, arrivee)),
                           SliverPadding(
-                            padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+                            padding:
+                                const EdgeInsets.fromLTRB(16, 20, 16, 40),
                             sliver: SliverList(
-                              delegate: SliverChildListDelegate([_buildBody()]),
+                              delegate: SliverChildListDelegate(
+                                  [_buildBody()]),
                             ),
                           ),
                         ],
@@ -402,7 +619,6 @@ class _SegmentPageState extends State<SegmentPage>
       padding: const EdgeInsets.fromLTRB(20, 52, 20, 28),
       child: Column(
         children: [
-          // Top row: back + offline badge + refresh
           Row(
             children: [
               GestureDetector(
@@ -413,21 +629,31 @@ class _SegmentPageState extends State<SegmentPage>
                     color: Colors.white.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 17),
+                  child: const Icon(Icons.arrow_back_ios_new,
+                      color: Colors.white, size: 17),
                 ),
               ),
               const Spacer(),
               if (isOffline)
                 Container(
                   margin: const EdgeInsets.only(right: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(color: Colors.orange.shade700, borderRadius: BorderRadius.circular(20)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade700,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.offline_bolt, color: Colors.white, size: 10),
                       SizedBox(width: 4),
-                      Text('HORS-LIGNE', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                      Text('HORS-LIGNE',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5)),
                     ],
                   ),
                 ),
@@ -435,36 +661,51 @@ class _SegmentPageState extends State<SegmentPage>
                 onTap: _fetchAll,
                 child: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-                  child: const Icon(Icons.refresh_rounded, color: Colors.white70, size: 17),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.refresh_rounded,
+                      color: Colors.white70, size: 17),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 18),
-
-          // Logo
           Container(
             width: 72, height: 72,
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(18),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 16, offset: const Offset(0, 6))],
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6)),
+              ],
             ),
-            child: Image.asset('assets/images/logo_srtb.png', fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Icon(Icons.directions_bus, size: 44, color: navyMid)),
+            child: Image.asset(
+              'assets/images/logo_srtb.png',
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) =>
+                  const Icon(Icons.directions_bus, size: 44, color: navyMid),
+            ),
           ),
           const SizedBox(height: 12),
-
           const Text('S R T B',
-              style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 7)),
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 7)),
           const SizedBox(height: 4),
           Text('Gestion des Segments',
-              style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12, letterSpacing: 1.5)),
+              style: TextStyle(
+                  color: Colors.white.withOpacity(0.7),
+                  fontSize: 12,
+                  letterSpacing: 1.5)),
           const SizedBox(height: 14),
-
-          // Route pill — FIX: constrain width and wrap texts in Flexible
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
             decoration: BoxDecoration(
@@ -475,33 +716,41 @@ class _SegmentPageState extends State<SegmentPage>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(width: 7, height: 7, decoration: const BoxDecoration(color: goldLight, shape: BoxShape.circle)),
+                Container(
+                  width: 7, height: 7,
+                  decoration: const BoxDecoration(
+                      color: goldLight, shape: BoxShape.circle),
+                ),
                 const SizedBox(width: 8),
                 Flexible(
-                  child: Text(
-                    depart,
-                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  child: Text(depart,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis),
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Icon(Icons.arrow_forward, color: Colors.white.withOpacity(0.4), size: 13),
+                  child: Icon(Icons.arrow_forward,
+                      color: Colors.white.withOpacity(0.4), size: 13),
                 ),
                 Container(
                   width: 7, height: 7,
                   decoration: BoxDecoration(
-                    color: Colors.transparent, shape: BoxShape.circle,
+                    color: Colors.transparent,
+                    shape: BoxShape.circle,
                     border: Border.all(color: goldLight, width: 2),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Flexible(
-                  child: Text(
-                    arrivee,
-                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  child: Text(arrivee,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis),
                 ),
               ],
             ),
@@ -519,33 +768,61 @@ class _SegmentPageState extends State<SegmentPage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // ── Offline pending badge ──
+        if (isOffline) ...[
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.orange.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.sync, color: Colors.orange.shade700, size: 16),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    'Mode hors-ligne — les actions seront synchronisées dès la reconnexion',
+                    style: TextStyle(
+                        fontSize: 12, color: Colors.orange.shade700),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+
         // ── Secteur actif ──
         if (secteurActif != null) ...[
-          _sectionLabel('Secteur en cours', Icons.radio_button_checked_rounded, const Color(0xFF16A34A)),
+          _sectionLabel('Secteur en cours',
+              Icons.radio_button_checked_rounded, const Color(0xFF16A34A)),
           const SizedBox(height: 10),
           _buildStatusCard(
-            depart: secteurActif!['point_depart'] ?? '',
-            arrivee: secteurActif!['point_arrivee'] ?? '',
-            timestamp: secteurActif!['date_ouverture'],
-            accent: const Color(0xFF16A34A),
+            depart:     secteurActif!['point_depart']  ?? '',
+            arrivee:    secteurActif!['point_arrivee'] ?? '',
+            timestamp:  secteurActif!['date_ouverture'],
+            accent:     const Color(0xFF16A34A),
             badgeLabel: 'ACTIF',
-            icon: Icons.directions_bus_rounded,
-            note: 'Ouvert',
+            icon:       Icons.directions_bus_rounded,
+            note:       'Ouvert',
           ),
           const SizedBox(height: 14),
           _actionBtn(
-            label: 'Billetterie',
-            sublabel: 'Vente de tickets & passages spéciaux',
-            icon: Icons.confirmation_number_rounded,
-            colors: [navyDark, navyLight],
+            label:     'Billetterie',
+            sublabel:  'Vente de tickets & passages spéciaux',
+            icon:      Icons.confirmation_number_rounded,
+            colors:    [navyDark, navyLight],
             onPressed: _goToTicketing,
           ),
           const SizedBox(height: 10),
           _actionBtn(
-            label: 'Clôturer ce secteur',
-            sublabel: "Le secteur suivant s'ouvrira automatiquement",
-            icon: Icons.flag_rounded,
-            colors: [const Color(0xFFB45309), const Color(0xFFEA580C)],
+            label:     'Clôturer ce secteur',
+            sublabel:  "Le secteur suivant s'ouvrira automatiquement",
+            icon:      Icons.flag_rounded,
+            colors:    [const Color(0xFFB45309), const Color(0xFFEA580C)],
             onPressed: _confirmCloture,
             isLoading: isActioning,
           ),
@@ -554,26 +831,67 @@ class _SegmentPageState extends State<SegmentPage>
 
         // ── Prochain secteur ──
         if (secteurActif == null && !tousClotures && prochainSecteur != null) ...[
-          _sectionLabel('Prochain secteur', Icons.schedule_rounded, Colors.orange.shade600),
+          _sectionLabel('Prochain secteur',
+              Icons.schedule_rounded, Colors.orange.shade600),
           const SizedBox(height: 10),
           _buildStatusCard(
-            depart: prochainSecteur!['point_depart'] ?? '',
-            arrivee: prochainSecteur!['point_arrivee'] ?? '',
-            timestamp: null,
-            accent: Colors.orange.shade600,
+            depart:     prochainSecteur!['point_depart']  ?? '',
+            arrivee:    prochainSecteur!['point_arrivee'] ?? '',
+            timestamp:  null,
+            accent:     Colors.orange.shade600,
             badgeLabel: 'EN ATTENTE',
-            icon: Icons.schedule_rounded,
-            note: 'Prêt à ouvrir',
+            icon:       Icons.schedule_rounded,
+            note:       'Prêt à ouvrir',
           ),
           const SizedBox(height: 12),
-          _actionBtn(
-            label: 'Ouvrir ce secteur',
-            sublabel: 'Démarrer la vente de tickets',
-            icon: Icons.play_arrow_rounded,
-            colors: [const Color(0xFF15803D), const Color(0xFF16A34A)],
-            onPressed: _ouvrirProchainSecteur,
-            isLoading: isActioning,
-          ),
+          // ✅ Disable open button when offline — opening is synced automatically
+          //    after the cloture sync completes in SyncService.
+          if (!isOffline)
+            _actionBtn(
+              label:     'Ouvrir ce secteur',
+              sublabel:  'Démarrer la vente de tickets',
+              icon:      Icons.play_arrow_rounded,
+              colors:    [const Color(0xFF15803D), const Color(0xFF16A34A)],
+              onPressed: _ouvrirProchainSecteur,
+              isLoading: isActioning,
+            )
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42, height: 42,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: Icon(Icons.sync, color: Colors.grey.shade400, size: 20),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Ouverture en attente de sync',
+                            style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade500)),
+                        const SizedBox(height: 2),
+                        Text('S\'ouvrira automatiquement dès la reconnexion',
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.grey.shade400)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           const SizedBox(height: 28),
         ],
 
@@ -585,7 +903,11 @@ class _SegmentPageState extends State<SegmentPage>
 
         // ── Timeline ──
         if (tousSecteurs.isNotEmpty) ...[
-          _sectionLabel('Parcours complet · ${tousSecteurs.length} segments', Icons.route_rounded, navyMid),
+          _sectionLabel(
+            'Parcours complet · ${tousSecteurs.length} segments',
+            Icons.route_rounded,
+            navyMid,
+          ),
           const SizedBox(height: 10),
           _buildTimeline(),
         ],
@@ -594,7 +916,7 @@ class _SegmentPageState extends State<SegmentPage>
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Reusable widgets
+  // Reusable widgets (unchanged)
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildStatusCard({
@@ -612,19 +934,30 @@ class _SegmentPageState extends State<SegmentPage>
         color: cardWhite,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: accent.withOpacity(0.2)),
-        boxShadow: [BoxShadow(color: navyMid.withOpacity(0.07), blurRadius: 12, offset: const Offset(0, 3))],
+        boxShadow: [
+          BoxShadow(
+              color: navyMid.withOpacity(0.07),
+              blurRadius: 12,
+              offset: const Offset(0, 3)),
+        ],
       ),
       child: Row(
         children: [
-          Container(width: 4, height: 52, decoration: BoxDecoration(color: accent, borderRadius: BorderRadius.circular(4))),
+          Container(
+            width: 4, height: 52,
+            decoration: BoxDecoration(
+                color: accent, borderRadius: BorderRadius.circular(4)),
+          ),
           const SizedBox(width: 14),
           Container(
             width: 44, height: 44,
-            decoration: BoxDecoration(color: accent.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+              color: accent.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: Icon(icon, color: accent, size: 22),
           ),
           const SizedBox(width: 14),
-          // FIX: Expanded wraps the column so the inner Row is constrained
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -632,34 +965,39 @@ class _SegmentPageState extends State<SegmentPage>
                 Row(
                   children: [
                     Flexible(
-                      child: Text(
-                        depart,
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: navyDark),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      child: Text(depart,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: navyDark),
+                          overflow: TextOverflow.ellipsis),
                     ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 6),
-                      child: Icon(Icons.arrow_forward_rounded, size: 13, color: Colors.grey.shade400),
+                      child: Icon(Icons.arrow_forward_rounded,
+                          size: 13, color: Colors.grey.shade400),
                     ),
                     Flexible(
-                      child: Text(
-                        arrivee,
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: navyDark),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      child: Text(arrivee,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: navyDark),
+                          overflow: TextOverflow.ellipsis),
                     ),
                   ],
                 ),
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Icon(Icons.access_time_rounded, size: 11, color: Colors.grey.shade400),
+                    Icon(Icons.access_time_rounded,
+                        size: 11, color: Colors.grey.shade400),
                     const SizedBox(width: 4),
                     Flexible(
                       child: Text(
                         timestamp != null ? '$note · $timestamp' : note,
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey.shade400),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -676,7 +1014,12 @@ class _SegmentPageState extends State<SegmentPage>
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: accent.withOpacity(0.3)),
             ),
-            child: Text(badgeLabel, style: TextStyle(color: accent, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.4)),
+            child: Text(badgeLabel,
+                style: TextStyle(
+                    color: accent,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4)),
           ),
         ],
       ),
@@ -702,19 +1045,40 @@ class _SegmentPageState extends State<SegmentPage>
           borderRadius: BorderRadius.circular(14),
           child: Ink(
             decoration: BoxDecoration(
-              gradient: enabled ? LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight) : null,
+              gradient: enabled
+                  ? LinearGradient(
+                      colors: colors,
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight)
+                  : null,
               color: enabled ? null : Colors.grey.shade200,
               borderRadius: BorderRadius.circular(14),
-              boxShadow: enabled ? [BoxShadow(color: colors.first.withOpacity(0.35), blurRadius: 12, offset: const Offset(0, 4))] : [],
+              boxShadow: enabled
+                  ? [
+                      BoxShadow(
+                          color: colors.first.withOpacity(0.35),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4))
+                    ]
+                  : [],
             ),
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
             child: Row(
               children: [
                 Container(
                   width: 42, height: 42,
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(11)),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
                   child: isLoading
-                      ? const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)))
+                      ? const Center(
+                          child: SizedBox(
+                            width: 18, height: 18,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2),
+                          ),
+                        )
                       : Icon(icon, color: Colors.white, size: 20),
                 ),
                 const SizedBox(width: 14),
@@ -722,13 +1086,26 @@ class _SegmentPageState extends State<SegmentPage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.2, color: enabled ? Colors.white : Colors.grey.shade400)),
+                      Text(label,
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.2,
+                              color: enabled
+                                  ? Colors.white
+                                  : Colors.grey.shade400)),
                       const SizedBox(height: 2),
-                      Text(sublabel, style: TextStyle(fontSize: 11, color: enabled ? Colors.white.withOpacity(0.7) : Colors.grey.shade400)),
+                      Text(sublabel,
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: enabled
+                                  ? Colors.white.withOpacity(0.7)
+                                  : Colors.grey.shade400)),
                     ],
                   ),
                 ),
-                Icon(Icons.arrow_forward_ios_rounded, color: Colors.white.withOpacity(0.6), size: 13),
+                Icon(Icons.arrow_forward_ios_rounded,
+                    color: Colors.white.withOpacity(0.6), size: 13),
               ],
             ),
           ),
@@ -742,41 +1119,52 @@ class _SegmentPageState extends State<SegmentPage>
       decoration: BoxDecoration(
         color: cardWhite,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: navyMid.withOpacity(0.06), blurRadius: 12, offset: const Offset(0, 3))],
+        boxShadow: [
+          BoxShadow(
+              color: navyMid.withOpacity(0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 3)),
+        ],
       ),
       child: ListView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         itemCount: tousSecteurs.length,
         itemBuilder: (_, i) {
-          final s       = tousSecteurs[i] as Map<String, dynamic>;
-          final statut  = s['statut'] as String? ?? 'en_attente';
-          final color   = _statutColor(statut);
+          final s      = tousSecteurs[i] as Map<String, dynamic>;
+          final statut = s['statut'] as String? ?? 'en_attente';
+          final color  = _statutColor(statut);
           final isActif = statut == 'actif';
           final isLast  = i == tousSecteurs.length - 1;
 
           return Column(
             children: [
               Container(
-                color: isActif ? const Color(0xFF16A34A).withOpacity(0.04) : Colors.transparent,
+                color: isActif
+                    ? const Color(0xFF16A34A).withOpacity(0.04)
+                    : Colors.transparent,
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
                 child: Row(
                   children: [
-                    // Order circle
                     Container(
                       width: 32, height: 32,
                       decoration: BoxDecoration(
-                        color: color.withOpacity(0.08), shape: BoxShape.circle,
-                        border: Border.all(color: isActif ? color : color.withOpacity(0.35), width: isActif ? 1.5 : 1),
+                        color: color.withOpacity(0.08),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isActif ? color : color.withOpacity(0.35),
+                          width: isActif ? 1.5 : 1,
+                        ),
                       ),
                       child: Center(
                         child: Text('${s['ordre']}',
-                            style: TextStyle(color: isActif ? color : Colors.grey.shade400, fontWeight: FontWeight.w700, fontSize: 12)),
+                            style: TextStyle(
+                                color: isActif ? color : Colors.grey.shade400,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12)),
                       ),
                     ),
                     const SizedBox(width: 12),
-
-                    // Route text — FIX: Expanded + ellipsis on all texts
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -784,44 +1172,56 @@ class _SegmentPageState extends State<SegmentPage>
                           Row(
                             children: [
                               Flexible(
-                                child: Text(
-                                  s['point_depart'] ?? '',
-                                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: isActif ? navyDark : Colors.grey.shade500),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                                child: Text(s['point_depart'] ?? '',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13,
+                                        color: isActif
+                                            ? navyDark
+                                            : Colors.grey.shade500),
+                                    overflow: TextOverflow.ellipsis),
                               ),
                               Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 6),
-                                child: Icon(Icons.arrow_forward_rounded, size: 11, color: Colors.grey.shade400),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 6),
+                                child: Icon(Icons.arrow_forward_rounded,
+                                    size: 11, color: Colors.grey.shade400),
                               ),
                               Flexible(
-                                child: Text(
-                                  s['point_arrivee'] ?? '',
-                                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: isActif ? navyDark : Colors.grey.shade500),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                                child: Text(s['point_arrivee'] ?? '',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13,
+                                        color: isActif
+                                            ? navyDark
+                                            : Colors.grey.shade500),
+                                    overflow: TextOverflow.ellipsis),
                               ),
                             ],
                           ),
-                          if (s['date_ouverture'] != null || s['date_cloture'] != null) ...[
+                          if (s['date_ouverture'] != null ||
+                              s['date_cloture'] != null) ...[
                             const SizedBox(height: 3),
                             if (s['date_ouverture'] != null)
                               Text('Ouvert · ${s['date_ouverture']}',
-                                  style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.grey.shade400),
                                   overflow: TextOverflow.ellipsis),
                             if (s['date_cloture'] != null)
                               Text('Clôturé · ${s['date_cloture']}',
-                                  style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.grey.shade400),
                                   overflow: TextOverflow.ellipsis),
                           ],
                         ],
                       ),
                     ),
                     const SizedBox(width: 8),
-
-                    // Status badge
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 9, vertical: 4),
                       decoration: BoxDecoration(
                         color: color.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(20),
@@ -832,14 +1232,24 @@ class _SegmentPageState extends State<SegmentPage>
                         children: [
                           Icon(_statutIcon(statut), color: color, size: 10),
                           const SizedBox(width: 4),
-                          Text(_statutLabel(statut), style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.3)),
+                          Text(_statutLabel(statut),
+                              style: TextStyle(
+                                  color: color,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.3)),
                         ],
                       ),
                     ),
                   ],
                 ),
               ),
-              if (!isLast) Divider(height: 1, indent: 16, endIndent: 16, color: Colors.grey.shade100),
+              if (!isLast)
+                Divider(
+                    height: 1,
+                    indent: 16,
+                    endIndent: 16,
+                    color: Colors.grey.shade100),
             ],
           );
         },
@@ -853,11 +1263,13 @@ class _SegmentPageState extends State<SegmentPage>
         Icon(icon, color: color, size: 14),
         const SizedBox(width: 8),
         Flexible(
-          child: Text(
-            label,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: navyDark, letterSpacing: 0.3),
-            overflow: TextOverflow.ellipsis,
-          ),
+          child: Text(label,
+              style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: navyDark,
+                  letterSpacing: 0.3),
+              overflow: TextOverflow.ellipsis),
         ),
       ],
     );
@@ -870,21 +1282,35 @@ class _SegmentPageState extends State<SegmentPage>
         color: cardWhite,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFF86EFAC), width: 1.5),
-        boxShadow: [BoxShadow(color: navyMid.withOpacity(0.06), blurRadius: 12, offset: const Offset(0, 3))],
+        boxShadow: [
+          BoxShadow(
+              color: navyMid.withOpacity(0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 3)),
+        ],
       ),
       child: Column(
         children: [
           Container(
             width: 64, height: 64,
-            decoration: BoxDecoration(color: const Color(0xFF16A34A).withOpacity(0.1), shape: BoxShape.circle),
-            child: const Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 36),
+            decoration: BoxDecoration(
+              color: const Color(0xFF16A34A).withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.check_circle_rounded,
+                color: Color(0xFF16A34A), size: 36),
           ),
           const SizedBox(height: 14),
           const Text('Tous les secteurs sont clôturés',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: navyDark), textAlign: TextAlign.center),
+              style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: navyDark),
+              textAlign: TextAlign.center),
           const SizedBox(height: 6),
           Text('Vous pouvez maintenant clôturer le voyage',
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 13), textAlign: TextAlign.center),
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+              textAlign: TextAlign.center),
         ],
       ),
     );
@@ -899,19 +1325,27 @@ class _SegmentPageState extends State<SegmentPage>
           children: [
             Container(
               width: 64, height: 64,
-              decoration: BoxDecoration(color: Colors.red.shade50, shape: BoxShape.circle),
-              child: Icon(Icons.error_outline_rounded, color: Colors.red.shade400, size: 32),
+              decoration: BoxDecoration(
+                  color: Colors.red.shade50, shape: BoxShape.circle),
+              child: Icon(Icons.error_outline_rounded,
+                  color: Colors.red.shade400, size: 32),
             ),
             const SizedBox(height: 16),
-            Text(errorMessage!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, color: Colors.black87)),
+            Text(errorMessage!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 13, color: Colors.black87)),
             const SizedBox(height: 24),
             ElevatedButton.icon(
               icon: const Icon(Icons.refresh_rounded, size: 16),
               label: const Text('Réessayer'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: navyMid, foregroundColor: Colors.white, elevation: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                backgroundColor: navyMid,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 28, vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
               onPressed: _fetchAll,
             ),

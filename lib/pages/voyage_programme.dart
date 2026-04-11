@@ -4,12 +4,12 @@ import 'dart:convert';
 import '../local_database.dart';
 import 'vente_tickets.dart';
 
-const Color navyDark  = Color(0xFF0D1B3E);
-const Color navyMid   = Color(0xFF1A3260);
+const Color navyDark = Color(0xFF0D1B3E);
+const Color navyMid = Color(0xFF1A3260);
 const Color navyLight = Color(0xFF1E4080);
-const Color gold      = Color(0xFFD4A017);
+const Color gold = Color(0xFFD4A017);
 const Color goldLight = Color(0xFFF5C842);
-const Color surface   = Color(0xFFF2F5FB);
+const Color surface = Color(0xFFF2F5FB);
 const Color cardWhite = Color(0xFFFFFFFF);
 
 class VoyageProgrammePage extends StatefulWidget {
@@ -25,15 +25,15 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
   late TabController _tabController;
 
   // ── Programmés ──
-  List<dynamic> voyagesProgrammes   = [];
-  bool isLoadingProgrammes          = true;
-  bool isOfflineProgrammes          = false;
+  List<dynamic> voyagesProgrammes = [];
+  bool isLoadingProgrammes = true;
+  bool isOfflineProgrammes = false;
   String? errorProgrammes;
 
   // ── Non programmés ──
   List<dynamic> voyagesNonProgrammes = [];
-  bool isLoadingNonProgrammes        = true;
-  bool isOfflineNonProgrammes        = false;
+  bool isLoadingNonProgrammes = true;
+  bool isOfflineNonProgrammes = false;
   String? errorNonProgrammes;
 
   @override
@@ -57,8 +57,6 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
   int get _matricule =>
       widget.agent['matricule_agent'] ?? widget.agent['matricule'];
 
-  // Key used to store non-programmés separately from programmés
-  // We use a negative value so it never collides with a real matricule key
   int get _matriculeNonProg => -_matricule;
 
   int get _activeIndex {
@@ -69,17 +67,47 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Fetch — Programmés (unchanged)
+  // Merge local offline cloture statuts into a list.
+  //
+  // After loading any list (server or cache), iterate every voyage
+  // and check voyage_cache. If a local override exists, apply it.
+  // ─────────────────────────────────────────────────────────────
+
+  Future<List<dynamic>> _mergeLocalStatuts(List<dynamic> voyages) async {
+    final merged = <dynamic>[];
+    for (final v in voyages) {
+      final voyage = Map<String, dynamic>.from(v as Map);
+      // Support both 'id_vente' and fallback 'id' keys
+      final idVente = voyage['id_vente'] ?? voyage['id'];
+      debugPrint('merge → id_vente=$idVente  statut=${voyage['statut']}');
+      if (idVente != null) {
+        final localStatut =
+            await LocalDatabase.getVoyageStatut(idVente as int);
+        if (localStatut != null) {
+          voyage['statut'] = localStatut;
+        }
+      }
+      merged.add(voyage);
+    }
+    return merged;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Fetch — Programmés
   // ─────────────────────────────────────────────────────────────
 
   Future<void> _fetchProgrammes() async {
-    setState(() { isLoadingProgrammes = true; errorProgrammes = null; });
+    setState(() {
+      isLoadingProgrammes = true;
+      errorProgrammes = null;
+    });
 
     try {
       final response = await http
           .get(
             Uri.parse(
-                'http://192.168.1.22:8000/billetterie/ventes/programmees/$_matricule'),
+              'http://172.24.114.63:8000/billetterie/ventes/programmees/$_matricule',
+            ),
             headers: {'Content-Type': 'application/json'},
           )
           .timeout(const Duration(seconds: 6));
@@ -87,9 +115,12 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       if (response.statusCode == 200) {
         final list =
             (jsonDecode(response.body)['voyages'] as List<dynamic>);
+        // ✅ Online: server is source of truth — save & display as-is.
+        //    Never merge local voyage_cache here; stale local entries would
+        //    incorrectly override a fresh actif coming from the server.
         await LocalDatabase.saveVoyages(_matricule, list);
         setState(() {
-          voyagesProgrammes   = list;
+          voyagesProgrammes = list;
           isOfflineProgrammes = false;
           isLoadingProgrammes = false;
         });
@@ -97,11 +128,13 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       }
     } catch (_) {}
 
-    // Offline fallback
+    // Offline fallback — merge IS needed: cache still holds old server
+    // statut but voyage_cache has the real locally-clôturé value.
     final cached = await LocalDatabase.getVoyages(_matricule);
     if (cached != null) {
+      final merged = await _mergeLocalStatuts(cached);
       setState(() {
-        voyagesProgrammes   = cached;
+        voyagesProgrammes = merged;
         isOfflineProgrammes = true;
         isLoadingProgrammes = false;
       });
@@ -117,17 +150,21 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Fetch — Non programmés (now cached)
+  // Fetch — Non programmés
   // ─────────────────────────────────────────────────────────────
 
   Future<void> _fetchNonProgrammes() async {
-    setState(() { isLoadingNonProgrammes = true; errorNonProgrammes = null; });
+    setState(() {
+      isLoadingNonProgrammes = true;
+      errorNonProgrammes = null;
+    });
 
     try {
       final response = await http
           .get(
             Uri.parse(
-                'http://192.168.1.22:8000/billetterie/ventes/agent/$_matricule'),
+              'http://172.24.114.63:8000/billetterie/ventes/agent/$_matricule',
+            ),
             headers: {'Content-Type': 'application/json'},
           )
           .timeout(const Duration(seconds: 6));
@@ -141,18 +178,22 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
             .map((v) {
               final voyage = Map<String, dynamic>.from(v as Map);
               voyage['matricule_agent'] ??= _matricule;
-              voyage['id_appareil']     ??= widget.agent['id_appareil'];
-              voyage['id_billet']       ??= widget.agent['id_billet'];
-              voyage['code_agence']     ??= widget.agent['code_agence'];
+              voyage['id_appareil'] ??= widget.agent['id_appareil'];
+              voyage['id_billet'] ??= widget.agent['id_billet'];
+              voyage['code_agence'] ??= widget.agent['code_agence'];
+              // ✅ FIX: Normalize null statut so grey/green logic works
+              voyage['statut'] ??= 'actif';
               return voyage;
             })
             .toList();
 
-        // ✅ Save to cache using the negative key
+        // ✅ Online: server is source of truth — save & display as-is.
+        //    Never merge local voyage_cache here; stale local entries would
+        //    incorrectly override a fresh actif coming from the server.
         await LocalDatabase.saveVoyages(_matriculeNonProg, list);
 
         setState(() {
-          voyagesNonProgrammes   = list;
+          voyagesNonProgrammes = list;
           isOfflineNonProgrammes = false;
           isLoadingNonProgrammes = false;
         });
@@ -160,21 +201,24 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       }
     } catch (_) {}
 
-    // ✅ Offline fallback — load from cache
+    // Offline fallback
     final cached = await LocalDatabase.getVoyages(_matriculeNonProg);
     if (cached != null) {
-      // Re-inject agent fields in case they were stripped during JSON encode
       final list = cached.map((v) {
         final voyage = Map<String, dynamic>.from(v as Map);
         voyage['matricule_agent'] ??= _matricule;
-        voyage['id_appareil']     ??= widget.agent['id_appareil'];
-        voyage['id_billet']       ??= widget.agent['id_billet'];
-        voyage['code_agence']     ??= widget.agent['code_agence'];
+        voyage['id_appareil'] ??= widget.agent['id_appareil'];
+        voyage['id_billet'] ??= widget.agent['id_billet'];
+        voyage['code_agence'] ??= widget.agent['code_agence'];
+        // ✅ FIX: Normalize null statut in offline fallback too
+        voyage['statut'] ??= 'actif';
         return voyage;
       }).toList();
 
+      final merged = await _mergeLocalStatuts(list);
+
       setState(() {
-        voyagesNonProgrammes   = list;
+        voyagesNonProgrammes = merged;
         isOfflineNonProgrammes = true;
         isLoadingNonProgrammes = false;
       });
@@ -214,15 +258,19 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Row(children: [
-            Icon(Icons.offline_bolt, color: Colors.white, size: 15),
-            SizedBox(width: 8),
-            Flexible(
-              child: Text('📡 Mode hors-ligne — données en cache',
-                  style: TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w600)),
-            ),
-          ]),
+          content: const Row(
+            children: [
+              Icon(Icons.offline_bolt, color: Colors.white, size: 15),
+              SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  '📡 Mode hors-ligne — données en cache',
+                  style:
+                      TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
           backgroundColor: Colors.orange.shade700,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
@@ -239,16 +287,19 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       ..removeCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: const Row(children: [
-            Icon(Icons.lock_outline, color: Colors.white, size: 17),
-            SizedBox(width: 8),
-            Flexible(
-              child: Text(
+          content: const Row(
+            children: [
+              Icon(Icons.lock_outline, color: Colors.white, size: 17),
+              SizedBox(width: 8),
+              Flexible(
+                child: Text(
                   "Terminez le voyage en cours avant d'accéder à celui-ci",
                   style: TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 13)),
-            ),
-          ]),
+                      fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
           backgroundColor: Colors.orange.shade700,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
@@ -294,7 +345,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildHeader() {
-    final agent   = widget.agent;
+    final agent = widget.agent;
     final offline = isOfflineProgrammes || isOfflineNonProgrammes;
 
     return Container(
@@ -319,66 +370,86 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                   color: Colors.white.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.arrow_back_ios_new,
-                    color: Colors.white, size: 17),
+                child: const Icon(
+                  Icons.arrow_back_ios_new,
+                  color: Colors.white,
+                  size: 17,
+                ),
               ),
             ),
           ),
           const SizedBox(height: 18),
           Container(
-            width: 72, height: 72,
+            width: 72,
+            height: 72,
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(18),
-              boxShadow: [BoxShadow(
+              boxShadow: [
+                BoxShadow(
                   color: Colors.black.withOpacity(0.3),
                   blurRadius: 16,
-                  offset: const Offset(0, 6))],
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
             child: Image.asset(
               'assets/images/logo_srtb.png',
               fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.directions_bus, size: 44, color: navyMid),
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.directions_bus,
+                size: 44,
+                color: navyMid,
+              ),
             ),
           ),
           const SizedBox(height: 12),
-          const Text('S R T B',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 7)),
+          const Text(
+            'S R T B',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 7,
+            ),
+          ),
           const SizedBox(height: 4),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('Mes Voyages',
-                  style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 12,
-                      letterSpacing: 1.5)),
+              Text(
+                'Mes Voyages',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.7),
+                  fontSize: 12,
+                  letterSpacing: 1.5,
+                ),
+              ),
               if (offline) ...[
                 const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                      color: Colors.orange.shade700,
-                      borderRadius: BorderRadius.circular(20)),
+                    color: Colors.orange.shade700,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.offline_bolt,
                           color: Colors.white, size: 10),
                       SizedBox(width: 4),
-                      Text('HORS-LIGNE',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5)),
+                      Text(
+                        'HORS-LIGNE',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -392,22 +463,28 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.1),
               borderRadius: BorderRadius.circular(30),
-              border:
-                  Border.all(color: Colors.white.withOpacity(0.2)),
+              border: Border.all(color: Colors.white.withOpacity(0.2)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                    width: 7, height: 7,
-                    decoration: const BoxDecoration(
-                        color: goldLight, shape: BoxShape.circle)),
+                  width: 7,
+                  height: 7,
+                  decoration: const BoxDecoration(
+                    color: goldLight,
+                    shape: BoxShape.circle,
+                  ),
+                ),
                 const SizedBox(width: 8),
-                Text('${agent['prenom']} ${agent['nom']}',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600)),
+                Text(
+                  '${agent['prenom']} ${agent['nom']}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
           ),
@@ -430,7 +507,10 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
         labelColor: goldLight,
         unselectedLabelColor: Colors.white54,
         labelStyle: const TextStyle(
-            fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.3),
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
+          letterSpacing: 0.3,
+        ),
         unselectedLabelStyle: const TextStyle(fontSize: 12),
         tabs: [
           Tab(
@@ -441,8 +521,9 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                 const Icon(Icons.schedule_rounded, size: 14),
                 const SizedBox(width: 5),
                 const Flexible(
-                    child: Text('Programmés',
-                        overflow: TextOverflow.ellipsis)),
+                  child: Text('Programmés',
+                      overflow: TextOverflow.ellipsis),
+                ),
                 const SizedBox(width: 5),
                 _tabBadge(
                     voyagesProgrammes.length, isLoadingProgrammes),
@@ -457,8 +538,9 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                 const Icon(Icons.directions_bus_outlined, size: 14),
                 const SizedBox(width: 5),
                 const Flexible(
-                    child: Text('Non programmés',
-                        overflow: TextOverflow.ellipsis)),
+                  child: Text('Non programmés',
+                      overflow: TextOverflow.ellipsis),
+                ),
                 const SizedBox(width: 5),
                 _tabBadge(voyagesNonProgrammes.length,
                     isLoadingNonProgrammes),
@@ -475,11 +557,13 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildProgrammesTab() {
-    if (isLoadingProgrammes)
+    if (isLoadingProgrammes) {
       return const Center(
           child: CircularProgressIndicator(color: navyMid));
-    if (errorProgrammes != null)
+    }
+    if (errorProgrammes != null) {
       return _buildError(errorProgrammes!, _fetchProgrammes);
+    }
 
     final activeIdx = _activeIndex;
 
@@ -487,26 +571,37 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       children: [
         if (voyagesProgrammes.isNotEmpty)
           _buildStatsBar([
-            _statTile(Icons.directions_bus_outlined, 'Total',
-                '${voyagesProgrammes.length}', navyMid),
-            _statTile(Icons.check_circle_outline, 'Clôturés',
-                '${voyagesProgrammes.where((v) => v['statut'] == 'cloture').length}',
-                Colors.grey),
-            _statTile(Icons.play_circle_outline, 'En cours',
-                activeIdx >= 0 ? '1' : '0', const Color(0xFF16A34A)),
+            _statTile(
+              Icons.directions_bus_outlined,
+              'Total',
+              '${voyagesProgrammes.length}',
+              navyMid,
+            ),
+            _statTile(
+              Icons.check_circle_outline,
+              'Clôturés',
+              '${voyagesProgrammes.where((v) => v['statut'] == 'cloture').length}',
+              Colors.grey,
+            ),
+            _statTile(
+              Icons.play_circle_outline,
+              'En cours',
+              activeIdx >= 0 ? '1' : '0',
+              const Color(0xFF16A34A),
+            ),
           ]),
         Expanded(
           child: voyagesProgrammes.isEmpty
               ? _buildEmpty('Aucun voyage programmé')
               : ListView.builder(
-                  padding:
-                      const EdgeInsets.fromLTRB(16, 14, 16, 40),
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 40),
                   itemCount: voyagesProgrammes.length,
                   itemBuilder: (_, i) {
-                    final v         = voyagesProgrammes[i] as Map<String, dynamic>;
+                    final v =
+                        voyagesProgrammes[i] as Map<String, dynamic>;
                     final isCloture = v['statut'] == 'cloture';
-                    final isActive  = i == activeIdx;
-                    final isLocked  = !isCloture && !isActive;
+                    final isActive = i == activeIdx;
+                    final isLocked = !isCloture && !isActive;
 
                     final Color accent, bgColor, borderColor;
                     if (isCloture) {
@@ -531,9 +626,9 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                       isActive: isActive,
                       isCloture: isCloture,
                       isLocked: isLocked,
-                      onTap: () => isLocked
-                          ? _showLockedSnack()
-                          : _openVoyage(v),
+                      onTap: isLocked
+                          ? _showLockedSnack
+                          : () => _openVoyage(v),
                       extraLabel: isLocked
                           ? 'En attente du voyage précédent'
                           : null,
@@ -551,38 +646,53 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildNonProgrammesTab() {
-    if (isLoadingNonProgrammes)
+    if (isLoadingNonProgrammes) {
       return const Center(
           child: CircularProgressIndicator(color: navyMid));
-    if (errorNonProgrammes != null)
+    }
+    if (errorNonProgrammes != null) {
       return _buildError(errorNonProgrammes!, _fetchNonProgrammes);
+    }
 
     return Column(
       children: [
         if (voyagesNonProgrammes.isNotEmpty)
           _buildStatsBar([
-            _statTile(Icons.directions_bus_outlined, 'Total',
-                '${voyagesNonProgrammes.length}', navyMid),
-            _statTile(Icons.check_circle_outline, 'Clôturés',
-                '${voyagesNonProgrammes.where((v) => v['statut'] == 'cloture').length}',
-                Colors.grey),
-            _statTile(Icons.play_circle_outline, 'Actifs',
-                '${voyagesNonProgrammes.where((v) => v['statut'] != 'cloture').length}',
-                const Color(0xFF16A34A)),
+            _statTile(
+              Icons.directions_bus_outlined,
+              'Total',
+              '${voyagesNonProgrammes.length}',
+              navyMid,
+            ),
+            _statTile(
+              Icons.check_circle_outline,
+              'Clôturés',
+              '${voyagesNonProgrammes.where((v) => v['statut'] == 'cloture').length}',
+              Colors.grey,
+            ),
+            _statTile(
+              Icons.play_circle_outline,
+              'Actifs',
+              '${voyagesNonProgrammes.where((v) => v['statut'] != 'cloture').length}',
+              const Color(0xFF16A34A),
+            ),
           ]),
         Expanded(
           child: voyagesNonProgrammes.isEmpty
               ? _buildEmpty('Aucun voyage non programmé')
               : ListView.builder(
-                  padding:
-                      const EdgeInsets.fromLTRB(16, 14, 16, 40),
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 40),
                   itemCount: voyagesNonProgrammes.length,
                   itemBuilder: (_, i) {
-                    final v         = voyagesNonProgrammes[i] as Map<String, dynamic>;
+                    final v =
+                        voyagesNonProgrammes[i] as Map<String, dynamic>;
+
+                    // ✅ FIX: statut is now always a non-null string
                     final isCloture = v['statut'] == 'cloture';
 
                     final Color accent, bgColor, borderColor;
                     if (isCloture) {
+                      // ── Clôturé: grey — identical to programmés ──
                       accent = Colors.grey;
                       bgColor = Colors.grey.shade50;
                       borderColor = Colors.grey.shade200;
@@ -593,7 +703,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                     }
 
                     final typeLabel =
-                        (v['type'] as String? ?? '').isNotEmpty
+                        ((v['type'] as String?) ?? '').isNotEmpty
                             ? v['type'] as String
                             : 'Spontané';
 
@@ -604,9 +714,11 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                       borderColor: borderColor,
                       isActive: !isCloture,
                       isCloture: isCloture,
+                      // ✅ FIX: clôturé is never "locked" — it's always
+                      // tappable to view historique & journaux (read-only)
                       isLocked: false,
                       onTap: () => _openVoyage(v),
-                      extraLabel: typeLabel,
+                      extraLabel: isCloture ? null : typeLabel,
                       extraLabelColor: accent,
                     );
                   },
@@ -642,10 +754,13 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
           color: bgColor,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: borderColor, width: 1.5),
-          boxShadow: [BoxShadow(
+          boxShadow: [
+            BoxShadow(
               color: accent.withOpacity(isCloture ? 0.04 : 0.08),
               blurRadius: 10,
-              offset: const Offset(0, 3))],
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -655,25 +770,42 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                 clipBehavior: Clip.none,
                 children: [
                   Container(
-                    width: 46, height: 46,
+                    width: 46,
+                    height: 46,
                     decoration: BoxDecoration(
-                        color: accent.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(13)),
-                    child: Icon(Icons.directions_bus,
-                        color: accent, size: 24),
+                      color: accent.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                    child: Icon(
+                      Icons.directions_bus,
+                      color: accent,
+                      size: 24,
+                    ),
                   ),
-                  if (isLocked)
+                  if (isCloture)
                     Positioned(
-                        right: -4,
-                        bottom: -4,
-                        child: _statusDot(
-                            Colors.orange.shade700, Icons.lock, 10)),
-                  if (isActive && !isLocked)
+                      right: -4,
+                      bottom: -4,
+                      child:
+                          _statusDot(Colors.grey, Icons.history, 10),
+                    )
+                  else if (isLocked)
                     Positioned(
-                        right: -4,
-                        bottom: -4,
-                        child: _statusDot(const Color(0xFF16A34A),
-                            Icons.play_arrow, 11)),
+                      right: -4,
+                      bottom: -4,
+                      child: _statusDot(
+                          Colors.orange.shade700, Icons.lock, 10),
+                    )
+                  else if (isActive)
+                    Positioned(
+                      right: -4,
+                      bottom: -4,
+                      child: _statusDot(
+                        const Color(0xFF16A34A),
+                        Icons.play_arrow,
+                        11,
+                      ),
+                    ),
                 ],
               ),
               const SizedBox(width: 14),
@@ -684,9 +816,10 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                     Row(
                       children: [
                         Container(
-                          width: 6, height: 6,
+                          width: 6,
+                          height: 6,
                           decoration: BoxDecoration(
-                            color: (isActive && !isLocked)
+                            color: (isActive && !isLocked && !isCloture)
                                 ? goldLight
                                 : accent.withOpacity(0.6),
                             shape: BoxShape.circle,
@@ -697,11 +830,12 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                           child: Text(
                             '${voyage['depart']} → ${voyage['arrivee']}',
                             style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                                color: isCloture
-                                    ? Colors.grey.shade400
-                                    : navyDark),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: isCloture
+                                  ? Colors.grey.shade400
+                                  : navyDark,
+                            ),
                           ),
                         ),
                       ],
@@ -709,24 +843,32 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                     const SizedBox(height: 5),
                     Row(
                       children: [
-                        Icon(Icons.access_time_rounded,
-                            size: 11, color: Colors.grey.shade400),
+                        Icon(
+                          Icons.access_time_rounded,
+                          size: 11,
+                          color: Colors.grey.shade400,
+                        ),
                         const SizedBox(width: 4),
                         Text(
-                            '${_getTime(dh)}  ·  ${_getDate(dh)}',
-                            style: TextStyle(
-                                color: Colors.grey.shade400,
-                                fontSize: 11)),
+                          '${_getTime(dh)}  ·  ${_getDate(dh)}',
+                          style: TextStyle(
+                            color: Colors.grey.shade400,
+                            fontSize: 11,
+                          ),
+                        ),
                       ],
                     ),
                     if (extraLabel != null &&
                         extraLabel.isNotEmpty) ...[
                       const SizedBox(height: 5),
-                      Text(extraLabel,
-                          style: TextStyle(
-                              color: extraLabelColor ?? accent,
-                              fontSize: 11,
-                              fontStyle: FontStyle.italic)),
+                      Text(
+                        extraLabel,
+                        style: TextStyle(
+                          color: extraLabelColor ?? accent,
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -741,8 +883,8 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                     decoration: BoxDecoration(
                       color: accent.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(20),
-                      border:
-                          Border.all(color: accent.withOpacity(0.25)),
+                      border: Border.all(
+                          color: accent.withOpacity(0.25)),
                     ),
                     child: Text(
                       isCloture
@@ -751,17 +893,18 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                               ? 'En attente'
                               : 'Actif',
                       style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: accent),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: accent,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 6),
                   Icon(
-                    isLocked
-                        ? Icons.lock_outline
-                        : isCloture
-                            ? Icons.history
+                    isCloture
+                        ? Icons.history
+                        : isLocked
+                            ? Icons.lock_outline
                             : Icons.chevron_right,
                     color: accent.withOpacity(0.5),
                     size: 18,
@@ -784,42 +927,58 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     for (int i = 0; i < tiles.length; i++) {
       separated.add(tiles[i]);
       if (i < tiles.length - 1) {
-        separated.add(Container(
-            width: 1, height: 36, color: Colors.grey.shade100));
+        separated.add(
+          Container(
+              width: 1, height: 36, color: Colors.grey.shade100),
+        );
       }
     }
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      padding:
+          const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
       decoration: BoxDecoration(
         color: cardWhite,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(
+        boxShadow: [
+          BoxShadow(
             color: navyMid.withOpacity(0.07),
             blurRadius: 16,
-            offset: const Offset(0, 3))],
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Row(children: separated),
     );
   }
 
   Widget _statTile(
-      IconData icon, String label, String value, Color color) {
+    IconData icon,
+    String label,
+    String value,
+    Color color,
+  ) {
     return Expanded(
       child: Column(
         children: [
           Icon(icon, color: color, size: 20),
           const SizedBox(height: 4),
-          Text(value,
-              style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: color)),
-          Text(label,
-              style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.grey.shade400,
-                  letterSpacing: 0.3)),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              color: Colors.grey.shade400,
+              letterSpacing: 0.3,
+            ),
+          ),
         ],
       ),
     );
@@ -827,11 +986,13 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
 
   Widget _statusDot(Color color, IconData icon, double iconSize) {
     return Container(
-      width: 18, height: 18,
+      width: 18,
+      height: 18,
       decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-          border: Border.all(color: cardWhite, width: 1.5)),
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(color: cardWhite, width: 1.5),
+      ),
       child: Icon(icon, color: Colors.white, size: iconSize),
     );
   }
@@ -842,13 +1003,17 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       padding:
           const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(10)),
-      child: Text('$count',
-          style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: Colors.white)),
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        '$count',
+        style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      ),
     );
   }
 
@@ -862,10 +1027,12 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
             Icon(Icons.wifi_off_rounded,
                 size: 48, color: Colors.orange.shade200),
             const SizedBox(height: 12),
-            Text(message,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    color: Colors.grey.shade500, height: 1.6)),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: Colors.grey.shade500, height: 1.6),
+            ),
             const SizedBox(height: 16),
             TextButton.icon(
               onPressed: retry,
@@ -885,14 +1052,20 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.directions_bus_outlined,
-              size: 52, color: Colors.grey.shade200),
+          Icon(
+            Icons.directions_bus_outlined,
+            size: 52,
+            color: Colors.grey.shade200,
+          ),
           const SizedBox(height: 14),
-          Text(message,
-              style: TextStyle(
-                  color: Colors.grey.shade400,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600)),
+          Text(
+            message,
+            style: TextStyle(
+              color: Colors.grey.shade400,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );

@@ -19,7 +19,8 @@ class LocalDatabase {
     final path = join(await getDatabasesPath(), 'srtb_offline.db');
     final database = await openDatabase(
       path,
-      version: 4,
+      // ✅ Bumped to 5 to trigger onUpgrade and create segment_cloture_pending
+      version: 5,
       onCreate: (db, version) async {
         print('📦 Creating new database (v$version)...');
         await _createTables(db);
@@ -102,6 +103,16 @@ class LocalDatabase {
         id_vente    INTEGER NOT NULL UNIQUE,
         created_at  TEXT NOT NULL,
         statut_sync TEXT NOT NULL DEFAULT 'pending'
+      )''',
+      // ✅ NEW: pending offline segment clotures + auto-open of next segment
+      '''CREATE TABLE IF NOT EXISTS segment_cloture_pending (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        id_vente    INTEGER NOT NULL,
+        id_segment  INTEGER NOT NULL,
+        open_next   INTEGER NOT NULL DEFAULT 1,
+        created_at  TEXT NOT NULL,
+        statut_sync TEXT NOT NULL DEFAULT 'pending',
+        UNIQUE(id_vente, id_segment)
       )''',
     ];
 
@@ -444,6 +455,70 @@ class LocalDatabase {
     } catch (e) {
       print('❌ Error getting segments: $e');
       return null;
+    }
+  }
+
+  // ═══════════════════════════════════════════════
+  // ── SEGMENT CLOTURE PENDING METHODS ──
+  // ═══════════════════════════════════════════════
+
+  /// Save an offline segment cloture to sync later.
+  /// [openNext] = true means the sync service should also open the next
+  /// segment after successfully clôturing this one.
+  static Future<void> saveSegmentCloturePending({
+    required int idVente,
+    required int idSegment,
+    bool openNext = true,
+  }) async {
+    final database = await db;
+    await _ensureAllTablesExist(database);
+    try {
+      await database.insert(
+        'segment_cloture_pending',
+        {
+          'id_vente': idVente,
+          'id_segment': idSegment,
+          'open_next': openNext ? 1 : 0,
+          'created_at': DateTime.now().toIso8601String(),
+          'statut_sync': 'pending',
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      print('✓ Segment cloture pending saved: vente=$idVente seg=$idSegment');
+    } catch (e) {
+      print('❌ Error saving segment cloture pending: $e');
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getPendingSegmentClotures() async {
+    final database = await db;
+    await _ensureAllTablesExist(database);
+    try {
+      return await database.query(
+        'segment_cloture_pending',
+        where: "statut_sync = 'pending'",
+        orderBy: 'created_at ASC',
+      );
+    } catch (e) {
+      print('❌ Error getting pending segment clotures: $e');
+      return [];
+    }
+  }
+
+  static Future<void> markSegmentClotureSynced(
+      int idVente, int idSegment) async {
+    final database = await db;
+    await _ensureAllTablesExist(database);
+    try {
+      await database.update(
+        'segment_cloture_pending',
+        {'statut_sync': 'synced'},
+        where: 'id_vente = ? AND id_segment = ?',
+        whereArgs: [idVente, idSegment],
+      );
+      print('✓ Segment cloture synced: vente=$idVente seg=$idSegment');
+    } catch (e) {
+      print('❌ Error marking segment cloture synced: $e');
     }
   }
 

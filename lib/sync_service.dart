@@ -4,18 +4,14 @@ import 'dart:convert';
 import 'local_database.dart';
 
 class SyncService {
-  static const String _baseUrl = 'http://192.168.1.22:8000/billetterie';
+  static const String _baseUrl = 'http://172.24.114.63:8000/billetterie';
   static bool _isSyncing = false;
 
   static void startListening() {
     Connectivity().onConnectivityChanged.listen((results) {
-      final isOnline =
-          results.any((r) => r != ConnectivityResult.none);
+      final isOnline = results.any((r) => r != ConnectivityResult.none);
       if (isOnline) {
-        Future.delayed(
-          const Duration(seconds: 2),
-          () => syncPending(),
-        );
+        Future.delayed(const Duration(seconds: 2), () => syncPending());
       }
     });
   }
@@ -27,7 +23,7 @@ class SyncService {
     int synced = 0, failed = 0;
 
     try {
-      // ── 1. Sync pending tickets ──
+      // ── 1. Sync pending tickets ──────────────────────────────
       final toSync = await LocalDatabase.getUnsyncedTickets();
       print('🔄 Syncing ${toSync.length} unsynced tickets...');
 
@@ -39,14 +35,14 @@ class SyncService {
                 Uri.parse('$_baseUrl/tickets/vendre'),
                 headers: {'Content-Type': 'application/json'},
                 body: jsonEncode({
-                  'id_vente': ticket['id_vente'],
-                  'id_segment': ticket['id_segment'],
-                  'point_depart': ticket['point_depart'],
-                  'point_arrivee': ticket['point_arrivee'],
-                  'type_tarif': ticket['type_tarif'],
-                  'quantite': (ticket['quantite'] as num).toInt(),
-                  'prix_unitaire': (ticket['prix_unitaire'] as num).toInt(),
-                  'montant_total': (ticket['montant_total'] as num).toInt(),
+                  'id_vente':       ticket['id_vente'],
+                  'id_segment':     ticket['id_segment'],
+                  'point_depart':   ticket['point_depart'],
+                  'point_arrivee':  ticket['point_arrivee'],
+                  'type_tarif':     ticket['type_tarif'],
+                  'quantite':       (ticket['quantite']     as num).toInt(),
+                  'prix_unitaire':  (ticket['prix_unitaire'] as num).toInt(),
+                  'montant_total':  (ticket['montant_total'] as num).toInt(),
                   'matricule_agent': ticket['matricule_agent'],
                 }),
               )
@@ -55,12 +51,11 @@ class SyncService {
           if (response.statusCode == 200) {
             final data = jsonDecode(response.body);
             if (data['success'] == true) {
-              await LocalDatabase.markSynced(
-                  localId, data['id_ticket'] as int);
+              await LocalDatabase.markSynced(localId, data['id_ticket'] as int);
               await LocalDatabase.insertLog(
                 idTicketLocal: localId,
-                statut: 'synced',
-                message: 'Synchronisé avec succès (restauration réseau)',
+                statut:        'synced',
+                message:       'Synchronisé avec succès (restauration réseau)',
               );
               print('✅ Ticket $localId synced → server id: ${data['id_ticket']}');
               synced++;
@@ -75,16 +70,85 @@ class SyncService {
           await LocalDatabase.markFailed(localId, e.toString());
           await LocalDatabase.insertLog(
             idTicketLocal: localId,
-            statut: 'failed',
-            message: e.toString(),
+            statut:        'failed',
+            message:       e.toString(),
           );
           failed++;
         }
       }
 
-      // ── 2. Sync pending clôtures ──
+      // ── 2. Sync pending segment clotures ─────────────────────
+      // Must run BEFORE voyage clotures so all segments are closed
+      // on the server before the voyage itself is clôturé.
+      final pendingSegments = await LocalDatabase.getPendingSegmentClotures();
+      print('🔄 Syncing ${pendingSegments.length} pending segment clotures...');
+
+      for (final row in pendingSegments) {
+        final idVente   = row['id_vente']   as int;
+        final idSegment = row['id_segment'] as int;
+        final openNext  = (row['open_next'] as int?) == 1;
+
+        try {
+          // 2a. Clôture the segment on the server
+          final clotureResp = await http
+              .put(
+                Uri.parse(
+                  '$_baseUrl/voyages/$idVente/segments/$idSegment/cloturer',
+                ),
+                headers: {'Content-Type': 'application/json'},
+              )
+              .timeout(const Duration(seconds: 10));
+
+          final clotureData = jsonDecode(clotureResp.body);
+
+          if (clotureResp.statusCode == 200 &&
+              clotureData['success'] == true) {
+            await LocalDatabase.markSegmentClotureSynced(idVente, idSegment);
+            print('✅ Segment $idSegment clôturé on server (vente $idVente)');
+
+            // 2b. Open next segment if needed
+            if (openNext) {
+              try {
+                final ouvrirResp = await http
+                    .put(
+                      Uri.parse(
+                        '$_baseUrl/voyages/$idVente/segment/ouvrir',
+                      ),
+                      headers: {'Content-Type': 'application/json'},
+                    )
+                    .timeout(const Duration(seconds: 10));
+
+                final ouvrirData = jsonDecode(ouvrirResp.body);
+                if (ouvrirData['success'] == true) {
+                  print('✅ Next segment opened for vente $idVente');
+                } else {
+                  print(
+                    '⚠️ Could not open next segment for vente $idVente: '
+                    '${ouvrirData['message']}',
+                  );
+                }
+              } catch (e) {
+                print('❌ Open next segment failed for vente $idVente: $e');
+              }
+            }
+          } else {
+            // Server rejected (e.g. already clôturé) — mark synced anyway
+            // to avoid retrying indefinitely.
+            final msg = clotureData['message'] ?? 'Rejeté par le serveur';
+            print(
+              '⚠️ Segment $idSegment cloture rejected for vente $idVente: $msg',
+            );
+            await LocalDatabase.markSegmentClotureSynced(idVente, idSegment);
+          }
+        } catch (e) {
+          print('❌ Segment cloture sync failed vente=$idVente seg=$idSegment: $e');
+          // Leave as pending — will retry next connectivity event
+        }
+      }
+
+      // ── 3. Sync pending voyage clotures ──────────────────────
       final pendingClotures = await LocalDatabase.getPendingClotures();
-      print('🔄 Syncing ${pendingClotures.length} pending clôtures...');
+      print('🔄 Syncing ${pendingClotures.length} pending voyage clôtures...');
 
       for (final cloture in pendingClotures) {
         final idVente = cloture['id_vente'] as int;
@@ -101,15 +165,21 @@ class SyncService {
             if (data['success'] == true) {
               await LocalDatabase.markClotureSynced(idVente);
               await LocalDatabase.saveVoyageStatut(idVente, 'cloture');
-              print('✅ Clôture synced for vente $idVente');
+              print('✅ Voyage clôture synced for vente $idVente');
             } else {
-              print('⚠️ Clôture rejected by server for vente $idVente: ${data['message']}');
+              print(
+                '⚠️ Voyage clôture rejected by server for vente $idVente: '
+                '${data['message']}',
+              );
             }
           } else {
-            print('⚠️ Clôture HTTP error for vente $idVente: ${response.statusCode}');
+            print(
+              '⚠️ Voyage clôture HTTP error for vente $idVente: '
+              '${response.statusCode}',
+            );
           }
         } catch (e) {
-          print('❌ Clôture sync failed for vente $idVente: $e');
+          print('❌ Voyage clôture sync failed for vente $idVente: $e');
         }
       }
 

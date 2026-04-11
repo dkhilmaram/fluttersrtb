@@ -101,7 +101,7 @@ class _VenteTicketsPageState
       final response = await http
           .get(
             Uri.parse(
-              'http://192.168.1.22:8000/billetterie/vente/$id/statut',
+              'http://172.24.114.63:8000/billetterie/vente/$id/statut',
             ),
           )
           .timeout(
