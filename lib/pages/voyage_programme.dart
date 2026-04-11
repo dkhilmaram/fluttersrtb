@@ -72,7 +72,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     final IconData icon;
 
     if (isOffline) {
-      color = const Color(0xFF8B1A1A); // deep matte red, not shiny
+      color = const Color(0xFF8B1A1A);
       icon  = Icons.wifi_off_rounded;
     } else if (isError) {
       color = const Color(0xFF8B1A1A);
@@ -682,6 +682,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
+              // ── Bus icon + status dot ──
               Stack(
                 clipBehavior: Clip.none,
                 children: [
@@ -705,10 +706,13 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                 ],
               ),
               const SizedBox(width: 14),
+
+              // ── Middle text column — EXPANDED so it can shrink ──
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Route row
                     Row(
                       children: [
                         Container(
@@ -724,6 +728,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                         Flexible(
                           child: Text(
                             '${voyage['depart']} → ${voyage['arrivee']}',
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontWeight: FontWeight.bold, fontSize: 14,
                               color: isCloture ? Colors.grey.shade400 : navyDark,
@@ -733,20 +738,30 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                       ],
                     ),
                     const SizedBox(height: 5),
+
+                    // ── FIX: date/time row — text wrapped in Flexible ──
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.access_time_rounded, size: 11,
                             color: Colors.grey.shade400),
                         const SizedBox(width: 4),
-                        Text('${_getTime(dh)}  ·  ${_getDate(dh)}',
+                        Flexible(
+                          child: Text(
+                            '${_getTime(dh)}  ·  ${_getDate(dh)}',
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                                color: Colors.grey.shade400, fontSize: 11)),
+                                color: Colors.grey.shade400, fontSize: 11),
+                          ),
+                        ),
                       ],
                     ),
+
                     if (extraLabel != null && extraLabel.isNotEmpty) ...[
                       const SizedBox(height: 5),
                       Text(
                         extraLabel,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: extraLabelColor ?? accent,
                           fontSize: 11,
@@ -758,6 +773,8 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                 ),
               ),
               const SizedBox(width: 10),
+
+              // ── Right badge + chevron ──
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -975,7 +992,6 @@ class _ToastWidgetState extends State<_ToastWidget>
               decoration: BoxDecoration(
                 color: widget.color,
                 borderRadius: BorderRadius.circular(12),
-                // Subtle shadow only — no color-tinted glow to keep it matte
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.25),
