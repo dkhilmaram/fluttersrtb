@@ -19,7 +19,6 @@ class LocalDatabase {
     final path = join(await getDatabasesPath(), 'srtb_offline.db');
     final database = await openDatabase(
       path,
-      // ✅ Bumped to 5 to trigger onUpgrade and create segment_cloture_pending
       version: 5,
       onCreate: (db, version) async {
         print('📦 Creating new database (v$version)...');
@@ -73,10 +72,12 @@ class LocalDatabase {
         tarif_types  TEXT NOT NULL,
         cached_at    TEXT NOT NULL
       )''',
+      // ✅ Added server_statut column to know what the server last said
       '''CREATE TABLE IF NOT EXISTS voyage_cache (
-        id_vente     INTEGER PRIMARY KEY,
-        statut       TEXT NOT NULL,
-        cached_at    TEXT NOT NULL
+        id_vente       INTEGER PRIMARY KEY,
+        statut         TEXT NOT NULL,
+        server_statut  TEXT,
+        cached_at      TEXT NOT NULL
       )''',
       '''CREATE TABLE IF NOT EXISTS voyages_cache (
         matricule    INTEGER NOT NULL,
@@ -104,7 +105,6 @@ class LocalDatabase {
         created_at  TEXT NOT NULL,
         statut_sync TEXT NOT NULL DEFAULT 'pending'
       )''',
-      // ✅ NEW: pending offline segment clotures + auto-open of next segment
       '''CREATE TABLE IF NOT EXISTS segment_cloture_pending (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         id_vente    INTEGER NOT NULL,
@@ -322,16 +322,24 @@ class LocalDatabase {
   // ── VOYAGE STATUT CACHE METHODS ──
   // ═══════════════════════════════════════════════
 
-  static Future<void> saveVoyageStatut(int idVente, String statut) async {
+  /// Save the local pending statut (e.g. 'cloture_pending') AND remember
+  /// what the server last told us ([serverStatut]) so we can detect when
+  /// the server has been reset manually.
+  static Future<void> saveVoyageStatut(
+    int idVente,
+    String statut, {
+    String? serverStatut,
+  }) async {
     final database = await db;
     await _ensureAllTablesExist(database);
     try {
       await database.insert(
         'voyage_cache',
         {
-          'id_vente': idVente,
-          'statut': statut,
-          'cached_at': DateTime.now().toIso8601String(),
+          'id_vente':      idVente,
+          'statut':        statut,
+          'server_statut': serverStatut,
+          'cached_at':     DateTime.now().toIso8601String(),
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
@@ -340,17 +348,57 @@ class LocalDatabase {
     }
   }
 
-  static Future<String?> getVoyageStatut(int idVente) async {
+  /// Returns the cached statut ONLY if it represents a locally-pending
+  /// action (i.e. 'cloture_pending') AND the server hasn't moved on.
+  /// If the server statut no longer matches what we last saw, we discard
+  /// the local override so the server value wins.
+  static Future<String?> getVoyageStatut(int idVente,
+      {String? currentServerStatut}) async {
     final database = await db;
     await _ensureAllTablesExist(database);
     try {
       final rows = await database.query('voyage_cache',
           where: 'id_vente = ?', whereArgs: [idVente]);
       if (rows.isEmpty) return null;
-      return rows.first['statut'] as String?;
+
+      final row          = rows.first;
+      final cached       = row['statut']        as String?;
+      final serverSaved  = row['server_statut'] as String?;
+
+      // ── If the server statut has changed since we cached ──
+      // e.g. someone manually reset the voyage to 'actif' on the DB,
+      // the server will now return 'actif'. Discard our local override.
+      if (currentServerStatut != null &&
+          serverSaved != null &&
+          currentServerStatut != serverSaved) {
+        print(
+          '🔄 Server statut changed ($serverSaved → $currentServerStatut) '
+          'for vente $idVente — discarding local cache',
+        );
+        await database.delete('voyage_cache',
+            where: 'id_vente = ?', whereArgs: [idVente]);
+        // Also clear any stale cloture_pending queue entry
+        await database.delete('cloture_pending',
+            where: 'id_vente = ?', whereArgs: [idVente]);
+        return null;
+      }
+
+      return cached;
     } catch (e) {
       print('❌ Error getting voyage statut: $e');
       return null;
+    }
+  }
+
+  /// Hard-clear the local statut for a voyage (e.g. after a successful sync).
+  static Future<void> clearVoyageStatut(int idVente) async {
+    final database = await db;
+    await _ensureAllTablesExist(database);
+    try {
+      await database.delete('voyage_cache',
+          where: 'id_vente = ?', whereArgs: [idVente]);
+    } catch (e) {
+      print('❌ Error clearing voyage statut: $e');
     }
   }
 
@@ -415,14 +463,12 @@ class LocalDatabase {
       await database.insert(
         'segment_cache',
         {
-          'id_vente': idVente,
-          'actif_segment':
-              actifSegment != null ? jsonEncode(actifSegment) : null,
-          'prochain_segment':
-              prochainSegment != null ? jsonEncode(prochainSegment) : null,
-          'tous_segments': jsonEncode(tousSecteurs),
-          'tous_clotures': tousClotures ? 1 : 0,
-          'cached_at': DateTime.now().toIso8601String(),
+          'id_vente':        idVente,
+          'actif_segment':   actifSegment != null ? jsonEncode(actifSegment) : null,
+          'prochain_segment':prochainSegment != null ? jsonEncode(prochainSegment) : null,
+          'tous_segments':   jsonEncode(tousSecteurs),
+          'tous_clotures':   tousClotures ? 1 : 0,
+          'cached_at':       DateTime.now().toIso8601String(),
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
@@ -462,9 +508,6 @@ class LocalDatabase {
   // ── SEGMENT CLOTURE PENDING METHODS ──
   // ═══════════════════════════════════════════════
 
-  /// Save an offline segment cloture to sync later.
-  /// [openNext] = true means the sync service should also open the next
-  /// segment after successfully clôturing this one.
   static Future<void> saveSegmentCloturePending({
     required int idVente,
     required int idSegment,
@@ -476,9 +519,9 @@ class LocalDatabase {
       await database.insert(
         'segment_cloture_pending',
         {
-          'id_vente': idVente,
+          'id_vente':   idVente,
           'id_segment': idSegment,
-          'open_next': openNext ? 1 : 0,
+          'open_next':  openNext ? 1 : 0,
           'created_at': DateTime.now().toIso8601String(),
           'statut_sync': 'pending',
         },
@@ -537,10 +580,10 @@ class LocalDatabase {
       await database.insert(
         'agent_cache',
         {
-          'matricule': matricule,
+          'matricule':    matricule,
           'mot_de_passe': motDePasse,
           'employe_data': jsonEncode(employeData),
-          'cached_at': DateTime.now().toIso8601String(),
+          'cached_at':    DateTime.now().toIso8601String(),
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
@@ -580,8 +623,8 @@ class LocalDatabase {
       await database.insert(
         'cloture_pending',
         {
-          'id_vente': idVente,
-          'created_at': DateTime.now().toIso8601String(),
+          'id_vente':    idVente,
+          'created_at':  DateTime.now().toIso8601String(),
           'statut_sync': 'pending',
         },
         conflictAlgorithm: ConflictAlgorithm.replace,

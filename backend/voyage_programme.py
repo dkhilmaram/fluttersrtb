@@ -18,18 +18,18 @@ class VenteData(BaseModel):
 
 class TypePassageSpecial(str, Enum):
     """Types of special passages (institutions, NFC, subscriptions)"""
-    GRATUIT_ARMEE      = "Gratuit — Armée nationale"
-    GRATUIT_GARDE      = "Gratuit — Garde nationale"
-    GRATUIT_POLICE     = "Gratuit — Police nationale"
-    GRATUIT_DOUANE     = "Gratuit — Douane"
-    GRATUIT_MINISTERE  = "Gratuit — Ministère"
-    GRATUIT_MUNICIPAL  = "Gratuit — Municipalité"
-    GRATUIT_SCOLAIRE   = "Gratuit — Établissement scolaire"
-    GRATUIT_AUTRE      = "Gratuit — Autre institution"
-    ABONNEMENT         = "Abonnement"
-    AGENT              = "Agent"
-    TITRE_NFC          = "Titre NFC"
-    TITRE_BARCODE      = "Titre Code-barres"
+    GRATUIT_ARMEE           = "Gratuit — Armée nationale"
+    GRATUIT_GARDE           = "Gratuit — Garde nationale"
+    GRATUIT_POLICE          = "Gratuit — Police nationale"
+    GRATUIT_DOUANE          = "Gratuit — Douane"
+    GRATUIT_MINISTERE       = "Gratuit — Ministère"
+    GRATUIT_MUNICIPAL       = "Gratuit — Municipalité"
+    GRATUIT_SCOLAIRE        = "Gratuit — Établissement scolaire"
+    GRATUIT_AUTRE           = "Gratuit — Autre institution"
+    ABONNEMENT              = "Abonnement"
+    AGENT                   = "Agent"
+    TITRE_NFC               = "Titre NFC"
+    TITRE_BARCODE           = "Titre Code-barres"
     ABONNEMENT_MENSUEL      = "Abonnement Mensuel"
     ABONNEMENT_TRIMESTRIEL  = "Abonnement Trimestriel"
     ABONNEMENT_ANNUEL       = "Abonnement Annuel"
@@ -38,16 +38,16 @@ class TypePassageSpecial(str, Enum):
 
 class TicketSpecialData(BaseModel):
     """Enhanced ticket data with metadata support"""
-    id_vente:         int
-    id_segment:       int   = 0
-    point_depart:     str
-    point_arrivee:    str
-    type_tarif:       str
-    quantite:         int   = 1
-    prix_unitaire:    float = 0.0
-    montant_total:    float = 0.0
-    matricule_agent:  int
-    metadata:         dict  = None
+    id_vente:        int
+    id_segment:      int   = 0
+    point_depart:    str
+    point_arrivee:   str
+    type_tarif:      str
+    quantite:        int   = 1
+    prix_unitaire:   float = 0.0
+    montant_total:   float = 0.0
+    matricule_agent: int
+    metadata:        dict  = None
 
 
 _SPECIAL_KEYWORDS = [
@@ -106,8 +106,6 @@ def get_ventes_programmees(matricule_agent: int):
                a.nom, a.prenom
         FROM billetterie.vente v
         JOIN base_global.ligne l ON v.id_ligne = l.id_ligne
-        -- ✅ FIX: LEFT JOIN so a voyage is never excluded because its
-        --    matricule_agent has no matching row in base_global.agent
         LEFT JOIN base_global.agent a ON v.matricule_agent = a.matricule_agent
         WHERE v.type = 'programmé' AND v.matricule_agent = %s
         ORDER BY v.date_heure DESC
@@ -116,20 +114,18 @@ def get_ventes_programmees(matricule_agent: int):
     conn.close()
     return {"voyages": [
         {
-            # ✅ FIX: expose BOTH "id" and "id_vente" so Flutter
-            #    _mergeLocalStatuts (keyed on id_vente) works correctly
-            "id":               v["id_vente"],
-            "id_vente":         v["id_vente"],
-            "id_ligne":         v["id_ligne"],
-            "id_appareil":      v["id_appareil"],
-            "id_billet":        v["id_billet"],
-            "matricule_agent":  v["matricule_agent"],
-            "code_agence":      v["code_agence"],
-            "depart":           v["point_depart"],
-            "arrivee":          v["point_arrive"],
-            "nom_ligne":        v["nom_ligne"],
-            "date_heure":       str(v["date_heure"]),
-            "statut":           v["statut"],   # already present — kept as-is
+            "id":              v["id_vente"],
+            "id_vente":        v["id_vente"],
+            "id_ligne":        v["id_ligne"],
+            "id_appareil":     v["id_appareil"],
+            "id_billet":       v["id_billet"],
+            "matricule_agent": v["matricule_agent"],
+            "code_agence":     v["code_agence"],
+            "depart":          v["point_depart"],
+            "arrivee":         v["point_arrive"],
+            "nom_ligne":       v["nom_ligne"],
+            "date_heure":      str(v["date_heure"]),
+            "statut":          v["statut"],
         }
         for v in ventes
     ]}
@@ -155,8 +151,6 @@ def get_ventes_agent(matricule_agent: int):
     conn.close()
     return {"voyages": [
         {
-            # ✅ FIX: expose BOTH "id" and "id_vente" so Flutter
-            #    _mergeLocalStatuts (keyed on id_vente) works correctly
             "id":              v["id_vente"],
             "id_vente":        v["id_vente"],
             "id_ligne":        v["id_ligne"],
@@ -169,7 +163,6 @@ def get_ventes_agent(matricule_agent: int):
             "nom_ligne":       v["nom_ligne"],
             "date_heure":      str(v["date_heure"]),
             "type":            v["type"],
-            # ✅ FIX: statut was completely missing — now included
             "statut":          v["statut"],
         }
         for v in ventes
@@ -266,26 +259,78 @@ def get_statut_voyage(id_vente: int):
     return {"success": False, "message": "Voyage introuvable"}
 
 
-# ── Clôturer un voyage ──
+# ── Clôturer un voyage (avec cascade segments + date_cloture) ──
 @router.put("/vente/{id_vente}/cloturer")
 def cloturer_voyage(id_vente: int):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
+        # ── 1. Check voyage exists ──
         cursor.execute(
             "SELECT * FROM billetterie.vente WHERE id_vente = %s",
-            (id_vente,))
+            (id_vente,)
+        )
         vente = cursor.fetchone()
         if not vente:
             return {"success": False, "message": "Voyage introuvable"}
         if vente["statut"] == "cloture":
             return {"success": False, "message": "Voyage déjà clôturé"}
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # ── 2. Fetch all non-clôturé segments ──
+        cursor.execute("""
+            SELECT id_segment, statut
+            FROM billetterie.segment_voyage
+            WHERE id_vente = %s AND statut != 'cloture'
+            ORDER BY ordre
+        """, (id_vente,))
+        open_segments = cursor.fetchall()
+
+        # ── 3. Cascade: open then clôture each non-clôturé segment ──
+        for seg in open_segments:
+            id_seg = seg["id_segment"]
+            statut = seg["statut"]
+
+            # If still 'en_attente', activate it first so the
+            # DB constraint (only 'actif' → 'cloture') is respected.
+            if statut == "en_attente":
+                cursor.execute("""
+                    UPDATE billetterie.segment_voyage
+                    SET statut = 'actif', date_ouverture = %s
+                    WHERE id_segment = %s
+                """, (now, id_seg))
+
+            # Clôture the segment
+            cursor.execute("""
+                UPDATE billetterie.segment_voyage
+                SET statut = 'cloture', date_cloture = %s
+                WHERE id_segment = %s
+            """, (now, id_seg))
+
+        # ── 4. Clôture the voyage itself — save date_cloture ──
         cursor.execute(
-            "UPDATE billetterie.vente SET statut = 'cloture' "
-            "WHERE id_vente = %s", (id_vente,))
+            "UPDATE billetterie.vente "
+            "SET statut = 'cloture', date_cloture = %s "
+            "WHERE id_vente = %s",
+            (now, id_vente)
+        )
         conn.commit()
-        return {"success": True, "message": "Voyage clôturé"}
+
+        segments_closed = len(open_segments)
+        print(
+            f"✅ Voyage {id_vente} clôturé à {now} — "
+            f"{segments_closed} segment(s) cascade-clôturés"
+        )
+        return {
+            "success":         True,
+            "message":         "Voyage clôturé",
+            "date_cloture":    now,
+            "segments_closed": segments_closed,
+        }
+
     except Exception as e:
+        conn.rollback()
         return {"success": False, "error": str(e)}
     finally:
         conn.close()
@@ -402,8 +447,7 @@ def cloturer_segment(id_vente: int, id_segment: int):
         if not row:
             return {"success": False, "message": "Segment introuvable"}
         if row["statut"] != "actif":
-            return {"success": False,
-                    "message": "Ce segment n'est pas actif"}
+            return {"success": False, "message": "Ce segment n'est pas actif"}
 
         cursor.execute("""
             UPDATE billetterie.segment_voyage
@@ -602,9 +646,9 @@ def get_special_passages_stats(id_vente: int):
         "id_vente": id_vente,
         "passages_speciaux": [
             {
-                "type":             s["type_tarif"],
-                "nombre":           s["count"],
-                "quantite_totale":  s["total_quantite"],
+                "type":            s["type_tarif"],
+                "nombre":          s["count"],
+                "quantite_totale": s["total_quantite"],
             }
             for s in stats
         ],

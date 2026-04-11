@@ -35,14 +35,14 @@ class SyncService {
                 Uri.parse('$_baseUrl/tickets/vendre'),
                 headers: {'Content-Type': 'application/json'},
                 body: jsonEncode({
-                  'id_vente':       ticket['id_vente'],
-                  'id_segment':     ticket['id_segment'],
-                  'point_depart':   ticket['point_depart'],
-                  'point_arrivee':  ticket['point_arrivee'],
-                  'type_tarif':     ticket['type_tarif'],
-                  'quantite':       (ticket['quantite']     as num).toInt(),
-                  'prix_unitaire':  (ticket['prix_unitaire'] as num).toInt(),
-                  'montant_total':  (ticket['montant_total'] as num).toInt(),
+                  'id_vente':        ticket['id_vente'],
+                  'id_segment':      ticket['id_segment'],
+                  'point_depart':    ticket['point_depart'],
+                  'point_arrivee':   ticket['point_arrivee'],
+                  'type_tarif':      ticket['type_tarif'],
+                  'quantite':        (ticket['quantite']      as num).toInt(),
+                  'prix_unitaire':   (ticket['prix_unitaire'] as num).toInt(),
+                  'montant_total':   (ticket['montant_total'] as num).toInt(),
                   'matricule_agent': ticket['matricule_agent'],
                 }),
               )
@@ -78,8 +78,8 @@ class SyncService {
       }
 
       // ── 2. Sync pending segment clotures ─────────────────────
-      // Must run BEFORE voyage clotures so all segments are closed
-      // on the server before the voyage itself is clôturé.
+      // Runs BEFORE voyage clotures so all segments are closed on the server
+      // before the voyage itself is clôturé.
       final pendingSegments = await LocalDatabase.getPendingSegmentClotures();
       print('🔄 Syncing ${pendingSegments.length} pending segment clotures...');
 
@@ -89,7 +89,34 @@ class SyncService {
         final openNext  = (row['open_next'] as int?) == 1;
 
         try {
-          // 2a. Clôture the segment on the server
+          // 2a. If the segment is still en_attente on the server, open it first
+          //     so the server will accept the cloture.
+          final checkResp = await http
+              .get(Uri.parse(
+                '$_baseUrl/voyages/$idVente/segments',
+              ))
+              .timeout(const Duration(seconds: 10));
+
+          if (checkResp.statusCode == 200) {
+            final checkData = jsonDecode(checkResp.body);
+            final segs      = checkData['segments'] as List<dynamic>? ?? [];
+            final match     = segs.cast<Map<String, dynamic>>()
+                .where((s) => s['id_segment'] == idSegment)
+                .firstOrNull;
+
+            if (match != null && match['statut'] == 'en_attente') {
+              // Open it first
+              await http
+                  .put(
+                    Uri.parse(
+                        '$_baseUrl/voyages/$idVente/segment/ouvrir'),
+                    headers: {'Content-Type': 'application/json'},
+                  )
+                  .timeout(const Duration(seconds: 10));
+            }
+          }
+
+          // 2b. Clôture the segment on the server
           final clotureResp = await http
               .put(
                 Uri.parse(
@@ -106,14 +133,14 @@ class SyncService {
             await LocalDatabase.markSegmentClotureSynced(idVente, idSegment);
             print('✅ Segment $idSegment clôturé on server (vente $idVente)');
 
-            // 2b. Open next segment if needed
+            // 2c. Open next segment only when explicitly requested
+            //     (normal segment flow, not voyage-cloture cascade)
             if (openNext) {
               try {
                 final ouvrirResp = await http
                     .put(
                       Uri.parse(
-                        '$_baseUrl/voyages/$idVente/segment/ouvrir',
-                      ),
+                          '$_baseUrl/voyages/$idVente/segment/ouvrir'),
                       headers: {'Content-Type': 'application/json'},
                     )
                     .timeout(const Duration(seconds: 10));
@@ -133,7 +160,6 @@ class SyncService {
             }
           } else {
             // Server rejected (e.g. already clôturé) — mark synced anyway
-            // to avoid retrying indefinitely.
             final msg = clotureData['message'] ?? 'Rejeté par le serveur';
             print(
               '⚠️ Segment $idSegment cloture rejected for vente $idVente: $msg',
@@ -141,18 +167,25 @@ class SyncService {
             await LocalDatabase.markSegmentClotureSynced(idVente, idSegment);
           }
         } catch (e) {
-          print('❌ Segment cloture sync failed vente=$idVente seg=$idSegment: $e');
+          print(
+              '❌ Segment cloture sync failed vente=$idVente seg=$idSegment: $e');
           // Leave as pending — will retry next connectivity event
         }
       }
 
       // ── 3. Sync pending voyage clotures ──────────────────────
+      // By now all segments for each voyage should already be clôturé
+      // on the server (step 2 above). We just need to clôture the voyage.
       final pendingClotures = await LocalDatabase.getPendingClotures();
       print('🔄 Syncing ${pendingClotures.length} pending voyage clôtures...');
 
       for (final cloture in pendingClotures) {
         final idVente = cloture['id_vente'] as int;
         try {
+          // Extra safety: ensure all segments are clôturé on the server
+          // before clôturing the voyage, in case step 2 missed any.
+          await _ensureAllSegmentsCloturedOnServer(idVente);
+
           final response = await http
               .put(
                 Uri.parse('$_baseUrl/vente/$idVente/cloturer'),
@@ -189,6 +222,57 @@ class SyncService {
     }
 
     return SyncResult(synced: synced, failed: failed);
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Helper: ensure every segment of a voyage is clôturé on the
+  // server. Called just before syncing a voyage cloture.
+  // ─────────────────────────────────────────────────────────────
+  static Future<void> _ensureAllSegmentsCloturedOnServer(int idVente) async {
+    try {
+      final segResp = await http
+          .get(Uri.parse('$_baseUrl/voyages/$idVente/segments'))
+          .timeout(const Duration(seconds: 10));
+
+      if (segResp.statusCode != 200) return;
+
+      final segData  = jsonDecode(segResp.body);
+      final segments = segData['segments'] as List<dynamic>? ?? [];
+
+      for (final s in segments) {
+        final seg    = s as Map<String, dynamic>;
+        final statut = seg['statut'] as String? ?? '';
+        if (statut == 'cloture') continue;
+
+        final idSeg = seg['id_segment'] as int;
+
+        // If still en_attente, open it first
+        if (statut == 'en_attente') {
+          await http
+              .put(
+                Uri.parse('$_baseUrl/voyages/$idVente/segment/ouvrir'),
+                headers: {'Content-Type': 'application/json'},
+              )
+              .timeout(const Duration(seconds: 10));
+        }
+
+        // Now clôture it
+        await http
+            .put(
+              Uri.parse(
+                '$_baseUrl/voyages/$idVente/segments/$idSeg/cloturer',
+              ),
+              headers: {'Content-Type': 'application/json'},
+            )
+            .timeout(const Duration(seconds: 10));
+
+        print(
+            '✅ Cascade: segment $idSeg clôturé on server for vente $idVente');
+      }
+    } catch (e) {
+      print(
+          '⚠️ _ensureAllSegmentsCloturedOnServer failed for vente $idVente: $e');
+    }
   }
 }
 
