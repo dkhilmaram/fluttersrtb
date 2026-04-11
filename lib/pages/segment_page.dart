@@ -2,14 +2,133 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../local_database.dart';
+import '../route_observer.dart';
 import 'ticketing_page.dart';
 
-const Color navyDark  = Color(0xFF0D1B3E);
-const Color navyMid   = Color(0xFF1A3260);
+const Color navyDark = Color(0xFF0D1B3E);
+const Color navyMid = Color(0xFF1A3260);
 const Color navyLight = Color(0xFF1E4080);
 const Color goldLight = Color(0xFFF5C842);
-const Color surface   = Color(0xFFF2F5FB);
+const Color surface = Color(0xFFF2F5FB);
 const Color cardWhite = Color(0xFFFFFFFF);
+
+// ════════════════════════════════════════════════════
+// TOAST WIDGET
+// ════════════════════════════════════════════════════
+
+class _ToastWidget extends StatefulWidget {
+  final String message;
+  final Color color;
+  final IconData icon;
+  final VoidCallback onDismiss;
+
+  const _ToastWidget({
+    required this.message,
+    required this.color,
+    required this.icon,
+    required this.onDismiss,
+  });
+
+  @override
+  State<_ToastWidget> createState() => _ToastWidgetState();
+}
+
+class _ToastWidgetState extends State<_ToastWidget>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _opacity;
+  late Animation<Offset> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+    _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+    _slide = Tween<Offset>(
+      begin: const Offset(0.3, 0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack));
+    _ctrl.forward();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _dismiss() {
+    _ctrl.reverse().then((_) => widget.onDismiss());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _opacity,
+      child: SlideTransition(
+        position: _slide,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: widget.color,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.18),
+                  blurRadius: 20,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(widget.icon, color: Colors.white, size: 16),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    widget.message,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: _dismiss,
+                  child: Icon(
+                    Icons.close_rounded,
+                    color: Colors.white.withOpacity(0.5),
+                    size: 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════
+// SEGMENT PAGE
+// ════════════════════════════════════════════════════
 
 class SegmentPage extends StatefulWidget {
   final Map<String, dynamic> voyage;
@@ -20,21 +139,22 @@ class SegmentPage extends StatefulWidget {
 }
 
 class _SegmentPageState extends State<SegmentPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, RouteAware {
   Map<String, dynamic>? secteurActif;
   Map<String, dynamic>? prochainSecteur;
   List<dynamic> tousSecteurs = [];
   bool tousClotures = false;
-  bool isLoading    = true;
-  bool isActioning  = false;
-  bool isOffline    = false;
+  bool isLoading = true;
+  bool isActioning = false;
+  bool isOffline = false;
   String? errorMessage;
+
+  OverlayEntry? _toastEntry;
 
   late AnimationController _animCtrl;
   late Animation<double> _fadeAnim;
-  late Animation<Offset>  _slideAnim;
+  late Animation<Offset> _slideAnim;
 
-  // ── convenience getter — works whether API returns 'id' or 'id_vente' ──
   int get _voyageId =>
       (widget.voyage['id_vente'] ?? widget.voyage['id']) as int;
 
@@ -54,18 +174,79 @@ class _SegmentPageState extends State<SegmentPage>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context)!);
+  }
+
+  @override
   void dispose() {
+    _toastEntry?.remove();
+    _toastEntry = null;
+    routeObserver.unsubscribe(this);
     _animCtrl.dispose();
     super.dispose();
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Fetch
-  // ─────────────────────────────────────────────────────────────
+  @override
+  void didPopNext() {
+    _fetchAll();
+  }
+
+  // ════════════════════════════════════════════════════
+  // TOAST
+  // ════════════════════════════════════════════════════
+
+  void _showToast(String msg, {bool isError = false, bool isWarning = false}) {
+    if (!mounted) return;
+
+    _toastEntry?.remove();
+    _toastEntry = null;
+
+    final color = isError
+        ? const Color(0xFFB45309)
+        : isWarning
+            ? const Color(0xFFB45309)
+            : const Color(0xFFB45309);
+
+    final icon = isError
+        ? Icons.error_outline
+        : isWarning
+            ? Icons.info_outline
+            : Icons.check_circle_outline;
+
+    _toastEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        top: MediaQuery.of(context).padding.top + 12,
+        right: 14,
+        width: 260,
+        child: _ToastWidget(
+          message: msg,
+          color: color,
+          icon: icon,
+          onDismiss: () {
+            _toastEntry?.remove();
+            _toastEntry = null;
+          },
+        ),
+      ),
+    );
+
+    Overlay.of(context).insert(_toastEntry!);
+
+    Future.delayed(const Duration(seconds: 4), () {
+      _toastEntry?.remove();
+      _toastEntry = null;
+    });
+  }
+
+  // ════════════════════════════════════════════════════
+  // DATA
+  // ════════════════════════════════════════════════════
 
   Future<void> _fetchAll() async {
     setState(() {
-      isLoading    = true;
+      isLoading = true;
       errorMessage = null;
     });
 
@@ -74,83 +255,68 @@ class _SegmentPageState extends State<SegmentPage>
 
       final r1 = await http
           .get(Uri.parse(
-            'http://172.24.114.63:8000/billetterie/voyages/$id/segment/actif',
-          ))
+              'http://192.168.1.22:8000/billetterie/voyages/$id/segment/actif'))
           .timeout(const Duration(seconds: 6));
       final r2 = await http
           .get(Uri.parse(
-            'http://172.24.114.63:8000/billetterie/voyages/$id/segments',
-          ))
+              'http://192.168.1.22:8000/billetterie/voyages/$id/segments'))
           .timeout(const Duration(seconds: 6));
 
       dynamic d1, d2;
-      try { d1 = jsonDecode(r1.body); } catch (_) {}
-      try { d2 = jsonDecode(r2.body); } catch (_) {}
+      try {
+        d1 = jsonDecode(r1.body);
+      } catch (_) {}
+      try {
+        d2 = jsonDecode(r2.body);
+      } catch (_) {}
 
       if (r1.statusCode == 200 &&
           r2.statusCode == 200 &&
           d1?['success'] == true) {
-        final actif    = d1['segment']      as Map<String, dynamic>?;
-        final prochain = d1['prochain']     as Map<String, dynamic>?;
-        final segments = d2?['segments']    as List<dynamic>? ?? [];
+        final actif = d1['segment'] as Map<String, dynamic>?;
+        final prochain = d1['prochain'] as Map<String, dynamic>?;
+        final segments = d2?['segments'] as List<dynamic>? ?? [];
         final clotures = d1['tous_clotures'] == true;
 
         await LocalDatabase.saveSegments(
-          idVente:         id,
-          actifSegment:    actif,
+          idVente: id,
+          actifSegment: actif,
           prochainSegment: prochain,
-          tousSecteurs:    segments,
-          tousClotures:    clotures,
+          tousSecteurs: segments,
+          tousClotures: clotures,
         );
 
         setState(() {
-          secteurActif    = actif;
+          secteurActif = actif;
           prochainSecteur = prochain;
-          tousSecteurs    = segments;
-          tousClotures    = clotures;
-          isOffline       = false;
-          isLoading       = false;
+          tousSecteurs = segments;
+          tousClotures = clotures;
+          isOffline = false;
+          isLoading = false;
         });
         _animCtrl.forward(from: 0);
         return;
       }
 
       throw Exception(
-        (d1?['message'] as String?) ?? 'Erreur serveur (${r1.statusCode})',
-      );
+          (d1?['message'] as String?) ?? 'Erreur serveur (${r1.statusCode})');
     } catch (_) {
-      // ── Offline fallback ──
       try {
         final cached = await LocalDatabase.getSegments(_voyageId);
         if (cached != null) {
           setState(() {
-            secteurActif    = cached['segment'];
+            secteurActif = cached['segment'];
             prochainSecteur = cached['prochain'];
-            tousSecteurs    = cached['segments'];
-            tousClotures    = cached['tous_clotures'] ?? false;
-            isOffline       = true;
-            isLoading       = false;
+            tousSecteurs = cached['segments'];
+            tousClotures = cached['tous_clotures'] ?? false;
+            isOffline = true;
+            isLoading = false;
           });
           _animCtrl.forward(from: 0);
-          if (mounted) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: const Row(children: [
-                  Icon(Icons.offline_bolt, color: Colors.white, size: 15),
-                  SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      '📡 Mode hors-ligne — données en cache',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ]),
-                backgroundColor: Colors.orange,
-                behavior: SnackBarBehavior.floating,
-                duration: const Duration(seconds: 4),
-              ));
-            });
-          }
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _showToast('📡 Mode hors-ligne — données en cache',
+                isWarning: true);
+          });
           return;
         }
       } catch (e) {
@@ -165,72 +331,58 @@ class _SegmentPageState extends State<SegmentPage>
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Actions
-  // ─────────────────────────────────────────────────────────────
-
   Future<void> _ouvrirProchainSecteur() async {
     setState(() => isActioning = true);
     try {
       final response = await http
           .put(
             Uri.parse(
-              'http://172.24.114.63:8000/billetterie/voyages/$_voyageId/segment/ouvrir',
-            ),
+                'http://192.168.1.22:8000/billetterie/voyages/$_voyageId/segment/ouvrir'),
             headers: {'Content-Type': 'application/json'},
           )
           .timeout(const Duration(seconds: 6));
 
       final data = jsonDecode(response.body);
       if (data['success'] == true) {
-        _showSnack('Secteur ouvert ✓');
+        _showToast('Secteur ouvert ✓');
         await _fetchAll();
       } else {
-        _showSnack(data['message'] ?? 'Erreur', isError: true);
+        _showToast(data['message'] ?? 'Erreur', isError: true);
       }
     } catch (e) {
-      _showSnack('Erreur : $e', isError: true);
+      _showToast('Erreur : $e', isError: true);
     }
     setState(() => isActioning = false);
   }
-
-  // ─────────────────────────────────────────────────────────────
-  // ✅ Clôturer — online + offline
-  // ─────────────────────────────────────────────────────────────
 
   Future<void> _cloturerSecteurActif() async {
     if (secteurActif == null) return;
     setState(() => isActioning = true);
 
-    final id    = _voyageId;
+    final id = _voyageId;
     final idSeg = secteurActif!['id_segment'] as int;
-    bool  clotureOk = false;
+    bool clotureOk = false;
 
-    // ── 1. Try online ──
     try {
       final response = await http
           .put(
             Uri.parse(
-              'http://172.24.114.63:8000/billetterie/voyages/$id/segments/$idSeg/cloturer',
-            ),
+                'http://192.168.1.22:8000/billetterie/voyages/$id/segments/$idSeg/cloturer'),
             headers: {'Content-Type': 'application/json'},
           )
           .timeout(const Duration(seconds: 6));
 
       final data = jsonDecode(response.body);
       if (data['success'] != true) {
-        _showSnack(data['message'] ?? 'Erreur', isError: true);
+        _showToast(data['message'] ?? 'Erreur', isError: true);
         setState(() => isActioning = false);
         return;
       }
       clotureOk = true;
-    } catch (_) {
-      // Network error → fall through to offline path
-    }
+    } catch (_) {}
 
     if (clotureOk) {
-      // ── Online success: refresh then auto-open next ──
-      _showSnack('Secteur clôturé ✓', isWarning: true);
+      _showToast('Secteur clôturé ✓', isWarning: true);
       await _fetchAll();
 
       if (!tousClotures && prochainSecteur != null) {
@@ -238,8 +390,7 @@ class _SegmentPageState extends State<SegmentPage>
           final openResponse = await http
               .put(
                 Uri.parse(
-                  'http://172.24.114.63:8000/billetterie/voyages/$id/segment/ouvrir',
-                ),
+                    'http://192.168.1.22:8000/billetterie/voyages/$id/segment/ouvrir'),
                 headers: {'Content-Type': 'application/json'},
               )
               .timeout(const Duration(seconds: 6));
@@ -247,160 +398,56 @@ class _SegmentPageState extends State<SegmentPage>
           if (openData['success'] == true) {
             await _fetchAll();
           } else {
-            _showSnack(openData['message'] ?? 'Erreur ouverture', isError: true);
+            _showToast(openData['message'] ?? 'Erreur ouverture',
+                isError: true);
           }
         } catch (e) {
-          _showSnack('Erreur ouverture : $e', isError: true);
+          _showToast('Erreur ouverture : $e', isError: true);
         }
       }
     } else {
-      // ── Offline: update local cache and queue for sync ──
       await _handleOfflineCloture(id, idSeg);
     }
 
     setState(() => isActioning = false);
   }
 
-  /// Apply the cloture locally and persist a pending record for later sync.
   Future<void> _handleOfflineCloture(int idVente, int idSegment) async {
-    // Build updated segments list: mark current as cloture, next as actif
-    final nextPending = prochainSecteur;
-    final updatedSegments = tousSecteurs.map((s) {
-      final seg = Map<String, dynamic>.from(s as Map);
-      if (seg['id_segment'] == idSegment) {
-        seg['statut']        = 'cloture';
-        seg['date_cloture']  = DateTime.now().toString().substring(0, 19);
-      } else if (nextPending != null &&
-          seg['id_segment'] == nextPending['id_segment']) {
-        seg['statut']         = 'actif';
-        seg['date_ouverture'] = DateTime.now().toString().substring(0, 19);
-      }
-      return seg;
-    }).toList();
-
-    // Determine new actif / prochain from the updated list
-    Map<String, dynamic>? newActif;
-    Map<String, dynamic>? newProchain;
-
-    if (nextPending != null) {
-      // The "next" segment just became actif
-      newActif = Map<String, dynamic>.from(nextPending)
-        ..['statut']         = 'actif'
-        ..['date_ouverture'] = DateTime.now().toString().substring(0, 19);
-
-      // Find the one after that (still en_attente)
-      bool foundActif = false;
-      for (final s in updatedSegments) {
-        final seg = s as Map<String, dynamic>;
-        if (seg['id_segment'] == newActif['id_segment']) {
-          foundActif = true;
-          continue;
-        }
-        if (foundActif && seg['statut'] == 'en_attente') {
-          newProchain = seg;
-          break;
-        }
-      }
-    }
-
-    final allDone = nextPending == null ||
-        updatedSegments.every((s) =>
-            (s as Map<String, dynamic>)['statut'] == 'cloture');
-
-    // Persist updated state to cache
-    await LocalDatabase.saveSegments(
-      idVente:         idVente,
-      actifSegment:    allDone ? null : newActif,
-      prochainSegment: allDone ? null : newProchain,
-      tousSecteurs:    updatedSegments,
-      tousClotures:    allDone,
-    );
-
-    // Queue cloture (and auto-open of next) for later sync
-    await LocalDatabase.saveSegmentCloturePending(
-      idVente:   idVente,
+    final result = await LocalDatabase.applyOfflineCloture(
+      idVente: idVente,
       idSegment: idSegment,
-      openNext:  !allDone && nextPending != null,
     );
 
-    // Update UI immediately
     setState(() {
-      secteurActif    = allDone ? null : newActif;
-      prochainSecteur = allDone ? null : newProchain;
-      tousSecteurs    = updatedSegments;
-      tousClotures    = allDone;
-      isOffline       = true;
+      secteurActif = result.allDone ? null : result.newActif;
+      prochainSecteur = result.allDone ? null : result.newProchain;
+      tousSecteurs = result.updatedSegments;
+      tousClotures = result.allDone;
+      isOffline = true;
     });
 
-    _showSnack(
-      allDone
+    _showToast(
+      result.allDone
           ? 'Tous secteurs clôturés hors-ligne ✓ (sync auto dès réseau)'
           : 'Secteur clôturé hors-ligne ✓ (sync auto dès réseau)',
       isWarning: true,
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Navigation
-  // ─────────────────────────────────────────────────────────────
-
   void _goToTicketing() {
     if (secteurActif == null) {
-      _showSnack('Aucun secteur actif', isError: true);
+      _showToast('Aucun secteur actif', isError: true);
       return;
     }
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => TicketingPage(
-          voyage:  widget.voyage,
+          voyage: widget.voyage,
           segment: secteurActif!,
         ),
       ),
     );
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // Helpers
-  // ─────────────────────────────────────────────────────────────
-
-  void _showSnack(
-    String msg, {
-    bool isError   = false,
-    bool isWarning = false,
-  }) {
-    final color = isError
-        ? Colors.red.shade700
-        : isWarning
-            ? Colors.orange.shade700
-            : const Color(0xFF16A34A);
-    ScaffoldMessenger.of(context)
-      ..removeCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        content: Row(children: [
-          Icon(
-            isError
-                ? Icons.error_outline
-                : isWarning
-                    ? Icons.info_outline
-                    : Icons.check_circle_outline,
-            color: Colors.white,
-            size: 17,
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              msg,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-            ),
-          ),
-        ]),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(14),
-        duration: const Duration(seconds: 4),
-      ));
   }
 
   void _confirmCloture() {
@@ -415,11 +462,13 @@ class _SegmentPageState extends State<SegmentPage>
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 52, height: 52,
+                width: 52,
+                height: 52,
                 decoration: BoxDecoration(
                   color: Colors.orange.shade50,
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.orange.shade200, width: 1.5),
+                  border: Border.all(
+                      color: Colors.orange.shade200, width: 1.5),
                 ),
                 child: Icon(Icons.warning_amber_rounded,
                     color: Colors.orange.shade700, size: 28),
@@ -428,12 +477,15 @@ class _SegmentPageState extends State<SegmentPage>
               const Text(
                 'Clôturer ce secteur ?',
                 style: TextStyle(
-                    color: navyDark, fontSize: 17, fontWeight: FontWeight.bold),
+                    color: navyDark,
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 10),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                 decoration: BoxDecoration(
                   color: surface,
                   borderRadius: BorderRadius.circular(10),
@@ -457,7 +509,6 @@ class _SegmentPageState extends State<SegmentPage>
                 ),
               ),
               const SizedBox(height: 10),
-              // ✅ Show offline warning in dialog if already offline
               if (isOffline)
                 Container(
                   margin: const EdgeInsets.only(bottom: 4),
@@ -466,8 +517,7 @@ class _SegmentPageState extends State<SegmentPage>
                   decoration: BoxDecoration(
                     color: Colors.orange.shade50,
                     borderRadius: BorderRadius.circular(8),
-                    border:
-                        Border.all(color: Colors.orange.shade200),
+                    border: Border.all(color: Colors.orange.shade200),
                   ),
                   child: Row(
                     children: [
@@ -487,7 +537,9 @@ class _SegmentPageState extends State<SegmentPage>
               Text(
                 "Le secteur suivant s'ouvrira automatiquement.",
                 style: TextStyle(
-                    fontSize: 13, color: Colors.grey.shade500, height: 1.5),
+                    fontSize: 13,
+                    color: Colors.grey.shade500,
+                    height: 1.5),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 22),
@@ -535,29 +587,32 @@ class _SegmentPageState extends State<SegmentPage>
     );
   }
 
-  Color   _statutColor(String s) => s == 'actif'
+  // ════════════════════════════════════════════════════
+  // HELPERS
+  // ════════════════════════════════════════════════════
+
+  Color _statutColor(String s) => s == 'actif'
       ? const Color(0xFF16A34A)
       : s == 'cloture'
           ? Colors.grey.shade400
           : Colors.orange.shade600;
-  String  _statutLabel(String s) => s == 'actif'
-      ? 'ACTIF'
-      : s == 'cloture'
-          ? 'CLÔTURÉ'
-          : 'EN ATTENTE';
+
+  String _statutLabel(String s) =>
+      s == 'actif' ? 'ACTIF' : s == 'cloture' ? 'CLÔTURÉ' : 'EN ATTENTE';
+
   IconData _statutIcon(String s) => s == 'actif'
       ? Icons.radio_button_checked_rounded
       : s == 'cloture'
           ? Icons.check_circle_rounded
           : Icons.radio_button_unchecked_rounded;
 
-  // ─────────────────────────────────────────────────────────────
-  // Build
-  // ─────────────────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════
+  // BUILD
+  // ════════════════════════════════════════════════════
 
   @override
   Widget build(BuildContext context) {
-    final depart  = widget.voyage['depart']  ?? '?';
+    final depart = widget.voyage['depart'] ?? '?';
     final arrivee = widget.voyage['arrivee'] ?? '?';
 
     return Scaffold(
@@ -566,8 +621,8 @@ class _SegmentPageState extends State<SegmentPage>
           ? Column(children: [
               _buildHeader(depart, arrivee),
               const Expanded(
-                child: Center(child: CircularProgressIndicator(color: navyMid)),
-              ),
+                  child:
+                      Center(child: CircularProgressIndicator(color: navyMid))),
             ])
           : errorMessage != null
               ? Column(children: [
@@ -602,9 +657,9 @@ class _SegmentPageState extends State<SegmentPage>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Header
-  // ─────────────────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════
+  // HEADER
+  // ════════════════════════════════════════════════════
 
   Widget _buildHeader(String depart, String arrivee) {
     return Container(
@@ -673,7 +728,8 @@ class _SegmentPageState extends State<SegmentPage>
           ),
           const SizedBox(height: 18),
           Container(
-            width: 72, height: 72,
+            width: 72,
+            height: 72,
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: Colors.white,
@@ -682,7 +738,7 @@ class _SegmentPageState extends State<SegmentPage>
                 BoxShadow(
                     color: Colors.black.withOpacity(0.3),
                     blurRadius: 16,
-                    offset: const Offset(0, 6)),
+                    offset: const Offset(0, 6))
               ],
             ),
             child: Image.asset(
@@ -717,7 +773,8 @@ class _SegmentPageState extends State<SegmentPage>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 7, height: 7,
+                  width: 7,
+                  height: 7,
                   decoration: const BoxDecoration(
                       color: goldLight, shape: BoxShape.circle),
                 ),
@@ -736,7 +793,8 @@ class _SegmentPageState extends State<SegmentPage>
                       color: Colors.white.withOpacity(0.4), size: 13),
                 ),
                 Container(
-                  width: 7, height: 7,
+                  width: 7,
+                  height: 7,
                   decoration: BoxDecoration(
                     color: Colors.transparent,
                     shape: BoxShape.circle,
@@ -760,15 +818,14 @@ class _SegmentPageState extends State<SegmentPage>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Body
-  // ─────────────────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════
+  // BODY
+  // ════════════════════════════════════════════════════
 
   Widget _buildBody() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Offline pending badge ──
         if (isOffline) ...[
           Container(
             width: double.infinity,
@@ -795,69 +852,70 @@ class _SegmentPageState extends State<SegmentPage>
           ),
         ],
 
-        // ── Secteur actif ──
+        // ── Active sector ──
         if (secteurActif != null) ...[
           _sectionLabel('Secteur en cours',
               Icons.radio_button_checked_rounded, const Color(0xFF16A34A)),
           const SizedBox(height: 10),
           _buildStatusCard(
-            depart:     secteurActif!['point_depart']  ?? '',
-            arrivee:    secteurActif!['point_arrivee'] ?? '',
-            timestamp:  secteurActif!['date_ouverture'],
-            accent:     const Color(0xFF16A34A),
+            depart: secteurActif!['point_depart'] ?? '',
+            arrivee: secteurActif!['point_arrivee'] ?? '',
+            timestamp: secteurActif!['date_ouverture'],
+            accent: const Color(0xFF16A34A),
             badgeLabel: 'ACTIF',
-            icon:       Icons.directions_bus_rounded,
-            note:       'Ouvert',
+            icon: Icons.directions_bus_rounded,
+            note: 'Ouvert',
           ),
           const SizedBox(height: 14),
           _actionBtn(
-            label:     'Billetterie',
-            sublabel:  'Vente de tickets & passages spéciaux',
-            icon:      Icons.confirmation_number_rounded,
-            colors:    [navyDark, navyLight],
+            label: 'Billetterie',
+            sublabel: 'Vente de tickets & passages spéciaux',
+            icon: Icons.confirmation_number_rounded,
+            colors: [navyDark, navyLight],
             onPressed: _goToTicketing,
           ),
           const SizedBox(height: 10),
           _actionBtn(
-            label:     'Clôturer ce secteur',
-            sublabel:  "Le secteur suivant s'ouvrira automatiquement",
-            icon:      Icons.flag_rounded,
-            colors:    [const Color(0xFFB45309), const Color(0xFFEA580C)],
+            label: 'Clôturer ce secteur',
+            sublabel: "Le secteur suivant s'ouvrira automatiquement",
+            icon: Icons.flag_rounded,
+            colors: [const Color(0xFFB45309), const Color(0xFFEA580C)],
             onPressed: _confirmCloture,
             isLoading: isActioning,
           ),
           const SizedBox(height: 28),
         ],
 
-        // ── Prochain secteur ──
-        if (secteurActif == null && !tousClotures && prochainSecteur != null) ...[
-          _sectionLabel('Prochain secteur',
-              Icons.schedule_rounded, Colors.orange.shade600),
+        // ── Next sector (no active) ──
+        if (secteurActif == null &&
+            !tousClotures &&
+            prochainSecteur != null) ...[
+          _sectionLabel('Prochain secteur', Icons.schedule_rounded,
+              Colors.orange.shade600),
           const SizedBox(height: 10),
           _buildStatusCard(
-            depart:     prochainSecteur!['point_depart']  ?? '',
-            arrivee:    prochainSecteur!['point_arrivee'] ?? '',
-            timestamp:  null,
-            accent:     Colors.orange.shade600,
+            depart: prochainSecteur!['point_depart'] ?? '',
+            arrivee: prochainSecteur!['point_arrivee'] ?? '',
+            timestamp: null,
+            accent: Colors.orange.shade600,
             badgeLabel: 'EN ATTENTE',
-            icon:       Icons.schedule_rounded,
-            note:       'Prêt à ouvrir',
+            icon: Icons.schedule_rounded,
+            note: 'Prêt à ouvrir',
           ),
           const SizedBox(height: 12),
-          // ✅ Disable open button when offline — opening is synced automatically
-          //    after the cloture sync completes in SyncService.
           if (!isOffline)
             _actionBtn(
-              label:     'Ouvrir ce secteur',
-              sublabel:  'Démarrer la vente de tickets',
-              icon:      Icons.play_arrow_rounded,
-              colors:    [const Color(0xFF15803D), const Color(0xFF16A34A)],
+              label: 'Ouvrir ce secteur',
+              sublabel: 'Démarrer la vente de tickets',
+              icon: Icons.play_arrow_rounded,
+              colors: [const Color(0xFF15803D), const Color(0xFF16A34A)],
               onPressed: _ouvrirProchainSecteur,
               isLoading: isActioning,
             )
           else
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
                 color: Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(14),
@@ -865,12 +923,14 @@ class _SegmentPageState extends State<SegmentPage>
               child: Row(
                 children: [
                   Container(
-                    width: 42, height: 42,
+                    width: 42,
+                    height: 42,
                     decoration: BoxDecoration(
                       color: Colors.grey.shade200,
                       borderRadius: BorderRadius.circular(11),
                     ),
-                    child: Icon(Icons.sync, color: Colors.grey.shade400, size: 20),
+                    child:
+                        Icon(Icons.sync, color: Colors.grey.shade400, size: 20),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -883,7 +943,7 @@ class _SegmentPageState extends State<SegmentPage>
                                 fontWeight: FontWeight.bold,
                                 color: Colors.grey.shade500)),
                         const SizedBox(height: 2),
-                        Text('S\'ouvrira automatiquement dès la reconnexion',
+                        Text("S'ouvrira automatiquement dès la reconnexion",
                             style: TextStyle(
                                 fontSize: 11, color: Colors.grey.shade400)),
                       ],
@@ -895,13 +955,13 @@ class _SegmentPageState extends State<SegmentPage>
           const SizedBox(height: 28),
         ],
 
-        // ── Tous clôturés ──
+        // ── All done ──
         if (tousClotures) ...[
           _buildAllDone(),
           const SizedBox(height: 28),
         ],
 
-        // ── Timeline ──
+        // ── Full timeline ──
         if (tousSecteurs.isNotEmpty) ...[
           _sectionLabel(
             'Parcours complet · ${tousSecteurs.length} segments',
@@ -915,9 +975,9 @@ class _SegmentPageState extends State<SegmentPage>
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Reusable widgets (unchanged)
-  // ─────────────────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════
+  // WIDGETS
+  // ════════════════════════════════════════════════════
 
   Widget _buildStatusCard({
     required String depart,
@@ -938,19 +998,21 @@ class _SegmentPageState extends State<SegmentPage>
           BoxShadow(
               color: navyMid.withOpacity(0.07),
               blurRadius: 12,
-              offset: const Offset(0, 3)),
+              offset: const Offset(0, 3))
         ],
       ),
       child: Row(
         children: [
           Container(
-            width: 4, height: 52,
+            width: 4,
+            height: 52,
             decoration: BoxDecoration(
                 color: accent, borderRadius: BorderRadius.circular(4)),
           ),
           const SizedBox(width: 14),
           Container(
-            width: 44, height: 44,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
               color: accent.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
@@ -995,11 +1057,10 @@ class _SegmentPageState extends State<SegmentPage>
                     const SizedBox(width: 4),
                     Flexible(
                       child: Text(
-                        timestamp != null ? '$note · $timestamp' : note,
-                        style: TextStyle(
-                            fontSize: 11, color: Colors.grey.shade400),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                          timestamp != null ? '$note · $timestamp' : note,
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.grey.shade400),
+                          overflow: TextOverflow.ellipsis),
                     ),
                   ],
                 ),
@@ -1066,7 +1127,8 @@ class _SegmentPageState extends State<SegmentPage>
             child: Row(
               children: [
                 Container(
-                  width: 42, height: 42,
+                  width: 42,
+                  height: 42,
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(11),
@@ -1074,7 +1136,8 @@ class _SegmentPageState extends State<SegmentPage>
                   child: isLoading
                       ? const Center(
                           child: SizedBox(
-                            width: 18, height: 18,
+                            width: 18,
+                            height: 18,
                             child: CircularProgressIndicator(
                                 color: Colors.white, strokeWidth: 2),
                           ),
@@ -1123,7 +1186,7 @@ class _SegmentPageState extends State<SegmentPage>
           BoxShadow(
               color: navyMid.withOpacity(0.06),
               blurRadius: 12,
-              offset: const Offset(0, 3)),
+              offset: const Offset(0, 3))
         ],
       ),
       child: ListView.builder(
@@ -1131,11 +1194,11 @@ class _SegmentPageState extends State<SegmentPage>
         physics: const NeverScrollableScrollPhysics(),
         itemCount: tousSecteurs.length,
         itemBuilder: (_, i) {
-          final s      = tousSecteurs[i] as Map<String, dynamic>;
+          final s = tousSecteurs[i] as Map<String, dynamic>;
           final statut = s['statut'] as String? ?? 'en_attente';
-          final color  = _statutColor(statut);
+          final color = _statutColor(statut);
           final isActif = statut == 'actif';
-          final isLast  = i == tousSecteurs.length - 1;
+          final isLast = i == tousSecteurs.length - 1;
 
           return Column(
             children: [
@@ -1147,7 +1210,8 @@ class _SegmentPageState extends State<SegmentPage>
                 child: Row(
                   children: [
                     Container(
-                      width: 32, height: 32,
+                      width: 32,
+                      height: 32,
                       decoration: BoxDecoration(
                         color: color.withOpacity(0.08),
                         shape: BoxShape.circle,
@@ -1286,13 +1350,14 @@ class _SegmentPageState extends State<SegmentPage>
           BoxShadow(
               color: navyMid.withOpacity(0.06),
               blurRadius: 12,
-              offset: const Offset(0, 3)),
+              offset: const Offset(0, 3))
         ],
       ),
       child: Column(
         children: [
           Container(
-            width: 64, height: 64,
+            width: 64,
+            height: 64,
             decoration: BoxDecoration(
               color: const Color(0xFF16A34A).withOpacity(0.1),
               shape: BoxShape.circle,
@@ -1324,7 +1389,8 @@ class _SegmentPageState extends State<SegmentPage>
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 64, height: 64,
+              width: 64,
+              height: 64,
               decoration: BoxDecoration(
                   color: Colors.red.shade50, shape: BoxShape.circle),
               child: Icon(Icons.error_outline_rounded,

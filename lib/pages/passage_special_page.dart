@@ -7,6 +7,7 @@
 //   <key>NSCameraUsageDescription</key>
 //   <string>Scan transport tickets</string>
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter/services.dart';
@@ -22,7 +23,6 @@ const Color cardWhite = Color(0xFFFFFFFF);
 
 // ── All categories: institutions + single abonnement + agent ──
 const List<Map<String, dynamic>> kCategories = [
-  // ── Institutions ──
   {'label': 'Armée nationale',        'icon': Icons.shield_rounded,            'color': Color(0xFF1E40AF)},
   {'label': 'Garde nationale',        'icon': Icons.security_rounded,          'color': Color(0xFF1D4ED8)},
   {'label': 'Police nationale',       'icon': Icons.local_police_rounded,      'color': Color(0xFF1E3A5F)},
@@ -31,7 +31,6 @@ const List<Map<String, dynamic>> kCategories = [
   {'label': 'Municipalité',           'icon': Icons.location_city_rounded,     'color': Color(0xFF065F46)},
   {'label': 'Établissement scolaire', 'icon': Icons.school_rounded,            'color': Color(0xFFB45309)},
   {'label': 'Autre institution',      'icon': Icons.groups_rounded,            'color': Color(0xFF9D174D)},
-  // ── Single Abonnement + Agent ──
   {'label': 'Abonnement',             'icon': Icons.confirmation_number_rounded, 'color': Color(0xFF0369A1)},
   {'label': 'Agent',                  'icon': Icons.badge_rounded,             'color': Color(0xFF7C3AED)},
 ];
@@ -81,12 +80,7 @@ class _PassageSpecialPageState extends State<PassageSpecialPage>
     return Scaffold(
       backgroundColor: surface,
       body: Column(children: [
-
-        // ── Hide header in embedded mode ──
-        if (!widget.embeddedMode)
-          _buildHeader(dep, arr),
-
-        // ── Tab bar ──
+        if (!widget.embeddedMode) _buildHeader(dep, arr),
         Container(
           color: cardWhite,
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -105,7 +99,6 @@ class _PassageSpecialPageState extends State<PassageSpecialPage>
             ],
           ),
         ),
-
         Expanded(
           child: TabBarView(
             controller: _tabCtrl,
@@ -225,13 +218,15 @@ class _PassageSpecialPageState extends State<PassageSpecialPage>
 }
 
 // ════════════════════════════════════════════════════
-// TAB 1 — PASSAGE GRATUIT  (institutions + abonnement + agent)
+// TAB 1 — PASSAGE GRATUIT
 // ════════════════════════════════════════════════════
+
 class _PassageGratuitTab extends StatefulWidget {
   final Map<String, dynamic> voyage;
   final Map<String, dynamic> segment;
   const _PassageGratuitTab({required this.voyage, required this.segment});
-  @override State<_PassageGratuitTab> createState() => _PassageGratuitTabState();
+  @override
+  State<_PassageGratuitTab> createState() => _PassageGratuitTabState();
 }
 
 class _PassageGratuitTabState extends State<_PassageGratuitTab> {
@@ -240,10 +235,52 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
   bool   isSaving         = false;
   int    totalEnregistres = 0;
 
+  OverlayEntry? _toastEntry;
+  Timer?        _toastTimer;
+
+  @override
+  void dispose() {
+    _toastTimer?.cancel();
+    _toastEntry?.remove();
+    super.dispose();
+  }
+
+  void _showToast(
+    String msg, {
+    bool isError   = false,
+    bool isWarning = false,
+  }) {
+    _toastTimer?.cancel();
+    _toastEntry?.remove();
+    _toastEntry = null;
+
+    final color = isError
+        ? Colors.red.shade700
+        : isWarning
+            ? Colors.orange.shade700
+            : const Color(0xFF16A34A);
+
+    final icon = isError
+        ? Icons.error_outline
+        : isWarning
+            ? Icons.offline_bolt
+            : Icons.check_circle_outline;
+
+    final entry = OverlayEntry(
+      builder: (_) => _ToastWidget(msg: msg, color: color, icon: icon),
+    );
+
+    _toastEntry = entry;
+    Overlay.of(context).insert(entry);
+
+    _toastTimer = Timer(const Duration(milliseconds: 2500), () {
+      entry.remove();
+      if (_toastEntry == entry) _toastEntry = null;
+    });
+  }
+
   bool get _canSave => selectedCategory != null;
 
-  // ── FIX 1: Build the correct type_tarif string ──
-  // Institutions get "Gratuit — <label>", Agent/Abonnement keep their own label.
   String _buildTypeTarif(String category) {
     if (category == 'Agent' || category == 'Abonnement') return category;
     return 'Gratuit — $category';
@@ -258,7 +295,7 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
       'id_segment':      widget.segment['id_segment'] as int? ?? 0,
       'point_depart':    widget.segment['point_depart']  ?? widget.voyage['depart']  ?? '',
       'point_arrivee':   widget.segment['point_arrivee'] ?? widget.voyage['arrivee'] ?? '',
-      'type_tarif':      _buildTypeTarif(selectedCategory!), // ← FIX 1 applied here
+      'type_tarif':      _buildTypeTarif(selectedCategory!),
       'quantite':        quantite,
       'prix_unitaire':   0,
       'montant_total':   0,
@@ -272,30 +309,11 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
         selectedCategory  = null;
         quantite          = 1;
       });
-      _snack('✓  $saved passage(s) enregistré(s)');
+      _showToast('$saved passage(s) enregistré(s)');
     } else {
-      _snack('Erreur : ${result.error ?? 'inconnue'}', isError: true);
+      _showToast('Erreur : ${result.error ?? 'inconnue'}', isError: true);
     }
     setState(() => isSaving = false);
-  }
-
-  void _snack(String msg, {bool isError = false}) {
-    ScaffoldMessenger.of(context)
-      ..removeCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        content: Row(children: [
-          Icon(isError ? Icons.error_outline : Icons.check_circle_outline,
-              color: Colors.white, size: 17),
-          const SizedBox(width: 8),
-          Flexible(child: Text(msg, style: const TextStyle(
-              fontWeight: FontWeight.w600, fontSize: 13))),
-        ]),
-        backgroundColor: isError ? Colors.red.shade700 : const Color(0xFF16A34A),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(14),
-        duration: const Duration(seconds: 3),
-      ));
   }
 
   @override
@@ -304,14 +322,12 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-        // ── Session counter ──
         if (totalEnregistres > 0)
           _SessionBanner(
             icon: Icons.how_to_reg_rounded,
             text: '$totalEnregistres passage(s) enregistré(s) cette session',
           ),
 
-        // ── Institutions ──
         _SectionLabel('Institution / Agence', Icons.domain_rounded),
         const SizedBox(height: 10),
         _CategoryGrid(
@@ -323,7 +339,6 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
 
         const SizedBox(height: 24),
 
-        // ── Abonnement + Agent (Single buttons) ──
         _SectionLabel('Type spécial', Icons.confirmation_number_rounded),
         const SizedBox(height: 10),
         Row(children: [
@@ -348,7 +363,6 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
 
         const SizedBox(height: 24),
 
-        // ── Quantity ──
         _SectionLabel('Nombre de personnes', Icons.people_rounded),
         const SizedBox(height: 10),
         _QuantiteCard(
@@ -359,7 +373,6 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
 
         const SizedBox(height: 16),
 
-        // ── Summary chip ──
         if (_canSave) ...[
           Container(
             width: double.infinity,
@@ -395,123 +408,70 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
   }
 }
 
-// ── Reusable category grid for institutions ──
-class _CategoryGrid extends StatelessWidget {
-  final List<Map<String, dynamic>> items;
-  final String? selected;
-  final ValueChanged<String> onSelect;
-  const _CategoryGrid(
-      {required this.items, required this.selected, required this.onSelect});
-
-  @override
-  Widget build(BuildContext context) => GridView.builder(
-    shrinkWrap: true,
-    physics: const NeverScrollableScrollPhysics(),
-    itemCount: items.length,
-    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-      crossAxisCount: 2, crossAxisSpacing: 8,
-      mainAxisSpacing: 8, childAspectRatio: 3.0,
-    ),
-    itemBuilder: (_, i) {
-      final item  = items[i];
-      final label = item['label'] as String;
-      final icon  = item['icon']  as IconData;
-      final color = item['color'] as Color;
-      final sel   = selected == label;
-      return GestureDetector(
-        onTap: () => onSelect(label),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          decoration: BoxDecoration(
-            color: sel ? color : cardWhite,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-                color: sel ? color : color.withOpacity(0.25), width: 1.5),
-            boxShadow: sel
-                ? [BoxShadow(color: color.withOpacity(0.3),
-                    blurRadius: 8, offset: const Offset(0, 3))]
-                : [BoxShadow(color: Colors.black.withOpacity(0.04),
-                    blurRadius: 4)],
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: Row(children: [
-            Icon(icon, color: sel ? Colors.white : color, size: 15),
-            const SizedBox(width: 8),
-            Expanded(child: Text(label,
-                maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                    color: sel ? Colors.white : Colors.grey.shade700))),
-          ]),
-        ),
-      );
-    },
-  );
-}
-
-// ── Single button for Abonnement / Agent ──
-class _CategoryButton extends StatelessWidget {
-  final Map<String, dynamic> item;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _CategoryButton({
-    required this.item,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final label = item['label'] as String;
-    final icon  = item['icon']  as IconData;
-    final color = item['color'] as Color;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        decoration: BoxDecoration(
-          color: selected ? color : cardWhite,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-              color: selected ? color : color.withOpacity(0.25), width: 1.5),
-          boxShadow: selected
-              ? [BoxShadow(color: color.withOpacity(0.3),
-                  blurRadius: 8, offset: const Offset(0, 3))]
-              : [BoxShadow(color: Colors.black.withOpacity(0.04),
-                  blurRadius: 4)],
-        ),
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(icon, color: selected ? Colors.white : color, size: 20),
-          const SizedBox(height: 4),
-          Text(label,
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                  color: selected ? Colors.white : Colors.grey.shade700)),
-        ]),
-      ),
-    );
-  }
-}
-
 // ════════════════════════════════════════════════════
-// TAB 2 — NFC / BARCODE SCAN  (real camera)
+// TAB 2 — NFC / BARCODE SCAN
 // ════════════════════════════════════════════════════
+
 class _ScanTab extends StatefulWidget {
   final Map<String, dynamic> voyage;
   final Map<String, dynamic> segment;
   const _ScanTab({required this.voyage, required this.segment});
-  @override State<_ScanTab> createState() => _ScanTabState();
+  @override
+  State<_ScanTab> createState() => _ScanTabState();
 }
 
 enum _ScanState { idle, success, error }
 
 class _ScanTabState extends State<_ScanTab> {
-  _ScanState scanState    = _ScanState.idle;
+  _ScanState            scanState    = _ScanState.idle;
   Map<String, dynamic>? scannedData;
-  String? errorMsg;
-  bool isSaving    = false;
-  int  totalScanned = 0;
+  String?               errorMsg;
+  bool                  isSaving     = false;
+  int                   totalScanned = 0;
+
+  OverlayEntry? _toastEntry;
+  Timer?        _toastTimer;
+
+  @override
+  void dispose() {
+    _toastTimer?.cancel();
+    _toastEntry?.remove();
+    super.dispose();
+  }
+
+  void _showToast(
+    String msg, {
+    bool isError   = false,
+    bool isWarning = false,
+  }) {
+    _toastTimer?.cancel();
+    _toastEntry?.remove();
+    _toastEntry = null;
+
+    final color = isError
+        ? Colors.red.shade700
+        : isWarning
+            ? Colors.orange.shade700
+            : const Color(0xFF16A34A);
+
+    final icon = isError
+        ? Icons.error_outline
+        : isWarning
+            ? Icons.offline_bolt
+            : Icons.check_circle_outline;
+
+    final entry = OverlayEntry(
+      builder: (_) => _ToastWidget(msg: msg, color: color, icon: icon),
+    );
+
+    _toastEntry = entry;
+    Overlay.of(context).insert(entry);
+
+    _toastTimer = Timer(const Duration(milliseconds: 2500), () {
+      entry.remove();
+      if (_toastEntry == entry) _toastEntry = null;
+    });
+  }
 
   Future<void> _openScanner(String mode) async {
     final raw = await Navigator.push<String>(
@@ -553,7 +513,6 @@ class _ScanTabState extends State<_ScanTab> {
     });
   }
 
-  // ── FIX 1 (scan): use a consistent "Scan <mode> — <type>" format ──
   String _buildScanTypeTarif(String mode, String type) =>
       'Scan $mode — $type';
 
@@ -582,13 +541,9 @@ class _ScanTabState extends State<_ScanTab> {
         scanState   = _ScanState.idle;
         scannedData = null;
       });
-      ScaffoldMessenger.of(context)
-        ..removeCurrentSnackBar()
-        ..showSnackBar(_successSnack('Titre validé et enregistré ✓'));
+      _showToast('Titre validé et enregistré ✓');
     } else {
-      ScaffoldMessenger.of(context)
-        ..removeCurrentSnackBar()
-        ..showSnackBar(_errorSnack('Erreur : ${result.error}'));
+      _showToast('Erreur : ${result.error}', isError: true);
     }
     setState(() => isSaving = false);
   }
@@ -657,7 +612,8 @@ class _ScanTabState extends State<_ScanTab> {
 class _CameraScannerPage extends StatefulWidget {
   final String mode;
   const _CameraScannerPage({required this.mode});
-  @override State<_CameraScannerPage> createState() => _CameraScannerPageState();
+  @override
+  State<_CameraScannerPage> createState() => _CameraScannerPageState();
 }
 
 class _CameraScannerPageState extends State<_CameraScannerPage> {
@@ -685,12 +641,8 @@ class _CameraScannerPageState extends State<_CameraScannerPage> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(children: [
-
         MobileScanner(controller: _ctrl, onDetect: _onDetect),
-
         const _ScanOverlay(),
-
-        // Top bar
         SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -732,8 +684,6 @@ class _CameraScannerPageState extends State<_CameraScannerPage> {
             ]),
           ),
         ),
-
-        // Bottom hint
         Positioned(
           left: 0, right: 0, bottom: 60,
           child: Center(
@@ -844,6 +794,103 @@ class _SectionLabel extends StatelessWidget {
     Text(text, style: const TextStyle(fontSize: 12,
         fontWeight: FontWeight.w700, color: navyDark, letterSpacing: 0.4)),
   ]);
+}
+
+// ── Category grid — renders institution buttons in a 2-column grid ──
+class _CategoryGrid extends StatelessWidget {
+  final List<Map<String, dynamic>> items;
+  final String? selected;
+  final ValueChanged<String> onSelect;
+
+  const _CategoryGrid({
+    required this.items,
+    required this.selected,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: items.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        childAspectRatio: 2.8,
+      ),
+      itemBuilder: (_, i) => _CategoryButton(
+        item: items[i],
+        selected: selected == items[i]['label'],
+        onTap: () => onSelect(items[i]['label'] as String),
+      ),
+    );
+  }
+}
+
+// ── Single category button — used both in the grid and the special row ──
+class _CategoryButton extends StatelessWidget {
+  final Map<String, dynamic> item;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _CategoryButton({
+    required this.item,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = item['color'] as Color;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? color : cardWhite,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? color : Colors.grey.shade200,
+            width: selected ? 0 : 1.5,
+          ),
+          boxShadow: selected
+              ? [BoxShadow(
+                  color: color.withOpacity(0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                )]
+              : [BoxShadow(
+                  color: navyMid.withOpacity(0.05),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                )],
+        ),
+        child: Row(children: [
+          Icon(
+            item['icon'] as IconData,
+            size: 16,
+            color: selected ? Colors.white : color,
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              item['label'] as String,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: selected ? Colors.white : navyDark,
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
 }
 
 class _QuantiteCard extends StatelessWidget {
@@ -1185,26 +1232,107 @@ class _BigBtn extends StatelessWidget {
   );
 }
 
-// ── Snackbar helpers ──
-SnackBar _successSnack(String msg) => SnackBar(
-  content: Row(children: [
-    const Icon(Icons.check_circle_outline, color: Colors.white, size: 17),
-    const SizedBox(width: 8),
-    Text(msg, style: const TextStyle(
-        fontWeight: FontWeight.w600, fontSize: 13)),
-  ]),
-  backgroundColor: const Color(0xFF16A34A),
-  behavior: SnackBarBehavior.floating,
-  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-  margin: const EdgeInsets.all(14),
-  duration: const Duration(seconds: 3),
-);
+// ─────────────────────────────────────────────────────────────
+// Toast widget — top-right, slides in from the right
+// ─────────────────────────────────────────────────────────────
 
-SnackBar _errorSnack(String msg) => SnackBar(
-  content: Text(msg,
-      style: const TextStyle(fontWeight: FontWeight.w600)),
-  backgroundColor: Colors.red.shade700,
-  behavior: SnackBarBehavior.floating,
-  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-  margin: const EdgeInsets.all(14),
-);
+class _ToastWidget extends StatefulWidget {
+  final String   msg;
+  final Color    color;
+  final IconData icon;
+
+  const _ToastWidget({
+    required this.msg,
+    required this.color,
+    required this.icon,
+  });
+
+  @override
+  State<_ToastWidget> createState() => _ToastWidgetState();
+}
+
+class _ToastWidgetState extends State<_ToastWidget>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double>   _opacity;
+  late final Animation<Offset>   _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    );
+    _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+    _slide   = Tween<Offset>(
+      begin: const Offset(1.0, 0),
+      end:   Offset.zero,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
+
+    _ctrl.forward();
+
+    Future.delayed(const Duration(milliseconds: 2100), () {
+      if (mounted) _ctrl.reverse();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      top:   MediaQuery.of(context).padding.top + 16,
+      right: 16,
+      child: FadeTransition(
+        opacity: _opacity,
+        child: SlideTransition(
+          position: _slide,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 300),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 18,
+                vertical: 11,
+              ),
+              decoration: BoxDecoration(
+                color: widget.color,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: widget.color.withOpacity(0.35),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(widget.icon, color: Colors.white, size: 16),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      widget.msg,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

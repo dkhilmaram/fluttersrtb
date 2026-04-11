@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -24,9 +25,12 @@ class VenteTicketsPage extends StatefulWidget {
 }
 
 class _VenteTicketsPageState extends State<VenteTicketsPage> {
-  bool isCloture = false;
-  bool isLoading = true;
-  int _pendingCount = 0;
+  bool isCloture    = false;
+  bool isLoading    = true;
+  int  _pendingCount = 0;
+
+  OverlayEntry? _toastEntry;
+  Timer?        _toastTimer;
 
   @override
   void initState() {
@@ -34,6 +38,55 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
     _loadPendingCount();
     _resolveStatut();
   }
+
+  @override
+  void dispose() {
+    _toastTimer?.cancel();
+    _toastEntry?.remove();
+    super.dispose();
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Toast
+  // ─────────────────────────────────────────────────────────────
+
+  void _showToast(
+    String msg, {
+    bool isError   = false,
+    bool isWarning = false,
+  }) {
+    _toastTimer?.cancel();
+    _toastEntry?.remove();
+    _toastEntry = null;
+
+    final color = isError
+        ? Colors.red.shade700
+        : isWarning
+            ? Colors.orange.shade700
+            : const Color(0xFF16A34A);
+
+    final icon = isError
+        ? Icons.error_outline
+        : isWarning
+            ? Icons.offline_bolt
+            : Icons.check_circle_outline;
+
+    final entry = OverlayEntry(
+      builder: (_) => _ToastWidget(msg: msg, color: color, icon: icon),
+    );
+
+    _toastEntry = entry;
+    Overlay.of(context).insert(entry);
+
+    _toastTimer = Timer(const Duration(milliseconds: 2500), () {
+      entry.remove();
+      if (_toastEntry == entry) _toastEntry = null;
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Pending count
+  // ─────────────────────────────────────────────────────────────
 
   Future<void> _loadPendingCount() async {
     final pending = await LocalDatabase.getPendingTickets();
@@ -49,13 +102,13 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
   //      server statut so stale 'cloture' entries are discarded when
   //      the server has been manually reset to 'actif'.
   // ─────────────────────────────────────────────────────────────
+
   Future<void> _resolveStatut() async {
     if (!mounted) return;
     setState(() => isLoading = true);
 
     final id = widget.voyage['id'] as int?;
 
-    // No id → can't do anything; treat as active.
     if (id == null) {
       setState(() => isLoading = false);
       return;
@@ -65,9 +118,11 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
     String? serverStatut;
     try {
       final response = await http
-          .get(Uri.parse(
-            'http://172.24.114.63:8000/billetterie/vente/$id/statut',
-          ))
+          .get(
+            Uri.parse(
+              'http://192.168.1.22:8000/billetterie/vente/$id/statut',
+            ),
+          )
           .timeout(const Duration(seconds: 6));
 
       if (response.statusCode == 200) {
@@ -80,13 +135,9 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
 
     if (serverStatut != null) {
       // ── Online path: server responded ──
-      // If the server says 'actif' but we have a local 'cloture_pending',
-      // it means someone manually reset the DB → honour the server.
       if (serverStatut != 'cloture') {
-        // Clear any stale local cloture entry so it doesn't haunt us.
         await LocalDatabase.clearVoyageStatut(id);
       }
-
       if (mounted) {
         setState(() {
           isCloture = serverStatut == 'cloture';
@@ -97,12 +148,9 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
     }
 
     // ── Offline path: server unreachable ──
-    // Use what the parent screen passed us as the last known server value.
     final lastKnownServerStatut =
         widget.voyage['statut'] as String? ?? 'actif';
 
-    // getVoyageStatut with currentServerStatut will discard the cached
-    // entry if the server value has changed (e.g. manual DB reset).
     final localStatut = await LocalDatabase.getVoyageStatut(
       id,
       currentServerStatut: lastKnownServerStatut,
@@ -110,9 +158,8 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
 
     if (mounted) {
       setState(() {
-        // Show as clôturé only if we have an explicit pending cloture
-        // queued locally, OR if the last known server value was cloture.
-        isCloture = localStatut == 'cloture' ||
+        isCloture =
+            localStatut == 'cloture' ||
             localStatut == 'cloture_pending' ||
             lastKnownServerStatut == 'cloture';
         isLoading = false;
@@ -123,13 +170,14 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
   // ─────────────────────────────────────────────────────────────
   // Helpers
   // ─────────────────────────────────────────────────────────────
+
   String get _date {
     final dh = widget.voyage['date_heure'] as String? ?? '';
     return dh.split(' ').first;
   }
 
   String get _heure {
-    final dh = widget.voyage['date_heure'] as String? ?? '';
+    final dh    = widget.voyage['date_heure'] as String? ?? '';
     final parts = dh.split(' ');
     return parts.length > 1 ? parts[1].substring(0, 5) : '';
   }
@@ -137,6 +185,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
   // ─────────────────────────────────────────────────────────────
   // Build
   // ─────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     final voyageId = widget.voyage['id'] as int?;
@@ -149,10 +198,8 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // ── Header ──
             _buildHeader(depart, arrivee),
 
-            // ── Clôture banner ──
             if (isCloture)
               Container(
                 width: double.infinity,
@@ -175,10 +222,8 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
                 ),
               ),
 
-            // ── Voyage info card ──
             _buildInfoCard(depart, arrivee),
 
-            // ── Action buttons ──
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
               child: isLoading
@@ -320,7 +365,6 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
                   builder: (_) => ClotureVoyagePage(voyage: widget.voyage),
                 ),
               );
-              // Re-check statut after returning — server is the source of truth.
               await _resolveStatut();
             },
           ),
@@ -332,6 +376,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
   // ─────────────────────────────────────────────────────────────
   // Header
   // ─────────────────────────────────────────────────────────────
+
   Widget _buildHeader(String depart, String arrivee) {
     return Container(
       width: double.infinity,
@@ -395,8 +440,10 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
                           decoration: BoxDecoration(
                             color: Colors.orange.shade600,
                             shape: BoxShape.circle,
-                            border:
-                                Border.all(color: Colors.white, width: 1.5),
+                            border: Border.all(
+                              color: Colors.white,
+                              width: 1.5,
+                            ),
                           ),
                           child: Center(
                             child: Text(
@@ -434,11 +481,8 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
             child: Image.asset(
               'assets/images/logo_srtb.png',
               fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => const Icon(
-                Icons.directions_bus,
-                size: 44,
-                color: navyMid,
-              ),
+              errorBuilder: (_, __, ___) =>
+                  const Icon(Icons.directions_bus, size: 44, color: navyMid),
             ),
           ),
           const SizedBox(height: 12),
@@ -462,8 +506,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
           ),
           const SizedBox(height: 14),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.1),
               borderRadius: BorderRadius.circular(30),
@@ -473,8 +516,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 7,
-                  height: 7,
+                  width: 7, height: 7,
                   decoration: const BoxDecoration(
                     color: goldLight,
                     shape: BoxShape.circle,
@@ -498,8 +540,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
                   ),
                 ),
                 Container(
-                  width: 7,
-                  height: 7,
+                  width: 7, height: 7,
                   decoration: BoxDecoration(
                     color: Colors.transparent,
                     shape: BoxShape.circle,
@@ -526,6 +567,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
   // ─────────────────────────────────────────────────────────────
   // Voyage info card
   // ─────────────────────────────────────────────────────────────
+
   Widget _buildInfoCard(String depart, String arrivee) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -542,8 +584,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
           ),
           boxShadow: [
             BoxShadow(
-              color:
-                  (isCloture ? Colors.grey : navyMid).withOpacity(0.06),
+              color: (isCloture ? Colors.grey : navyMid).withOpacity(0.06),
               blurRadius: 12,
               offset: const Offset(0, 3),
             ),
@@ -552,8 +593,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
         child: Row(
           children: [
             Container(
-              width: 46,
-              height: 46,
+              width: 46, height: 46,
               decoration: BoxDecoration(
                 color: (isCloture ? Colors.grey : navyMid).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(13),
@@ -594,8 +634,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
               ),
             ),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: isCloture
                     ? Colors.red.shade50
@@ -627,6 +666,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
   // ─────────────────────────────────────────────────────────────
   // Action button
   // ─────────────────────────────────────────────────────────────
+
   Widget _actionBtn({
     required String label,
     required IconData icon,
@@ -683,6 +723,111 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
                   ),
                 ),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Toast widget — top-right, slides in from the right
+// ─────────────────────────────────────────────────────────────
+
+class _ToastWidget extends StatefulWidget {
+  final String   msg;
+  final Color    color;
+  final IconData icon;
+
+  const _ToastWidget({
+    required this.msg,
+    required this.color,
+    required this.icon,
+  });
+
+  @override
+  State<_ToastWidget> createState() => _ToastWidgetState();
+}
+
+class _ToastWidgetState extends State<_ToastWidget>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double>   _opacity;
+  late final Animation<Offset>   _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    );
+    _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+    _slide   = Tween<Offset>(
+      begin: const Offset(1.0, 0),
+      end:   Offset.zero,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
+
+    _ctrl.forward();
+
+    Future.delayed(const Duration(milliseconds: 2100), () {
+      if (mounted) _ctrl.reverse();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      top:   MediaQuery.of(context).padding.top + 16,
+      right: 16,
+      child: FadeTransition(
+        opacity: _opacity,
+        child: SlideTransition(
+          position: _slide,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 300),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 18,
+                vertical: 11,
+              ),
+              decoration: BoxDecoration(
+                color: widget.color,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: widget.color.withOpacity(0.35),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(widget.icon, color: Colors.white, size: 16),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      widget.msg,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

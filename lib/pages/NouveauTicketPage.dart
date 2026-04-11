@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -32,23 +33,71 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
   String? typeTarif;
   int quantite = 1;
 
-  List<String> arrets = [];
-  Map<String, int> prixMap = {};
+  List<String>              arrets     = [];
+  Map<String, int>          prixMap    = {};
   List<Map<String, dynamic>> tarifTypes = [];
 
-  bool isLoading    = true;
-  bool isSaving     = false;
-  bool isCloturing  = false;
-  bool isOffline    = false;
+  bool    isLoading   = true;
+  bool    isSaving    = false;
+  bool    isCloturing = false;
+  bool    isOffline   = false;
   String? errorMessage;
 
   int ticketsVendus = 0;
   int montantTotal  = 0;
 
+  OverlayEntry? _toastEntry;
+  Timer?        _toastTimer;
+
   @override
   void initState() {
     super.initState();
     _fetchData();
+  }
+
+  @override
+  void dispose() {
+    _toastTimer?.cancel();
+    _toastEntry?.remove();
+    super.dispose();
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Toast
+  // ─────────────────────────────────────────────────────────────
+
+  void _showToast(
+    String msg, {
+    bool isError   = false,
+    bool isWarning = false,
+  }) {
+    _toastTimer?.cancel();
+    _toastEntry?.remove();
+    _toastEntry = null;
+
+    final color = isError
+        ? Colors.red.shade700
+        : isWarning
+            ? Colors.orange.shade700
+            : const Color(0xFF16A34A);
+
+    final icon = isError
+        ? Icons.error_outline
+        : isWarning
+            ? Icons.offline_bolt
+            : Icons.check_circle_outline;
+
+    final entry = OverlayEntry(
+      builder: (_) => _ToastWidget(msg: msg, color: color, icon: icon),
+    );
+
+    _toastEntry = entry;
+    Overlay.of(context).insert(entry);
+
+    _toastTimer = Timer(const Duration(milliseconds: 2500), () {
+      entry.remove();
+      if (_toastEntry == entry) _toastEntry = null;
+    });
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -59,9 +108,11 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
     final idLigne = widget.voyage['id_ligne'] as int;
     try {
       final response = await http
-          .get(Uri.parse(
-            'http://172.24.114.63:8000/billetterie/ligne/$idLigne/tarifs',
-          ))
+          .get(
+            Uri.parse(
+              'http://192.168.1.22:8000/billetterie/ligne/$idLigne/tarifs',
+            ),
+          )
           .timeout(const Duration(seconds: 6));
 
       if (response.statusCode == 200) {
@@ -74,7 +125,6 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
       }
     } catch (_) {}
 
-    // Offline fallback
     final cached = await LocalDatabase.getTarifs(idLigne);
     if (cached != null) {
       if (mounted) _applyTarifs(cached, fromCache: true);
@@ -82,7 +132,9 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
       if (mounted) {
         setState(() {
           errorMessage =
-              'Hors-ligne — aucune donnée en cache.\nConnectez-vous une première fois avec internet\npour activer le mode hors-ligne.';
+              'Hors-ligne — aucune donnée en cache.\n'
+              'Connectez-vous une première fois avec internet\n'
+              'pour activer le mode hors-ligne.';
           isLoading = false;
         });
       }
@@ -92,13 +144,13 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
   void _applyTarifs(Map<String, dynamic> data, {required bool fromCache}) {
     final rawArrets = List<String>.from(data['arrets']);
     setState(() {
-      isOffline   = fromCache;
-      arrets      = _orderArretsByDirection(rawArrets);
-      prixMap     = Map<String, int>.from(
+      isOffline  = fromCache;
+      arrets     = _orderArretsByDirection(rawArrets);
+      prixMap    = Map<String, int>.from(
         (data['prix_map'] as Map).map((k, v) => MapEntry(k.toString(), v as int)),
       );
-      tarifTypes  = List<Map<String, dynamic>>.from(data['tarif_types']);
-      isLoading   = false;
+      tarifTypes = List<Map<String, dynamic>>.from(data['tarif_types']);
+      isLoading  = false;
 
       final normalTarif = tarifTypes.firstWhere(
         (t) => (t['type_tarif'] as String).toLowerCase() == 'normal',
@@ -111,23 +163,7 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
 
     if (fromCache && mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Row(children: [
-            Icon(Icons.offline_bolt, color: Colors.white, size: 15),
-            SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                '📡 Mode hors-ligne — données en cache',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ]),
-          backgroundColor: Colors.orange.shade700,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          margin: const EdgeInsets.all(14),
-          duration: const Duration(seconds: 4),
-        ));
+        _showToast('Mode hors-ligne — données en cache', isWarning: true);
       });
     }
   }
@@ -135,8 +171,7 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
   List<String> _orderArretsByDirection(List<String> raw) {
     if (raw.isEmpty) return raw;
     final voyageDepart = widget.voyage['depart'] as String? ?? '';
-    if (raw.last.trim().toLowerCase() ==
-        voyageDepart.trim().toLowerCase()) {
+    if (raw.last.trim().toLowerCase() == voyageDepart.trim().toLowerCase()) {
       return raw.reversed.toList();
     }
     return raw;
@@ -205,7 +240,7 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
     final matricule = widget.voyage['matricule_agent'] as int?;
 
     if (idVente == null) {
-      _showSnack('ID du voyage manquant', isError: true);
+      _showToast('ID du voyage manquant', isError: true);
       return;
     }
 
@@ -219,14 +254,14 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
     final tarif = typeTarif!;
 
     final result = await TicketRepository.saveTicket({
-      'id_vente':       idVente,
-      'id_segment':     idSegment ?? 0,
-      'point_depart':   dep,
-      'point_arrivee':  arr,
-      'type_tarif':     tarif,
-      'quantite':       qte,
-      'prix_unitaire':  prixU,
-      'montant_total':  prixT,
+      'id_vente':        idVente,
+      'id_segment':      idSegment ?? 0,
+      'point_depart':    dep,
+      'point_arrivee':   arr,
+      'type_tarif':      tarif,
+      'quantite':        qte,
+      'prix_unitaire':   prixU,
+      'montant_total':   prixT,
       'matricule_agent': matricule ?? 0,
     });
 
@@ -240,17 +275,16 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
         isOffline      = result.wasOffline;
       });
       if (result.wasOffline) {
-        _showSnack('📡 Hors-ligne — ticket sauvegardé localement',
-            isWarning: true);
+        _showToast('Hors-ligne — ticket sauvegardé localement', isWarning: true);
       } else {
-        _showSnack(
+        _showToast(
           prixT == 0
-              ? '✓  $qte passage(s) gratuit(s) enregistré(s)'
-              : '✓  $qte ticket(s) · $prixT millimes',
+              ? '$qte passage(s) gratuit(s) enregistré(s)'
+              : '$qte ticket(s) · $prixT millimes',
         );
       }
     } else {
-      _showSnack('Erreur : ${result.error ?? 'inconnue'}', isError: true);
+      _showToast('Erreur : ${result.error ?? 'inconnue'}', isError: true);
     }
 
     setState(() => isSaving = false);
@@ -265,7 +299,7 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
     final idSegment = widget.voyage['id_segment'] as int?;
 
     if (idVoyage == null || idSegment == null) {
-      _showSnack('Informations du secteur manquantes', isError: true);
+      _showToast('Informations du secteur manquantes', isError: true);
       return;
     }
 
@@ -273,12 +307,12 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
 
     bool clotureOk = false;
 
-    // ── 1. Try online ──────────────────────────────────────────
+    // ── 1. Try online ──
     try {
       final clotResp = await http
           .put(
             Uri.parse(
-              'http://172.24.114.63:8000/billetterie/voyages/$idVoyage/segments/$idSegment/cloturer',
+              'http://192.168.1.22:8000/billetterie/voyages/$idVoyage/segments/$idSegment/cloturer',
             ),
             headers: {'Content-Type': 'application/json'},
           )
@@ -286,7 +320,7 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
 
       final clotData = jsonDecode(clotResp.body);
       if (clotData['success'] != true) {
-        _showSnack(clotData['message'] ?? 'Erreur clôture', isError: true);
+        _showToast(clotData['message'] ?? 'Erreur clôture', isError: true);
         setState(() => isCloturing = false);
         return;
       }
@@ -296,21 +330,20 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
     }
 
     if (clotureOk) {
-      // ── Online success ──────────────────────────────────────
-      _showSnack('Secteur clôturé ✓', isWarning: true);
+      // ── Online success ──
+      _showToast('Secteur clôturé ✓', isWarning: true);
 
       try {
         final checkData = jsonDecode(
           (await http
                   .get(Uri.parse(
-                    'http://172.24.114.63:8000/billetterie/voyages/$idVoyage/segment/actif',
+                    'http://192.168.1.22:8000/billetterie/voyages/$idVoyage/segment/actif',
                   ))
                   .timeout(const Duration(seconds: 6)))
               .body,
         );
 
-        if (checkData['tous_clotures'] == true ||
-            checkData['prochain'] == null) {
+        if (checkData['tous_clotures'] == true || checkData['prochain'] == null) {
           if (mounted) Navigator.pop(context);
           setState(() => isCloturing = false);
           return;
@@ -320,7 +353,7 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
           (await http
                   .put(
                     Uri.parse(
-                      'http://172.24.114.63:8000/billetterie/voyages/$idVoyage/segment/ouvrir',
+                      'http://192.168.1.22:8000/billetterie/voyages/$idVoyage/segment/ouvrir',
                     ),
                     headers: {'Content-Type': 'application/json'},
                   )
@@ -329,7 +362,7 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
         );
 
         if (openData['success'] != true) {
-          _showSnack(openData['message'] ?? 'Erreur ouverture', isError: true);
+          _showToast(openData['message'] ?? 'Erreur ouverture', isError: true);
           setState(() => isCloturing = false);
           return;
         }
@@ -337,7 +370,7 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
         final newData = jsonDecode(
           (await http
                   .get(Uri.parse(
-                    'http://172.24.114.63:8000/billetterie/voyages/$idVoyage/segment/actif',
+                    'http://192.168.1.22:8000/billetterie/voyages/$idVoyage/segment/actif',
                   ))
                   .timeout(const Duration(seconds: 6)))
               .body,
@@ -350,7 +383,7 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
           return;
         }
 
-        _showSnack('Secteur suivant ouvert ✓');
+        _showToast('Secteur suivant ouvert ✓');
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -366,99 +399,36 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
           ),
         );
       } catch (e) {
-        _showSnack('Erreur : $e', isError: true);
+        _showToast('Erreur : $e', isError: true);
         setState(() => isCloturing = false);
       }
     } else {
-      // ── Offline path ────────────────────────────────────────
+      // ── Offline ──
       await _handleOfflineCloture(idVoyage, idSegment);
       setState(() => isCloturing = false);
     }
   }
 
-  /// Apply the cloture locally and persist a pending record for later sync.
   Future<void> _handleOfflineCloture(int idVente, int idSegment) async {
-    // Load current segment cache to update it
-    final cached = await LocalDatabase.getSegments(idVente);
-
-    List<dynamic> tousSecteurs =
-        (cached?['segments'] as List<dynamic>?) ?? [];
-    Map<String, dynamic>? prochainSecteur =
-        cached?['prochain'] as Map<String, dynamic>?;
-
-    // Mark current as clôturé, next as actif
-    final updatedSegments = tousSecteurs.map((s) {
-      final seg = Map<String, dynamic>.from(s as Map);
-      if (seg['id_segment'] == idSegment) {
-        seg['statut']       = 'cloture';
-        seg['date_cloture'] = DateTime.now().toString().substring(0, 19);
-      } else if (prochainSecteur != null &&
-          seg['id_segment'] == prochainSecteur['id_segment']) {
-        seg['statut']         = 'actif';
-        seg['date_ouverture'] = DateTime.now().toString().substring(0, 19);
-      }
-      return seg;
-    }).toList();
-
-    // Determine new actif / prochain
-    Map<String, dynamic>? newActif;
-    Map<String, dynamic>? newProchain;
-
-    if (prochainSecteur != null) {
-      newActif = Map<String, dynamic>.from(prochainSecteur)
-        ..['statut']         = 'actif'
-        ..['date_ouverture'] = DateTime.now().toString().substring(0, 19);
-
-      bool foundActif = false;
-      for (final s in updatedSegments) {
-        final seg = s as Map<String, dynamic>;
-        if (seg['id_segment'] == newActif['id_segment']) {
-          foundActif = true;
-          continue;
-        }
-        if (foundActif && seg['statut'] == 'en_attente') {
-          newProchain = seg;
-          break;
-        }
-      }
-    }
-
-    final allDone = prochainSecteur == null ||
-        updatedSegments.every(
-          (s) => (s as Map<String, dynamic>)['statut'] == 'cloture',
-        );
-
-    // Persist updated cache
-    await LocalDatabase.saveSegments(
-      idVente:         idVente,
-      actifSegment:    allDone ? null : newActif,
-      prochainSegment: allDone ? null : newProchain,
-      tousSecteurs:    updatedSegments,
-      tousClotures:    allDone,
-    );
-
-    // Queue for later sync
-    await LocalDatabase.saveSegmentCloturePending(
+    final result = await LocalDatabase.applyOfflineCloture(
       idVente:   idVente,
       idSegment: idSegment,
-      openNext:  !allDone && prochainSecteur != null,
     );
 
     setState(() => isOffline = true);
 
-    if (allDone) {
-      _showSnack(
+    if (result.allDone) {
+      _showToast(
         'Tous secteurs clôturés hors-ligne ✓ (sync auto dès réseau)',
         isWarning: true,
       );
       if (mounted) Navigator.pop(context);
-    } else if (newActif != null) {
-      final nextSeg = newActif; // promote to non-nullable for closure
-      _showSnack(
+    } else if (result.newActif != null) {
+      final nextSeg = result.newActif!;
+      _showToast(
         'Secteur clôturé hors-ligne ✓ — passage au suivant',
         isWarning: true,
       );
-      // Navigate to next segment in offline mode
       if (mounted) {
         Navigator.pushReplacement(
           context,
@@ -476,7 +446,7 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
         );
       }
     } else {
-      _showSnack(
+      _showToast(
         'Secteur clôturé hors-ligne ✓ (sync auto dès réseau)',
         isWarning: true,
       );
@@ -485,11 +455,11 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Confirm dialog
+  // Confirm dialog — clôture
   // ─────────────────────────────────────────────────────────────
 
   void _confirmCloture() {
-    final dep = widget.voyage['depart'] ?? '?';
+    final dep = widget.voyage['depart']  ?? '?';
     final arr = widget.voyage['arrivee'] ?? '?';
     showDialog(
       context: context,
@@ -543,7 +513,6 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                 ),
               ),
               const SizedBox(height: 10),
-              // Show offline warning in dialog if already offline
               if (isOffline)
                 Container(
                   margin: const EdgeInsets.only(bottom: 4),
@@ -651,13 +620,13 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                     color: navyDark, fontSize: 17, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 18),
-              _confirmRow(Icons.trip_origin, 'Montée', pointDepart!),
+              _confirmRow(Icons.trip_origin,        'Montée',    pointDepart!),
               _dividerLine(),
-              _confirmRow(Icons.location_on_outlined, 'Descente', pointArrivee!),
+              _confirmRow(Icons.location_on_outlined,'Descente',  pointArrivee!),
               _dividerLine(),
-              _confirmRow(Icons.sell_outlined, 'Tarif', typeTarif!),
+              _confirmRow(Icons.sell_outlined,       'Tarif',     typeTarif!),
               _dividerLine(),
-              _confirmRow(Icons.people_outline, 'Quantité',
+              _confirmRow(Icons.people_outline,      'Quantité',
                   '$quantite ticket${quantite > 1 ? 's' : ''}'),
               const SizedBox(height: 16),
               Container(
@@ -675,10 +644,9 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                       Text(
                         '${_prixNormal! * quantite} ms',
                         style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
-                          decoration: TextDecoration.lineThrough,
-                        ),
+                            fontSize: 12,
+                            color: Colors.grey,
+                            decoration: TextDecoration.lineThrough),
                       ),
                     if (quantite > 1)
                       Text(
@@ -708,10 +676,9 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                         child: Text(
                           '−$_discountPct% appliqué',
                           style: TextStyle(
-                            color: Colors.orange.shade800,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
+                              color: Colors.orange.shade800,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600),
                         ),
                       ),
                     ],
@@ -788,44 +755,7 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
     );
   }
 
-  Widget _dividerLine() =>
-      Divider(height: 1, color: Colors.grey.shade100);
-
-  void _showSnack(String msg,
-      {bool isError = false, bool isWarning = false}) {
-    final color = isError
-        ? Colors.red.shade700
-        : isWarning
-            ? Colors.orange.shade700
-            : const Color(0xFF16A34A);
-    ScaffoldMessenger.of(context)
-      ..removeCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        content: Row(children: [
-          Icon(
-            isError
-                ? Icons.error_outline
-                : isWarning
-                    ? Icons.info_outline
-                    : Icons.check_circle_outline,
-            color: Colors.white,
-            size: 17,
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(msg,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w600, fontSize: 13)),
-          ),
-        ]),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(14),
-        duration: const Duration(seconds: 3),
-      ));
-  }
+  Widget _dividerLine() => Divider(height: 1, color: Colors.grey.shade100);
 
   // ─────────────────────────────────────────────────────────────
   // Build
@@ -888,18 +818,21 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                       child: Image.asset(
                         'assets/images/logo_srtb.png',
                         fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) =>
-                            const Icon(Icons.directions_bus,
-                                size: 44, color: navyMid),
+                        errorBuilder: (_, __, ___) => const Icon(
+                            Icons.directions_bus,
+                            size: 44,
+                            color: navyMid),
                       ),
                     ),
                     const SizedBox(height: 12),
-                    const Text('S R T B',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 7)),
+                    const Text(
+                      'S R T B',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 7),
+                    ),
                     const SizedBox(height: 4),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -926,12 +859,14 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                                 Icon(Icons.offline_bolt,
                                     color: Colors.white, size: 10),
                                 SizedBox(width: 4),
-                                Text('HORS-LIGNE',
-                                    style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 0.5)),
+                                Text(
+                                  'HORS-LIGNE',
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5),
+                                ),
                               ],
                             ),
                           ),
@@ -945,8 +880,8 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(30),
-                        border: Border.all(
-                            color: Colors.white.withOpacity(0.2)),
+                        border:
+                            Border.all(color: Colors.white.withOpacity(0.2)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -993,15 +928,17 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
             // ── Counter bar ──
             Container(
               margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+              padding:
+                  const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
               decoration: BoxDecoration(
                 color: cardWhite,
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                      color: navyMid.withOpacity(0.07),
-                      blurRadius: 16,
-                      offset: const Offset(0, 3)),
+                    color: navyMid.withOpacity(0.07),
+                    blurRadius: 16,
+                    offset: const Offset(0, 3),
+                  ),
                 ],
               ),
               child: Row(
@@ -1044,7 +981,8 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                             child: Column(
                               children: [
                                 Icon(Icons.wifi_off_rounded,
-                                    size: 52, color: Colors.orange.shade200),
+                                    size: 52,
+                                    color: Colors.orange.shade200),
                                 const SizedBox(height: 16),
                                 Text(
                                   errorMessage!,
@@ -1075,7 +1013,6 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                       : Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Offline pending badge
                             if (isOffline) ...[
                               Container(
                                 width: double.infinity,
@@ -1146,9 +1083,7 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                                     duration:
                                         const Duration(milliseconds: 180),
                                     decoration: BoxDecoration(
-                                      color: isSelected
-                                          ? accent
-                                          : cardWhite,
+                                      color: isSelected ? accent : cardWhite,
                                       borderRadius:
                                           BorderRadius.circular(10),
                                       border: Border.all(
@@ -1193,8 +1128,7 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                                             child: Text(
                                               type,
                                               maxLines: 1,
-                                              overflow:
-                                                  TextOverflow.ellipsis,
+                                              overflow: TextOverflow.ellipsis,
                                               style: TextStyle(
                                                 fontSize: 12,
                                                 fontWeight: FontWeight.w700,
@@ -1205,8 +1139,8 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                                             ),
                                           ),
                                           if (discount > 0)
-                                            _tarifBadge(
-                                                '−$discount%', accent, isSelected),
+                                            _tarifBadge('−$discount%', accent,
+                                                isSelected),
                                         ],
                                       ),
                                     ),
@@ -1214,6 +1148,7 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                                 );
                               },
                             ),
+
                             const SizedBox(height: 22),
                             _label('Trajet'),
                             const SizedBox(height: 10),
@@ -1237,9 +1172,10 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                                     child: Row(
                                       children: [
                                         Container(
-                                            width: 1.5,
-                                            height: 22,
-                                            color: Colors.grey.shade200),
+                                          width: 1.5,
+                                          height: 22,
+                                          color: Colors.grey.shade200,
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -1248,7 +1184,7 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                                     iconColor: Colors.red.shade500,
                                     label: 'Point de descente',
                                     hint: pointDepart == null
-                                        ? 'Choisir d\'abord la montée'
+                                        ? "Choisir d'abord la montée"
                                         : 'Choisir un arrêt',
                                     value: pointArrivee,
                                     items: _arrivalArrets,
@@ -1260,6 +1196,7 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                                 ],
                               ),
                             ),
+
                             const SizedBox(height: 22),
                             _label('Nombre de tickets'),
                             const SizedBox(height: 10),
@@ -1271,11 +1208,13 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                                   Expanded(
                                     child: Column(
                                       children: [
-                                        Text('$quantite',
-                                            style: const TextStyle(
-                                                fontSize: 30,
-                                                fontWeight: FontWeight.bold,
-                                                color: navyDark)),
+                                        Text(
+                                          '$quantite',
+                                          style: const TextStyle(
+                                              fontSize: 30,
+                                              fontWeight: FontWeight.bold,
+                                              color: navyDark),
+                                        ),
                                         Text(
                                           quantite == 1 ? 'ticket' : 'tickets',
                                           style: TextStyle(
@@ -1291,6 +1230,7 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                                 ],
                               ),
                             ),
+
                             const SizedBox(height: 22),
                             if (_prixUnitaire != null) ...[
                               _PriceCard(
@@ -1302,6 +1242,7 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                               ),
                               const SizedBox(height: 22),
                             ],
+
                             _actionBtn(
                               label: isSaving
                                   ? 'Enregistrement...'
@@ -1354,11 +1295,14 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
             : accent.withOpacity(0.12),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(text,
-          style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w800,
-              color: isSelected ? Colors.white : accent)),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          color: isSelected ? Colors.white : accent,
+        ),
+      ),
     );
   }
 
@@ -1378,9 +1322,10 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-                color: navyMid.withOpacity(0.06),
-                blurRadius: 12,
-                offset: const Offset(0, 3)),
+              color: navyMid.withOpacity(0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 3),
+            ),
           ],
         ),
         child: child,
@@ -1483,9 +1428,10 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
           boxShadow: enabled
               ? [
                   BoxShadow(
-                      color: navyMid.withOpacity(0.3),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2))
+                    color: navyMid.withOpacity(0.3),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
                 ]
               : [],
         ),
@@ -1518,16 +1464,18 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                   ? LinearGradient(
                       colors: colors,
                       begin: Alignment.topLeft,
-                      end: Alignment.bottomRight)
+                      end: Alignment.bottomRight,
+                    )
                   : null,
               color: enabled ? null : Colors.grey.shade200,
               borderRadius: BorderRadius.circular(14),
               boxShadow: enabled
                   ? [
                       BoxShadow(
-                          color: colors.first.withOpacity(0.35),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4))
+                        color: colors.first.withOpacity(0.35),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
                     ]
                   : [],
             ),
@@ -1542,18 +1490,18 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
                   )
                 else if (icon != null)
                   Icon(icon,
-                      color:
-                          enabled ? Colors.white : Colors.grey.shade400,
+                      color: enabled ? Colors.white : Colors.grey.shade400,
                       size: 20),
                 const SizedBox(width: 8),
-                Text(label,
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.3,
-                        color: enabled
-                            ? Colors.white
-                            : Colors.grey.shade400)),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.3,
+                    color: enabled ? Colors.white : Colors.grey.shade400,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1569,10 +1517,10 @@ class _NouveauTicketPageState extends State<NouveauTicketPage> {
 
 class _PriceCard extends StatelessWidget {
   final int? prixNormal;
-  final int prixUnitaire;
-  final int prixTotal;
-  final int quantite;
-  final int discountPct;
+  final int  prixUnitaire;
+  final int  prixTotal;
+  final int  quantite;
+  final int  discountPct;
 
   const _PriceCard({
     required this.prixNormal,
@@ -1593,14 +1541,18 @@ class _PriceCard extends StatelessWidget {
             ? const LinearGradient(
                 colors: [Color(0xFFDCFCE7), Color(0xFFF0FDF4)],
                 begin: Alignment.topLeft,
-                end: Alignment.bottomRight)
+                end: Alignment.bottomRight,
+              )
             : const LinearGradient(
                 colors: [Color(0xFFEBF0FF), Color(0xFFF2F5FF)],
                 begin: Alignment.topLeft,
-                end: Alignment.bottomRight),
+                end: Alignment.bottomRight,
+              ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isFree ? const Color(0xFF86EFAC) : const Color(0xFFB8C8F0),
+          color: isFree
+              ? const Color(0xFF86EFAC)
+              : const Color(0xFFB8C8F0),
           width: 1.5,
         ),
       ),
@@ -1630,10 +1582,9 @@ class _PriceCard extends StatelessWidget {
                   Text(
                     '${prixNormal! * quantite} ms',
                     style: const TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey,
-                      decoration: TextDecoration.lineThrough,
-                    ),
+                        fontSize: 11,
+                        color: Colors.grey,
+                        decoration: TextDecoration.lineThrough),
                   ),
               ],
             ),
@@ -1650,8 +1601,115 @@ class _PriceCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: color.withOpacity(0.25)),
         ),
-        child: Text(text,
-            style: TextStyle(
-                fontSize: 11, color: color, fontWeight: FontWeight.w700)),
+        child: Text(
+          text,
+          style: TextStyle(
+              fontSize: 11, color: color, fontWeight: FontWeight.w700),
+        ),
       );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Toast widget — top-right, slides in from the right
+// ─────────────────────────────────────────────────────────────
+
+class _ToastWidget extends StatefulWidget {
+  final String   msg;
+  final Color    color;
+  final IconData icon;
+
+  const _ToastWidget({
+    required this.msg,
+    required this.color,
+    required this.icon,
+  });
+
+  @override
+  State<_ToastWidget> createState() => _ToastWidgetState();
+}
+
+class _ToastWidgetState extends State<_ToastWidget>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double>   _opacity;
+  late final Animation<Offset>   _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    );
+    _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+    _slide   = Tween<Offset>(
+      begin: const Offset(1.0, 0),
+      end:   Offset.zero,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
+
+    _ctrl.forward();
+
+    Future.delayed(const Duration(milliseconds: 2100), () {
+      if (mounted) _ctrl.reverse();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      top:   MediaQuery.of(context).padding.top + 16,
+      right: 16,
+      child: FadeTransition(
+        opacity: _opacity,
+        child: SlideTransition(
+          position: _slide,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 300),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 18,
+                vertical: 11,
+              ),
+              decoration: BoxDecoration(
+                color: widget.color,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: widget.color.withOpacity(0.35),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(widget.icon, color: Colors.white, size: 16),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      widget.msg,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

@@ -2,6 +2,28 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'dart:convert';
 
+// ─────────────────────────────────────────────────────────────
+// Result type for shared offline cloture logic
+// ─────────────────────────────────────────────────────────────
+
+class OfflineClotureResult {
+  final bool allDone;
+  final Map<String, dynamic>? newActif;
+  final Map<String, dynamic>? newProchain;
+  final List<dynamic> updatedSegments;
+
+  const OfflineClotureResult({
+    required this.allDone,
+    required this.newActif,
+    required this.newProchain,
+    required this.updatedSegments,
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// LocalDatabase
+// ─────────────────────────────────────────────────────────────
+
 class LocalDatabase {
   static Database? _db;
   static bool _initialized = false;
@@ -72,7 +94,6 @@ class LocalDatabase {
         tarif_types  TEXT NOT NULL,
         cached_at    TEXT NOT NULL
       )''',
-      // ✅ Added server_statut column to know what the server last said
       '''CREATE TABLE IF NOT EXISTS voyage_cache (
         id_vente       INTEGER PRIMARY KEY,
         statut         TEXT NOT NULL,
@@ -131,6 +152,97 @@ class LocalDatabase {
     } catch (e) {
       print('❌ Error ensuring tables: $e');
     }
+  }
+
+  // ═══════════════════════════════════════════════
+  // ── SHARED OFFLINE CLOTURE LOGIC ──
+  // Single source of truth used by both NouveauTicketPage
+  // and SegmentPage — eliminates cache divergence.
+  // ═══════════════════════════════════════════════
+
+  /// Applies an offline segment cloture to the local cache and queues it
+  /// for later sync. Both NouveauTicketPage and SegmentPage call this
+  /// instead of maintaining their own separate copy of the logic.
+  static Future<OfflineClotureResult> applyOfflineCloture({
+    required int idVente,
+    required int idSegment,
+  }) async {
+    final cached = await getSegments(idVente);
+
+    final List<dynamic> tousSecteurs =
+        (cached?['segments'] as List<dynamic>?) ?? [];
+    final Map<String, dynamic>? prochainSecteur =
+        cached?['prochain'] as Map<String, dynamic>?;
+
+    // Mark current segment as clôturé, next as actif
+    final updatedSegments = tousSecteurs.map((s) {
+      final seg = Map<String, dynamic>.from(s as Map);
+      if (seg['id_segment'] == idSegment) {
+        seg['statut'] = 'cloture';
+        seg['date_cloture'] = DateTime.now().toString().substring(0, 19);
+      } else if (prochainSecteur != null &&
+          seg['id_segment'] == prochainSecteur['id_segment']) {
+        seg['statut'] = 'actif';
+        seg['date_ouverture'] = DateTime.now().toString().substring(0, 19);
+      }
+      return seg;
+    }).toList();
+
+    // Determine new actif and the one after that
+    Map<String, dynamic>? newActif;
+    Map<String, dynamic>? newProchain;
+
+    if (prochainSecteur != null) {
+      newActif = Map<String, dynamic>.from(prochainSecteur)
+        ..['statut'] = 'actif'
+        ..['date_ouverture'] = DateTime.now().toString().substring(0, 19);
+
+      bool foundActif = false;
+      for (final s in updatedSegments) {
+        final seg = s as Map<String, dynamic>;
+        if (seg['id_segment'] == newActif['id_segment']) {
+          foundActif = true;
+          continue;
+        }
+        if (foundActif && seg['statut'] == 'en_attente') {
+          newProchain = seg;
+          break;
+        }
+      }
+    }
+
+    final allDone = prochainSecteur == null ||
+        updatedSegments.every(
+          (s) => (s as Map<String, dynamic>)['statut'] == 'cloture',
+        );
+
+    // Persist updated cache — single write, both pages read from here
+    await saveSegments(
+      idVente: idVente,
+      actifSegment: allDone ? null : newActif,
+      prochainSegment: allDone ? null : newProchain,
+      tousSecteurs: updatedSegments,
+      tousClotures: allDone,
+    );
+
+    // Queue for later sync
+    await saveSegmentCloturePending(
+      idVente: idVente,
+      idSegment: idSegment,
+      openNext: !allDone && prochainSecteur != null,
+    );
+
+    print(
+      '✓ applyOfflineCloture: vente=$idVente seg=$idSegment '
+      'allDone=$allDone newActif=${newActif?['id_segment']}',
+    );
+
+    return OfflineClotureResult(
+      allDone: allDone,
+      newActif: newActif,
+      newProchain: newProchain,
+      updatedSegments: updatedSegments,
+    );
   }
 
   // ═══════════════════════════════════════════════
@@ -322,9 +434,6 @@ class LocalDatabase {
   // ── VOYAGE STATUT CACHE METHODS ──
   // ═══════════════════════════════════════════════
 
-  /// Save the local pending statut (e.g. 'cloture_pending') AND remember
-  /// what the server last told us ([serverStatut]) so we can detect when
-  /// the server has been reset manually.
   static Future<void> saveVoyageStatut(
     int idVente,
     String statut, {
@@ -348,10 +457,6 @@ class LocalDatabase {
     }
   }
 
-  /// Returns the cached statut ONLY if it represents a locally-pending
-  /// action (i.e. 'cloture_pending') AND the server hasn't moved on.
-  /// If the server statut no longer matches what we last saw, we discard
-  /// the local override so the server value wins.
   static Future<String?> getVoyageStatut(int idVente,
       {String? currentServerStatut}) async {
     final database = await db;
@@ -361,13 +466,10 @@ class LocalDatabase {
           where: 'id_vente = ?', whereArgs: [idVente]);
       if (rows.isEmpty) return null;
 
-      final row          = rows.first;
-      final cached       = row['statut']        as String?;
-      final serverSaved  = row['server_statut'] as String?;
+      final row         = rows.first;
+      final cached      = row['statut']        as String?;
+      final serverSaved = row['server_statut'] as String?;
 
-      // ── If the server statut has changed since we cached ──
-      // e.g. someone manually reset the voyage to 'actif' on the DB,
-      // the server will now return 'actif'. Discard our local override.
       if (currentServerStatut != null &&
           serverSaved != null &&
           currentServerStatut != serverSaved) {
@@ -377,7 +479,6 @@ class LocalDatabase {
         );
         await database.delete('voyage_cache',
             where: 'id_vente = ?', whereArgs: [idVente]);
-        // Also clear any stale cloture_pending queue entry
         await database.delete('cloture_pending',
             where: 'id_vente = ?', whereArgs: [idVente]);
         return null;
@@ -390,7 +491,6 @@ class LocalDatabase {
     }
   }
 
-  /// Hard-clear the local statut for a voyage (e.g. after a successful sync).
   static Future<void> clearVoyageStatut(int idVente) async {
     final database = await db;
     await _ensureAllTablesExist(database);
@@ -463,12 +563,12 @@ class LocalDatabase {
       await database.insert(
         'segment_cache',
         {
-          'id_vente':        idVente,
-          'actif_segment':   actifSegment != null ? jsonEncode(actifSegment) : null,
-          'prochain_segment':prochainSegment != null ? jsonEncode(prochainSegment) : null,
-          'tous_segments':   jsonEncode(tousSecteurs),
-          'tous_clotures':   tousClotures ? 1 : 0,
-          'cached_at':       DateTime.now().toIso8601String(),
+          'id_vente':         idVente,
+          'actif_segment':    actifSegment != null ? jsonEncode(actifSegment) : null,
+          'prochain_segment': prochainSegment != null ? jsonEncode(prochainSegment) : null,
+          'tous_segments':    jsonEncode(tousSecteurs),
+          'tous_clotures':    tousClotures ? 1 : 0,
+          'cached_at':        DateTime.now().toIso8601String(),
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
@@ -519,10 +619,10 @@ class LocalDatabase {
       await database.insert(
         'segment_cloture_pending',
         {
-          'id_vente':   idVente,
-          'id_segment': idSegment,
-          'open_next':  openNext ? 1 : 0,
-          'created_at': DateTime.now().toIso8601String(),
+          'id_vente':    idVente,
+          'id_segment':  idSegment,
+          'open_next':   openNext ? 1 : 0,
+          'created_at':  DateTime.now().toIso8601String(),
           'statut_sync': 'pending',
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
