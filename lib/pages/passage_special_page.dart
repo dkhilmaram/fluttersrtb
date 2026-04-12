@@ -33,17 +33,21 @@ const Color cardWhite = Color(0xFFFFFFFF);
 
 // ── All categories ──
 const List<Map<String, dynamic>> kCategories = [
-  {'label': 'Armée nationale',        'icon': Icons.shield_rounded,            'color': Color(0xFF1E40AF)},
-  {'label': 'Garde nationale',        'icon': Icons.security_rounded,          'color': Color(0xFF1D4ED8)},
-  {'label': 'Police nationale',       'icon': Icons.local_police_rounded,      'color': Color(0xFF1E3A5F)},
-  {'label': 'Douane',                 'icon': Icons.account_balance_rounded,   'color': Color(0xFF374151)},
-  {'label': 'Ministère',              'icon': Icons.domain_rounded,            'color': Color(0xFF6B21A8)},
-  {'label': 'Municipalité',           'icon': Icons.location_city_rounded,     'color': Color(0xFF065F46)},
-  {'label': 'Établissement scolaire', 'icon': Icons.school_rounded,            'color': Color(0xFFB45309)},
-  {'label': 'Autre institution',      'icon': Icons.groups_rounded,            'color': Color(0xFF9D174D)},
+  {'label': 'Armée nationale',        'icon': Icons.shield_rounded,              'color': Color(0xFF1E40AF)},
+  {'label': 'Garde nationale',        'icon': Icons.security_rounded,            'color': Color(0xFF1D4ED8)},
+  {'label': 'Police nationale',       'icon': Icons.local_police_rounded,        'color': Color(0xFF1E3A5F)},
+  {'label': 'Douane',                 'icon': Icons.account_balance_rounded,     'color': Color(0xFF374151)},
+  {'label': 'Ministère',              'icon': Icons.domain_rounded,              'color': Color(0xFF6B21A8)},
+  {'label': 'Municipalité',           'icon': Icons.location_city_rounded,       'color': Color(0xFF065F46)},
+  {'label': 'Établissement scolaire', 'icon': Icons.school_rounded,              'color': Color(0xFFB45309)},
+  {'label': 'Autre institution',      'icon': Icons.groups_rounded,              'color': Color(0xFF9D174D)},
   {'label': 'Abonnement',             'icon': Icons.confirmation_number_rounded, 'color': Color(0xFF0369A1)},
-  {'label': 'Agent',                  'icon': Icons.badge_rounded,             'color': Color(0xFF7C3AED)},
+  {'label': 'Agent',                  'icon': Icons.badge_rounded,               'color': Color(0xFF7C3AED)},
 ];
+
+// ════════════════════════════════════════════════════
+// MAIN PAGE
+// ════════════════════════════════════════════════════
 
 class PassageSpecialPage extends StatefulWidget {
   final Map<String, dynamic> voyage;
@@ -250,9 +254,9 @@ class _PassageGratuitTab extends StatefulWidget {
 
 class _PassageGratuitTabState extends State<_PassageGratuitTab> {
   String? selectedCategory;
-  int    quantite         = 1;
-  bool   isSaving         = false;
-  int    totalEnregistres = 0;
+  int     quantite         = 1;
+  bool    isSaving         = false;
+  int     totalEnregistres = 0;
 
   OverlayEntry? _toastEntry;
   Timer?        _toastTimer;
@@ -269,10 +273,10 @@ class _PassageGratuitTabState extends State<_PassageGratuitTab> {
     _toastEntry?.remove();
     _toastEntry = null;
 
-    final color = isError ? Colors.red.shade700
+    final color = isError   ? Colors.red.shade700
         : isWarning ? Colors.orange.shade700
         : const Color(0xFF16A34A);
-    final icon = isError ? Icons.error_outline
+    final icon = isError   ? Icons.error_outline
         : isWarning ? Icons.offline_bolt
         : Icons.check_circle_outline;
 
@@ -439,10 +443,10 @@ class _ScanTabState extends State<_ScanTab> {
     _toastEntry?.remove();
     _toastEntry = null;
 
-    final color = isError ? Colors.red.shade700
+    final color = isError   ? Colors.red.shade700
         : isWarning ? Colors.orange.shade700
         : const Color(0xFF16A34A);
-    final icon = isError ? Icons.error_outline
+    final icon = isError   ? Icons.error_outline
         : isWarning ? Icons.offline_bolt
         : Icons.check_circle_outline;
 
@@ -466,7 +470,7 @@ class _ScanTabState extends State<_ScanTab> {
       ),
     );
     if (raw == null) return;
-    _resolveCode(raw, 'Barcode');
+    _resolveCode(raw, 'QR');
   }
 
   // ── NFC: start foreground dispatch ──
@@ -476,7 +480,6 @@ class _ScanTabState extends State<_ScanTab> {
       if (mounted) _showToast('NFC non disponible sur cet appareil', isWarning: true);
       return;
     }
-
     if (!mounted) return;
 
     showModalBottomSheet(
@@ -522,20 +525,11 @@ class _ScanTabState extends State<_ScanTab> {
   }
 
   /// Extracts a readable string from the NFC tag.
-  ///
-  /// Priority order:
-  ///   1. NDEF text record
-  ///   2. NDEF URI record
-  ///   3. NDEF generic payload (UTF-8)
-  ///   4. Identifier bytes from tag.data (MifareClassic, MifareUltralight,
-  ///      NFC-A/B, ISO-7816, FeliCa) — avoids platform-specific class imports
-  ///      that are absent in nfc_manager ^3.x on all platforms.
   String? _extractRawFromTag(NfcTag tag) {
-    // 1. Try NDEF records
     final ndef = Ndef.from(tag);
     if (ndef != null && ndef.cachedMessage != null) {
       for (final record in ndef.cachedMessage!.records) {
-        // Text record (TNF wellknown, type byte 'T' = 0x54)
+        // Text record
         if (record.typeNameFormat == NdefTypeNameFormat.nfcWellknown &&
             record.type.isNotEmpty && record.type[0] == 0x54) {
           final payload = record.payload;
@@ -546,7 +540,7 @@ class _ScanTabState extends State<_ScanTab> {
             }
           }
         }
-        // URI record (TNF wellknown, type byte 'U' = 0x55)
+        // URI record
         if (record.typeNameFormat == NdefTypeNameFormat.nfcWellknown &&
             record.type.isNotEmpty && record.type[0] == 0x55) {
           final payload = record.payload;
@@ -554,7 +548,7 @@ class _ScanTabState extends State<_ScanTab> {
             return utf8.decode(payload.sublist(1));
           }
         }
-        // Generic payload — try UTF-8
+        // Generic payload
         try {
           final text = utf8.decode(record.payload, allowMalformed: false).trim();
           if (text.isNotEmpty) return text;
@@ -562,13 +556,8 @@ class _ScanTabState extends State<_ScanTab> {
       }
     }
 
-    // 2. Identifier bytes from tag.data map
-    //    nfc_manager 3.x exposes raw tag data as nested maps keyed by
-    //    technology name (lowercase). We probe every known key that carries
-    //    an identifier / UID / IDm field.
     final data = tag.data;
 
-    // Helper: turn a dynamic list field into a hex string.
     String? hexFromField(dynamic field) {
       if (field is List && field.isNotEmpty) {
         final bytes = Uint8List.fromList(List<int>.from(field));
@@ -580,60 +569,63 @@ class _ScanTabState extends State<_ScanTab> {
       return null;
     }
 
-    // Android ISO-A (includes Mifare Classic & Mifare Ultralight)
-    final hexA = hexFromField(data['nfca']?['identifier']);
-    if (hexA != null) return hexA;
-
-    // Android ISO-B
-    final hexB = hexFromField(data['nfcb']?['applicationData']);
-    if (hexB != null) return hexB;
-
-    // Android Mifare Classic (redundant with nfca but kept for clarity)
-    final hexMC = hexFromField(data['mifareClassic']?['identifier']);
-    if (hexMC != null) return hexMC;
-
-    // Android Mifare Ultralight
-    final hexMU = hexFromField(data['mifareUltralight']?['identifier']);
-    if (hexMU != null) return hexMU;
-
-    // iOS Core NFC / ISO-7816
-    final hexISO = hexFromField(data['iso7816']?['identifier']);
-    if (hexISO != null) return hexISO;
-
-    // FeliCa (Japan / some transit cards)
-    final hexFelica = hexFromField(data['feliCa']?['currentIdm']);
-    if (hexFelica != null) return hexFelica;
-
-    // Android NFC-F (FeliCa via nfcf key)
-    final hexF = hexFromField(data['nfcf']?['manufacturer']);
-    if (hexF != null) return hexF;
-
-    // Android NFC-V (ISO 15693)
-    final hexV = hexFromField(data['nfcv']?['identifier']);
-    if (hexV != null) return hexV;
-
-    return null;
+    return hexFromField(data['nfca']?['identifier'])
+        ?? hexFromField(data['nfcb']?['applicationData'])
+        ?? hexFromField(data['mifareClassic']?['identifier'])
+        ?? hexFromField(data['mifareUltralight']?['identifier'])
+        ?? hexFromField(data['iso7816']?['identifier'])
+        ?? hexFromField(data['feliCa']?['currentIdm'])
+        ?? hexFromField(data['nfcf']?['manufacturer'])
+        ?? hexFromField(data['nfcv']?['identifier']);
   }
 
+  // ── Parse JSON from QR / NFC payload ──
   void _resolveCode(String raw, String mode) {
-    String type = 'Inconnu';
-    final up = raw.toUpperCase();
-    if (up.contains('MEN'))      type = 'Mensuel';
-    else if (up.contains('ANN')) type = 'Annuel';
-    else if (up.contains('ETU')) type = 'Étudiant';
-    else if (up.contains('RET')) type = 'Retraité';
-    else if (up.contains('TRI')) type = 'Trimestriel';
-
     if (!mounted) return;
+
+    Map<String, dynamic>? parsed;
+    try {
+      parsed = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+    } catch (_) {
+      setState(() {
+        scanState = _ScanState.error;
+        errorMsg  = 'QR code illisible ou format non reconnu';
+      });
+      return;
+    }
+
+    final id        = parsed['id']?.toString()        ?? '';
+    final nom       = parsed['nom']?.toString()        ?? 'Inconnu';
+    final type      = parsed['type']?.toString()       ?? 'Inconnu';
+    final expire    = parsed['expire']?.toString()     ?? '';
+    final ligne     = parsed['ligne']?.toString()      ?? '—';
+    final organisme = parsed['organisme']?.toString()  ?? '—';
+
+    if (id.isEmpty || type.isEmpty || expire.isEmpty) {
+      setState(() {
+        scanState = _ScanState.error;
+        errorMsg  = 'Données du titre incomplètes (id, type ou expire manquant)';
+      });
+      return;
+    }
+
+    bool isExpired = false;
+    try {
+      final expireDate = DateTime.parse(expire);
+      isExpired = expireDate.isBefore(DateTime.now());
+    } catch (_) {}
+
     setState(() {
       scanState   = _ScanState.success;
       scannedData = {
-        'mode':        mode,
-        'numero':      raw,
-        'type':        type,
-        'valid_until': '—',
-        'ligne': widget.voyage['nom_ligne'] ??
-                 'Ligne ${widget.voyage['id_ligne']}',
+        'mode':      mode,
+        'id':        id,
+        'nom':       nom,
+        'type':      type,
+        'expire':    expire,
+        'ligne':     ligne,
+        'organisme': organisme,
+        'isExpired': isExpired,
       };
     });
   }
@@ -642,6 +634,7 @@ class _ScanTabState extends State<_ScanTab> {
 
   Future<void> _validerEtVendre() async {
     if (scannedData == null) return;
+    if (scannedData!['isExpired'] == true) return;
     setState(() => isSaving = true);
 
     final result = await TicketRepository.saveTicket({
@@ -656,6 +649,10 @@ class _ScanTabState extends State<_ScanTab> {
       'prix_unitaire':   0,
       'montant_total':   0,
       'matricule_agent': widget.voyage['matricule_agent'] ?? 0,
+      'numero_titre':    scannedData!['id'],
+      'nom_titulaire':   scannedData!['nom'],
+      'organisme':       scannedData!['organisme'],
+      'ligne_titre':     scannedData!['ligne'],
     });
 
     if (result.success) {
@@ -895,11 +892,10 @@ class _CameraScannerPageState extends State<_CameraScannerPage> {
               decoration: BoxDecoration(
                   color: Colors.black54,
                   borderRadius: BorderRadius.circular(30)),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.qr_code_2_rounded,
-                    color: Colors.white70, size: 16),
-                const SizedBox(width: 8),
-                const Flexible(child: Text('Centrez le code dans le cadre',
+              child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.qr_code_2_rounded, color: Colors.white70, size: 16),
+                SizedBox(width: 8),
+                Flexible(child: Text('Centrez le code dans le cadre',
                     style: TextStyle(color: Colors.white70, fontSize: 12))),
               ]),
             ),
@@ -951,6 +947,350 @@ class _OverlayPainter extends CustomPainter {
     canvas.drawLine(Offset(r.right, r.bottom - arm), Offset(r.right, r.bottom), b);
   }
   @override bool shouldRepaint(covariant CustomPainter _) => false;
+}
+
+// ════════════════════════════════════════════════════
+// SCAN RESULT WIDGET — rich card with all JSON fields
+// ════════════════════════════════════════════════════
+
+class _ScanResultWidget extends StatelessWidget {
+  final Map<String, dynamic> data;
+  final bool isSaving;
+  final VoidCallback onCancel, onValidate;
+
+  const _ScanResultWidget({
+    super.key,
+    required this.data,
+    required this.isSaving,
+    required this.onCancel,
+    required this.onValidate,
+  });
+
+  /// "Mohamed Ben Ali" → "MB"
+  String _initials(String nom) {
+    final parts = nom.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+    return nom.isNotEmpty ? nom[0].toUpperCase() : '?';
+  }
+
+  /// "2025-12-31" → "31 déc. 2025"
+  String _formatDate(String iso) {
+    try {
+      final d = DateTime.parse(iso);
+      const months = [
+        'jan.', 'fév.', 'mar.', 'avr.', 'mai', 'juin',
+        'juil.', 'août', 'sep.', 'oct.', 'nov.', 'déc.'
+      ];
+      return '${d.day} ${months[d.month - 1]} ${d.year}';
+    } catch (_) {
+      return iso;
+    }
+  }
+
+  /// Color-coded type badge
+  ({Color bg, Color fg}) _typeStyle(String type) {
+    switch (type.toLowerCase()) {
+      case 'mensuel':                return (bg: const Color(0xFFEEF2FF), fg: const Color(0xFF3730A3));
+      case 'annuel':                 return (bg: const Color(0xFFF0FDF4), fg: const Color(0xFF166534));
+      case 'étudiant':
+      case 'etudiant':               return (bg: const Color(0xFFFFF7ED), fg: const Color(0xFF9A3412));
+      case 'retraité':
+      case 'retraite':               return (bg: const Color(0xFFF5F3FF), fg: const Color(0xFF5B21B6));
+      case 'trimestriel':            return (bg: const Color(0xFFEFF6FF), fg: const Color(0xFF1E40AF));
+      default:                       return (bg: const Color(0xFFF3F4F6), fg: const Color(0xFF374151));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isExpired = data['isExpired'] as bool? ?? false;
+    final nom       = data['nom']       as String;
+    final id        = data['id']        as String;
+    final type      = data['type']      as String;
+    final organisme = data['organisme'] as String;
+    final ligne     = data['ligne']     as String;
+    final expire    = data['expire']    as String;
+    final mode      = data['mode']      as String;
+    final ts        = _typeStyle(type);
+
+    final accentGreen = const Color(0xFF16A34A);
+    final accentRed   = Colors.red.shade600;
+    final accent      = isExpired ? accentRed : accentGreen;
+    final accentLight = isExpired ? Colors.red.shade50 : const Color(0xFFDCFCE7);
+    final accentBorder= isExpired ? Colors.red.shade200 : const Color(0xFF86EFAC);
+    final accentText  = isExpired ? Colors.red.shade800 : const Color(0xFF15803D);
+    final accentSub   = isExpired ? Colors.red.shade400 : const Color(0xFF4ADE80);
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: cardWhite,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accentBorder, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withOpacity(0.08),
+            blurRadius: 16, offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(children: [
+
+        // ── Header ──────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          decoration: BoxDecoration(
+            color: accentLight,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+          ),
+          child: Row(children: [
+            // Initials avatar
+            Container(
+              width: 44, height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: accent.withOpacity(0.15),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                _initials(nom),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold,
+                    color: accentText),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(nom,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold,
+                        color: accentText),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(id,
+                    style: TextStyle(fontSize: 11, color: accentSub,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+            // Mode badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: accent,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(mode,
+                style: const TextStyle(color: Colors.white,
+                    fontSize: 10, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ]),
+        ),
+
+        // ── Fields ──────────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+          child: Column(children: [
+
+            // Type — colored badge
+            _ScanField(
+              label: 'Type d\'abonnement',
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: ts.bg,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(type,
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                      color: ts.fg),
+                ),
+              ),
+            ),
+
+            // Organisme
+            _ScanField(
+              label: 'Organisme',
+              child: Text(organisme,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
+                    color: navyDark),
+              ),
+            ),
+
+            // Ligne
+            _ScanField(
+              label: 'Ligne autorisée',
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Container(
+                  width: 28, height: 20,
+                  decoration: BoxDecoration(
+                    color: navyMid,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(ligne,
+                    style: const TextStyle(color: Colors.white,
+                        fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ]),
+            ),
+
+            // Expire
+            _ScanField(
+              label: 'Expire le',
+              child: Text(
+                _formatDate(expire),
+                style: TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w700,
+                  color: isExpired ? Colors.red.shade700 : navyDark,
+                ),
+              ),
+            ),
+
+            // Statut
+            _ScanField(
+              label: 'Statut',
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Container(
+                  width: 8, height: 8,
+                  margin: const EdgeInsets.only(right: 6),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isExpired ? Colors.red.shade500 : const Color(0xFF22C55E),
+                  ),
+                ),
+                Text(
+                  isExpired ? 'Expiré' : 'Valide',
+                  style: TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w700,
+                    color: isExpired ? Colors.red.shade700 : const Color(0xFF16A34A),
+                  ),
+                ),
+              ]),
+            ),
+
+          ]),
+        ),
+
+        // ── Warning banner for expired ───────────────────────
+        if (isExpired)
+          Container(
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.red.shade200),
+            ),
+            child: Row(children: [
+              Icon(Icons.warning_amber_rounded,
+                  color: Colors.red.shade400, size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Ce titre est expiré et ne peut pas être validé.',
+                  style: TextStyle(fontSize: 12, color: Colors.red.shade700,
+                      fontWeight: FontWeight.w600),
+                ),
+              ),
+            ]),
+          ),
+
+        // ── Buttons ─────────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+          child: Row(children: [
+
+            Expanded(child: OutlinedButton(
+              onPressed: onCancel,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.grey.shade500,
+                side: BorderSide(color: Colors.grey.shade300),
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Annuler',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+            )),
+
+            const SizedBox(width: 10),
+
+            Expanded(flex: 2, child: ElevatedButton.icon(
+              onPressed: (isExpired || isSaving) ? null : onValidate,
+              icon: isSaving
+                  ? const SizedBox(
+                      width: 16, height: 16,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2))
+                  : Icon(
+                      isExpired ? Icons.block_rounded : Icons.check_rounded,
+                      size: 18),
+              label: Text(
+                isSaving
+                    ? 'Enregistrement...'
+                    : isExpired
+                        ? 'Titre expiré'
+                        : 'Valider & Enregistrer',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isExpired
+                    ? Colors.red.shade400
+                    : const Color(0xFF16A34A),
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: isExpired
+                    ? Colors.red.shade200
+                    : Colors.grey.shade300,
+                disabledForegroundColor: Colors.white70,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            )),
+
+          ]),
+        ),
+
+      ]),
+    );
+  }
+}
+
+// Single field row used inside _ScanResultWidget
+class _ScanField extends StatelessWidget {
+  final String label;
+  final Widget child;
+  const _ScanField({required this.label, required this.child});
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(label,
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+            ),
+            const SizedBox(width: 12),
+            child,
+          ],
+        ),
+      ),
+      Divider(height: 1, color: Colors.grey.shade100),
+    ],
+  );
 }
 
 // ════════════════════════════════════════════════════
@@ -1105,31 +1445,6 @@ class _QtyBtn extends StatelessWidget {
   );
 }
 
-class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String label, value;
-  const _InfoRow(this.icon, this.label, this.value);
-  @override
-  Widget build(BuildContext context) => Column(children: [
-    Padding(
-      padding: const EdgeInsets.symmetric(vertical: 7),
-      child: Row(children: [
-        Icon(icon, size: 14, color: navyLight.withOpacity(0.5)),
-        const SizedBox(width: 10),
-        Flexible(flex: 2, child: Text(label,
-            style: TextStyle(color: Colors.grey.shade400, fontSize: 12))),
-        const SizedBox(width: 4),
-        Flexible(flex: 3, child: Text(value,
-            textAlign: TextAlign.end, maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w700,
-                fontSize: 13, color: navyDark))),
-      ]),
-    ),
-    Divider(height: 1, color: Colors.grey.shade100),
-  ]);
-}
-
 class _IdleWidget extends StatelessWidget {
   const _IdleWidget({super.key});
   @override
@@ -1154,97 +1469,6 @@ class _IdleWidget extends StatelessWidget {
   );
 }
 
-class _ScanResultWidget extends StatelessWidget {
-  final Map<String, dynamic> data;
-  final bool isSaving;
-  final VoidCallback onCancel, onValidate;
-  const _ScanResultWidget({super.key, required this.data, required this.isSaving,
-      required this.onCancel, required this.onValidate});
-  @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    decoration: BoxDecoration(
-      color: cardWhite, borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: const Color(0xFF86EFAC), width: 1.5),
-      boxShadow: [BoxShadow(color: const Color(0xFF16A34A).withOpacity(0.1),
-          blurRadius: 16, offset: const Offset(0, 4))],
-    ),
-    child: Column(children: [
-      Container(
-        padding: const EdgeInsets.all(20),
-        decoration: const BoxDecoration(color: Color(0xFFDCFCE7),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(14))),
-        child: Row(children: [
-          Container(width: 42, height: 42,
-              decoration: BoxDecoration(
-                  color: const Color(0xFF16A34A).withOpacity(0.15),
-                  shape: BoxShape.circle),
-              child: const Icon(Icons.verified_rounded,
-                  color: Color(0xFF16A34A), size: 24)),
-          const SizedBox(width: 12),
-          const Expanded(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Titre détecté', style: TextStyle(fontSize: 15,
-                fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
-            Text('Vérifiez et validez',
-                style: TextStyle(fontSize: 11, color: Color(0xFF16A34A))),
-          ])),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(color: const Color(0xFF16A34A),
-                borderRadius: BorderRadius.circular(20)),
-            child: Text(data['mode'] as String,
-                style: const TextStyle(color: Colors.white,
-                    fontSize: 10, fontWeight: FontWeight.bold)),
-          ),
-        ]),
-      ),
-      Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(children: [
-          _InfoRow(Icons.confirmation_number_outlined, 'Code scanné', data['numero']),
-          _InfoRow(Icons.sell_outlined, 'Type', data['type']),
-          _InfoRow(Icons.event_rounded, "Valable jusqu'au", data['valid_until']),
-          _InfoRow(Icons.route_rounded, 'Ligne', data['ligne']),
-        ]),
-      ),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Row(children: [
-          Expanded(child: OutlinedButton(
-            onPressed: onCancel,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.grey.shade500,
-              side: BorderSide(color: Colors.grey.shade300),
-              padding: const EdgeInsets.symmetric(vertical: 13),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: const Text('Annuler',
-                style: TextStyle(fontWeight: FontWeight.w600)),
-          )),
-          const SizedBox(width: 10),
-          Expanded(flex: 2, child: ElevatedButton.icon(
-            onPressed: isSaving ? null : onValidate,
-            icon: isSaving
-                ? const SizedBox(width: 16, height: 16,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : const Icon(Icons.check_rounded, size: 18),
-            label: Text(isSaving ? 'Enregistrement...' : 'Valider & Enregistrer',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF16A34A),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 13),
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          )),
-        ]),
-      ),
-    ]),
-  );
-}
-
 class _ScanErrorWidget extends StatelessWidget {
   final String msg;
   final VoidCallback onRetry;
@@ -1261,8 +1485,9 @@ class _ScanErrorWidget extends StatelessWidget {
           decoration: BoxDecoration(color: Colors.red.shade50, shape: BoxShape.circle),
           child: Icon(Icons.cancel_rounded, color: Colors.red.shade400, size: 30)),
       const SizedBox(height: 14),
-      Text(msg, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
-          color: Colors.red.shade700)),
+      Text(msg, textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
+              color: Colors.red.shade700)),
       const SizedBox(height: 6),
       Text('Ce titre de transport ne peut pas être accepté.',
           textAlign: TextAlign.center,

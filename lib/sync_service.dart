@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'local_database.dart';
 
 class SyncService {
-  static const String _baseUrl = 'http://192.168.1.22:8000/billetterie';
+  static const String _baseUrl = 'http://172.24.114.63:8000/billetterie';
   static bool _isSyncing = false;
 
   static void startListening() {
