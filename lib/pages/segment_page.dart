@@ -429,7 +429,7 @@ class _SegmentPageState
       final r1 = await http
           .get(
             Uri.parse(
-              'http://172.24.114.63:8000/billetterie/voyages/$id/segment/actif',
+              'http://192.168.1.22:8000/billetterie/voyages/$id/segment/actif',
             ),
           )
           .timeout(
@@ -440,7 +440,7 @@ class _SegmentPageState
       final r2 = await http
           .get(
             Uri.parse(
-              'http://172.24.114.63:8000/billetterie/voyages/$id/segments',
+              'http://192.168.1.22:8000/billetterie/voyages/$id/segments',
             ),
           )
           .timeout(
@@ -586,7 +586,7 @@ class _SegmentPageState
       final response = await http
           .put(
             Uri.parse(
-              'http://172.24.114.63:8000/billetterie/voyages/$_voyageId/segment/ouvrir',
+              'http://192.168.1.22:8000/billetterie/voyages/$_voyageId/segment/ouvrir',
             ),
             headers: {
               'Content-Type': 'application/json',
@@ -648,7 +648,7 @@ class _SegmentPageState
       final response = await http
           .put(
             Uri.parse(
-              'http://172.24.114.63:8000/billetterie/voyages/$id/segments/$idSeg/cloturer',
+              'http://192.168.1.22:8000/billetterie/voyages/$id/segments/$idSeg/cloturer',
             ),
             headers: {
               'Content-Type': 'application/json',
@@ -694,7 +694,7 @@ class _SegmentPageState
           final openResponse = await http
               .put(
                 Uri.parse(
-                  'http://172.24.114.63:8000/billetterie/voyages/$id/segment/ouvrir',
+                  'http://192.168.1.22:8000/billetterie/voyages/$id/segment/ouvrir',
                 ),
                 headers: {
                   'Content-Type': 'application/json',

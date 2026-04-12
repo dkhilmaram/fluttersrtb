@@ -182,7 +182,7 @@ class _NouveauTicketPageState
       final response = await http
           .get(
             Uri.parse(
-              'http://172.24.114.63:8000/billetterie/ligne/$idLigne/tarifs',
+              'http://192.168.1.22:8000/billetterie/ligne/$idLigne/tarifs',
             ),
           )
           .timeout(
@@ -582,7 +582,7 @@ class _NouveauTicketPageState
       final clotResp = await http
           .put(
             Uri.parse(
-              'http://172.24.114.63:8000/billetterie/voyages/$idVoyage/segments/$idSegment/cloturer',
+              'http://192.168.1.22:8000/billetterie/voyages/$idVoyage/segments/$idSegment/cloturer',
             ),
             headers: {
               'Content-Type': 'application/json',
@@ -628,7 +628,7 @@ class _NouveauTicketPageState
           (await http
                   .get(
                     Uri.parse(
-                      'http://172.24.114.63:8000/billetterie/voyages/$idVoyage/segment/actif',
+                      'http://192.168.1.22:8000/billetterie/voyages/$idVoyage/segment/actif',
                     ),
                   )
                   .timeout(
@@ -657,7 +657,7 @@ class _NouveauTicketPageState
           (await http
                   .put(
                     Uri.parse(
-                      'http://172.24.114.63:8000/billetterie/voyages/$idVoyage/segment/ouvrir',
+                      'http://192.168.1.22:8000/billetterie/voyages/$idVoyage/segment/ouvrir',
                     ),
                     headers: {
                       'Content-Type': 'application/json',
@@ -688,7 +688,7 @@ class _NouveauTicketPageState
           (await http
                   .get(
                     Uri.parse(
-                      'http://172.24.114.63:8000/billetterie/voyages/$idVoyage/segment/actif',
+                      'http://192.168.1.22:8000/billetterie/voyages/$idVoyage/segment/actif',
                     ),
                   )
                   .timeout(

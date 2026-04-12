@@ -66,7 +66,7 @@ class LocalDatabase {
       '''CREATE TABLE IF NOT EXISTS ticket_vendu_local (
         id               INTEGER PRIMARY KEY AUTOINCREMENT,
         id_vente         INTEGER NOT NULL,
-        id_segment       INTEGER NOT NULL,
+        id_segment       INTEGER NOT NULL DEFAULT 0,
         point_depart     TEXT NOT NULL,
         point_arrivee    TEXT NOT NULL,
         type_tarif       TEXT NOT NULL,
@@ -76,7 +76,7 @@ class LocalDatabase {
         date_heure       TEXT NOT NULL,
         matricule_agent  INTEGER NOT NULL,
         statut_sync      TEXT NOT NULL DEFAULT 'pending',
-        id_serveur       INTEGER,
+        id_serveur       INTEGER UNIQUE,
         tentatives       INTEGER NOT NULL DEFAULT 0,
         erreur           TEXT
       )''',
@@ -156,13 +156,8 @@ class LocalDatabase {
 
   // ═══════════════════════════════════════════════
   // ── SHARED OFFLINE CLOTURE LOGIC ──
-  // Single source of truth used by both NouveauTicketPage
-  // and SegmentPage — eliminates cache divergence.
   // ═══════════════════════════════════════════════
 
-  /// Applies an offline segment cloture to the local cache and queues it
-  /// for later sync. Both NouveauTicketPage and SegmentPage call this
-  /// instead of maintaining their own separate copy of the logic.
   static Future<OfflineClotureResult> applyOfflineCloture({
     required int idVente,
     required int idSegment,
@@ -174,7 +169,6 @@ class LocalDatabase {
     final Map<String, dynamic>? prochainSecteur =
         cached?['prochain'] as Map<String, dynamic>?;
 
-    // Mark current segment as clôturé, next as actif
     final updatedSegments = tousSecteurs.map((s) {
       final seg = Map<String, dynamic>.from(s as Map);
       if (seg['id_segment'] == idSegment) {
@@ -188,7 +182,6 @@ class LocalDatabase {
       return seg;
     }).toList();
 
-    // Determine new actif and the one after that
     Map<String, dynamic>? newActif;
     Map<String, dynamic>? newProchain;
 
@@ -216,7 +209,6 @@ class LocalDatabase {
           (s) => (s as Map<String, dynamic>)['statut'] == 'cloture',
         );
 
-    // Persist updated cache — single write, both pages read from here
     await saveSegments(
       idVente: idVente,
       actifSegment: allDone ? null : newActif,
@@ -225,7 +217,6 @@ class LocalDatabase {
       tousClotures: allDone,
     );
 
-    // Queue for later sync
     await saveSegmentCloturePending(
       idVente: idVente,
       idSegment: idSegment,
@@ -249,14 +240,45 @@ class LocalDatabase {
   // ── TICKET METHODS ──
   // ═══════════════════════════════════════════════
 
-  static Future<int> insertTicket(Map<String, dynamic> ticket) async {
+  /// Insert a new ticket row.
+  /// Pass [conflictReplace] = true to use REPLACE (default: IGNORE on
+  /// id_serveur conflicts so duplicate server tickets are safely skipped).
+  static Future<int> insertTicket(
+    Map<String, dynamic> ticket, {
+    bool conflictReplace = false,
+  }) async {
     final database = await db;
     await _ensureAllTablesExist(database);
     try {
-      return await database.insert('ticket_vendu_local', ticket);
+      return await database.insert(
+        'ticket_vendu_local',
+        ticket,
+        conflictAlgorithm: conflictReplace
+            ? ConflictAlgorithm.replace
+            : ConflictAlgorithm.ignore,
+      );
     } catch (e) {
       print('❌ Error inserting ticket: $e');
       rethrow;
+    }
+  }
+
+  /// Patches only the id_segment of an already-cached ticket row.
+  /// Called by historique_page when server sync reveals the correct
+  /// segment_ordre for a row that was cached with id_segment = 0.
+  static Future<void> updateTicketSegment(int localId, int idSegment) async {
+    final database = await db;
+    await _ensureAllTablesExist(database);
+    try {
+      await database.update(
+        'ticket_vendu_local',
+        {'id_segment': idSegment},
+        where: 'id = ?',
+        whereArgs: [localId],
+      );
+      print('✓ updateTicketSegment: id=$localId → id_segment=$idSegment');
+    } catch (e) {
+      print('❌ Error updating ticket segment: $e');
     }
   }
 
@@ -264,8 +286,11 @@ class LocalDatabase {
     final database = await db;
     await _ensureAllTablesExist(database);
     try {
-      return await database.query('ticket_vendu_local',
-          where: 'statut_sync = ?', whereArgs: ['pending']);
+      return await database.query(
+        'ticket_vendu_local',
+        where: 'statut_sync = ?',
+        whereArgs: ['pending'],
+      );
     } catch (e) {
       print('❌ Error getting pending tickets: $e');
       return [];
@@ -291,8 +316,10 @@ class LocalDatabase {
     final database = await db;
     await _ensureAllTablesExist(database);
     try {
-      return await database.query('ticket_vendu_local',
-          orderBy: 'date_heure DESC');
+      return await database.query(
+        'ticket_vendu_local',
+        orderBy: 'date_heure DESC',
+      );
     } catch (e) {
       print('❌ Error getting all tickets: $e');
       return [];
@@ -328,6 +355,8 @@ class LocalDatabase {
     }
   }
 
+  /// Returns all local ticket rows for a given voyage,
+  /// newest first. Each row includes id_segment (= sv.ordre from server).
   static Future<List<Map<String, dynamic>>> getTicketsByVoyage(
       int idVente) async {
     final database = await db;
@@ -359,9 +388,9 @@ class LocalDatabase {
     try {
       await database.insert('sync_log', {
         'id_ticket_local': idTicketLocal,
-        'date_tentative': DateTime.now().toIso8601String(),
-        'statut': statut,
-        'message': message,
+        'date_tentative':  DateTime.now().toIso8601String(),
+        'statut':          statut,
+        'message':         message,
       });
     } catch (e) {
       print('❌ Error inserting log: $e');
@@ -389,19 +418,18 @@ class LocalDatabase {
   // ── TARIF CACHE METHODS ──
   // ═══════════════════════════════════════════════
 
-  static Future<void> saveTarifs(
-      int idLigne, Map<String, dynamic> data) async {
+  static Future<void> saveTarifs(int idLigne, Map<String, dynamic> data) async {
     final database = await db;
     await _ensureAllTablesExist(database);
     try {
       await database.insert(
         'tarif_cache',
         {
-          'id_ligne': idLigne,
-          'arrets': jsonEncode(data['arrets']),
-          'prix_map': jsonEncode(data['prix_map']),
+          'id_ligne':    idLigne,
+          'arrets':      jsonEncode(data['arrets']),
+          'prix_map':    jsonEncode(data['prix_map']),
           'tarif_types': jsonEncode(data['tarif_types']),
-          'cached_at': DateTime.now().toIso8601String(),
+          'cached_at':   DateTime.now().toIso8601String(),
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
@@ -419,10 +447,10 @@ class LocalDatabase {
       if (rows.isEmpty) return null;
       final row = rows.first;
       return {
-        'arrets': jsonDecode(row['arrets'] as String),
-        'prix_map': jsonDecode(row['prix_map'] as String),
+        'arrets':      jsonDecode(row['arrets']      as String),
+        'prix_map':    jsonDecode(row['prix_map']    as String),
         'tarif_types': jsonDecode(row['tarif_types'] as String),
-        'cached_at': row['cached_at'],
+        'cached_at':   row['cached_at'],
       };
     } catch (e) {
       print('❌ Error getting tarifs: $e');
@@ -506,8 +534,7 @@ class LocalDatabase {
   // ── VOYAGES LIST CACHE METHODS ──
   // ═══════════════════════════════════════════════
 
-  static Future<void> saveVoyages(
-      int matricule, List<dynamic> voyages) async {
+  static Future<void> saveVoyages(int matricule, List<dynamic> voyages) async {
     final database = await db;
     await _ensureAllTablesExist(database);
     try {
@@ -515,7 +542,7 @@ class LocalDatabase {
         'voyages_cache',
         {
           'matricule': matricule,
-          'data': jsonEncode(voyages),
+          'data':      jsonEncode(voyages),
           'cached_at': DateTime.now().toIso8601String(),
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
@@ -536,8 +563,7 @@ class LocalDatabase {
         print('ℹ️ No voyages cached for matricule: $matricule');
         return null;
       }
-      final result =
-          jsonDecode(rows.first['data'] as String) as List<dynamic>;
+      final result = jsonDecode(rows.first['data'] as String) as List<dynamic>;
       print('✓ Voyages retrieved (${result.length} items)');
       return result;
     } catch (e) {
@@ -564,7 +590,7 @@ class LocalDatabase {
         'segment_cache',
         {
           'id_vente':         idVente,
-          'actif_segment':    actifSegment != null ? jsonEncode(actifSegment) : null,
+          'actif_segment':    actifSegment    != null ? jsonEncode(actifSegment)    : null,
           'prochain_segment': prochainSegment != null ? jsonEncode(prochainSegment) : null,
           'tous_segments':    jsonEncode(tousSecteurs),
           'tous_clotures':    tousClotures ? 1 : 0,
@@ -596,7 +622,7 @@ class LocalDatabase {
         'segments':
             jsonDecode(row['tous_segments'] as String) as List<dynamic>,
         'tous_clotures': (row['tous_clotures'] as int?) == 1,
-        'cached_at': row['cached_at'],
+        'cached_at':     row['cached_at'],
       };
     } catch (e) {
       print('❌ Error getting segments: $e');
@@ -748,6 +774,14 @@ class LocalDatabase {
       return [];
     }
   }
+  static Future<void> deleteTicketsByVoyage(int voyageId) async {
+  final database = await db;
+  await database.delete(
+    'ticket_vendu_local',
+    where: 'id_vente = ?',
+    whereArgs: [voyageId],
+  );
+}
 
   static Future<void> markClotureSynced(int idVente) async {
     final database = await db;

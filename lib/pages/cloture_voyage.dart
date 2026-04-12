@@ -400,7 +400,7 @@ class _ClotureVoyagePageState
       final response = await http
           .put(
             Uri.parse(
-              'http://172.24.114.63:8000/billetterie/vente/$id/cloturer',
+              'http://192.168.1.22:8000/billetterie/vente/$id/cloturer',
             ),
             headers: {
               'Content-Type': 'application/json',
