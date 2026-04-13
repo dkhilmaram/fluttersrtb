@@ -281,7 +281,7 @@ class _VoyageProgrammePageState
       final response = await http
           .get(
             Uri.parse(
-              'http://192.168.1.22:8000/billetterie/ventes/programmees/$_matricule',
+              'http://10.19.204.100:8000/billetterie/ventes/programmees/$_matricule',
             ),
             headers: {
               'Content-Type': 'application/json',
@@ -366,7 +366,7 @@ class _VoyageProgrammePageState
       final response = await http
           .get(
             Uri.parse(
-              'http://192.168.1.22:8000/billetterie/ventes/agent/$_matricule',
+              'http://10.19.204.100:8000/billetterie/ventes/agent/$_matricule',
             ),
             headers: {
               'Content-Type': 'application/json',

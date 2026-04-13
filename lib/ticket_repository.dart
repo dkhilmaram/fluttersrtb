@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'local_database.dart';
 
 class TicketRepository {
-  static const String _baseUrl = 'http://192.168.1.22:8000/billetterie';
+  static const String _baseUrl = 'http://10.19.204.100:8000/billetterie';
 
   static Future<
     ({

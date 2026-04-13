@@ -38,6 +38,7 @@ dependencies:
   nfc_manager: ^3.3.0
   excel: ^4.0.3
   share_plus: ^9.0.0
+  qr_flutter: ^4.1.0
   
   path_provider: ^2.1.2
   
