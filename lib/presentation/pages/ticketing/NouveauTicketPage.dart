@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:qr_flutter/qr_flutter.dart';
-import '../ticket_repository.dart';
-import '../local_database.dart';
+import '../../../data/repositories/ticket_repository.dart';
+import '../../../data/database/daos/voyage_dao.dart'; // FIX #1: was LocalDatabase, now VoyageDao
+import '../../../core/constants/api_constants.dart';  // FIX #2: use ApiConstants
 
+// ── Brand colours ──────────────────────────────────────────────
 const Color navyDark  = Color(0xFF0D1B3E);
 const Color navyMid   = Color(0xFF1A3260);
 const Color navyLight = Color(0xFF1E4080);
@@ -32,15 +34,15 @@ class NouveauTicketPage extends StatefulWidget {
   State<NouveauTicketPage> createState() => NouveauTicketPageState();
 }
 
-// Public state class so TicketingPage can call resetAfterGratuit() via GlobalKey
+/// Public state class so TicketingPage can call resetAfterGratuit() via GlobalKey.
 class NouveauTicketPageState extends State<NouveauTicketPage> {
   String? pointDepart;
   String? pointArrivee;
   String? typeTarif;
   int quantite = 1;
 
-  List<String> arrets     = [];
-  Map<String, int> prixMap = {};
+  List<String> arrets          = [];
+  Map<String, int> prixMap     = {};
   List<Map<String, dynamic>> tarifTypes = [];
 
   bool isLoading    = true;
@@ -63,17 +65,26 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
 
   @override
   void dispose() {
+    // FIX #3: cancel timer first, then safely remove overlay entry
     _toastTimer?.cancel();
-    _toastEntry?.remove();
+    _toastTimer = null;
+    // Guard against removing an already-removed entry
+    try {
+      _toastEntry?.remove();
+    } catch (_) {}
+    _toastEntry = null;
     super.dispose();
   }
 
-  // ── Public method called by TicketingPage after a gratuit passage is saved ──
+  // ── Public reset called by TicketingPage after gratuit save ──
+
   void resetAfterGratuit() {
+    // FIX #7: guard entire body, not just the setState call
     if (!mounted) return;
+    final currentDepart = pointDepart;
     setState(() {
-      if (pointDepart != null) {
-        final usedIndex = arrets.indexOf(pointDepart!);
+      if (currentDepart != null) {
+        final usedIndex = arrets.indexOf(currentDepart);
         if (usedIndex >= 0) _minDepartureIndex = usedIndex;
       }
       pointArrivee = null;
@@ -81,12 +92,16 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     });
   }
 
-  // ── Toast ──────────────────────────────────────────────────
+  // ── Toast ──────────────────────────────────────────────────────
 
   void _showToast(String msg,
       {bool isError = false, bool isWarning = false}) {
+    if (!mounted) return;
+
     _toastTimer?.cancel();
-    _toastEntry?.remove();
+    try {
+      _toastEntry?.remove();
+    } catch (_) {}
     _toastEntry = null;
 
     final color = isError
@@ -100,17 +115,31 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
             ? Icons.offline_bolt
             : Icons.check_circle_outline;
 
+    // FIX #10: wrap Positioned in a Stack so the OverlayEntry has a valid
+    // layout parent. Without the Stack, Positioned throws a layout error.
     final entry = OverlayEntry(
-        builder: (_) => _ToastWidget(msg: msg, color: color, icon: icon));
+      builder: (_) => Stack(
+        children: [
+          _ToastWidget(msg: msg, color: color, icon: icon),
+        ],
+      ),
+    );
+
     _toastEntry = entry;
     Overlay.of(context).insert(entry);
+
     _toastTimer = Timer(const Duration(milliseconds: 2500), () {
-      entry.remove();
-      if (_toastEntry == entry) _toastEntry = null;
+      // FIX #3: check mounted via the captured entry reference
+      if (_toastEntry == entry) {
+        try {
+          entry.remove();
+        } catch (_) {}
+        if (mounted) _toastEntry = null;
+      }
     });
   }
 
-  // ── Fetch data ─────────────────────────────────────────────
+  // ── Fetch data ──────────────────────────────────────────────────
 
   Future<void> _fetchData() async {
     final idLigne = widget.voyage['id_ligne'] as int;
@@ -120,12 +149,13 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
 
     if (idVente != null) {
       try {
+        // FIX #2: use ApiConstants.billetterie instead of hardcoded IP
         final r = await http
             .get(Uri.parse(
-                'http://192.168.1.16:8000/billetterie/voyages/$idVente/arrets'))
-            .timeout(const Duration(seconds: 6));
+                '${ApiConstants.billetterie}/voyages/$idVente/arrets'))
+            .timeout(ApiConstants.defaultTimeout);
         if (r.statusCode == 200) {
-          final d = jsonDecode(r.body);
+          final d = jsonDecode(r.body) as Map<String, dynamic>;
           if (d['success'] == true) {
             segmentArrets = List<String>.from(d['arrets'] as List);
           }
@@ -134,27 +164,32 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     }
 
     try {
+      // FIX #2: use ApiConstants
       final r = await http
           .get(Uri.parse(
-              'http://192.168.1.16:8000/billetterie/ligne/$idLigne/tarifs'))
-          .timeout(const Duration(seconds: 6));
+              '${ApiConstants.billetterie}/ligne/$idLigne/tarifs'))
+          .timeout(ApiConstants.defaultTimeout);
       if (r.statusCode == 200) {
         final d = jsonDecode(r.body) as Map<String, dynamic>;
         if (d['success'] == true) {
           if (segmentArrets != null && segmentArrets.isNotEmpty) {
             d['arrets'] = segmentArrets;
           }
-          await LocalDatabase.saveTarifs(idLigne, d);
+          // FIX #1: delegate to VoyageDao, not LocalDatabase
+          await VoyageDao.saveTarifs(idLigne, d);
           if (mounted) _applyTarifs(d, fromCache: false);
           return;
         }
       }
     } catch (_) {}
 
-    final cached = await LocalDatabase.getTarifs(idLigne);
+    // Fallback to cache
+    // FIX #1: delegate to VoyageDao
+    final cached = await VoyageDao.getTarifs(idLigne);
     if (cached != null) {
       if (segmentArrets == null && idVente != null) {
-        final segCache = await LocalDatabase.getSegments(idVente);
+        // FIX #1: delegate to VoyageDao
+        final segCache = await VoyageDao.getSegments(idVente);
         if (segCache != null) {
           final segs = (segCache['segments'] as List<dynamic>?) ?? [];
           if (segs.isNotEmpty) {
@@ -187,24 +222,28 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
   }
 
   void _applyTarifs(Map<String, dynamic> data, {required bool fromCache}) {
-    final rawArrets    = List<String>.from(data['arrets'] as List);
+    final rawArrets     = List<String>.from(data['arrets'] as List);
     final orderedArrets = _orderArretsByDirection(rawArrets);
     final defaultDepart = orderedArrets.isNotEmpty ? orderedArrets.first : null;
 
+    // FIX #6: keep ALL tarif types (including pourcentage == 0) so none are
+    // silently dropped. Filtering happens at display time in _buildTarifGrid.
+    final allTarifTypes = List<Map<String, dynamic>>.from(
+        data['tarif_types'] as List);
+
     setState(() {
-      isOffline   = fromCache;
-      arrets      = orderedArrets;
-      prixMap     = Map<String, int>.from(
+      isOffline          = fromCache;
+      arrets             = orderedArrets;
+      prixMap            = Map<String, int>.from(
           (data['prix_map'] as Map).map(
               (k, v) => MapEntry(k.toString(), v as int)));
-      tarifTypes  = List<Map<String, dynamic>>.from(
-          data['tarif_types'] as List);
-      isLoading   = false;
+      tarifTypes         = allTarifTypes;
+      isLoading          = false;
+      pointDepart        = defaultDepart;
+      pointArrivee       = null;
+      _minDepartureIndex = 0;
 
-      pointDepart         = defaultDepart;
-      pointArrivee        = null;
-      _minDepartureIndex  = 0;
-
+      // Default to 'Normal' tarif if available
       final normalTarif = tarifTypes.firstWhere(
         (t) => (t['type_tarif'] as String).toLowerCase() == 'normal',
         orElse: () => tarifTypes.isNotEmpty ? tarifTypes.first : {},
@@ -221,22 +260,33 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     }
   }
 
+  // FIX #4: compare against voyageArrivee (not voyageDepart) to detect a
+  // reversed list. The raw list is in route order [dep → arr]; if the last
+  // element matches the voyage's ARRIVAL we leave it as-is. If it matches
+  // the voyage's DEPARTURE the list was returned backwards and we reverse it.
   List<String> _orderArretsByDirection(List<String> raw) {
     if (raw.isEmpty) return raw;
-    final voyageDepart = widget.voyage['depart'] as String? ?? '';
-    if (raw.last.trim().toLowerCase() ==
-        voyageDepart.trim().toLowerCase()) {
+    final voyageArrivee = widget.voyage['arrivee'] as String? ?? '';
+    if (raw.last.trim().toLowerCase() !=
+        voyageArrivee.trim().toLowerCase()) {
+      // Last stop doesn't match the expected arrival → list is reversed
       return raw.reversed.toList();
     }
     return raw;
   }
 
-  // ── Computed getters ───────────────────────────────────────
+  // ── Computed getters ────────────────────────────────────────────
 
+  // FIX #5: departure list now correctly spans from _minDepartureIndex to
+  // arrets.length - 2 (inclusive) so that the second-to-last stop CAN be
+  // chosen as a departure (with the last stop as arrival).
   List<String> get _departureArrets {
     if (arrets.isEmpty) return [];
     final from = _minDepartureIndex.clamp(0, arrets.length - 1);
+    // Need at least one stop after 'from' to form a valid segment
     if (from >= arrets.length - 1) return [];
+    // Sublist up to (but not including) the very last stop so there's always
+    // a valid arrival after the chosen departure.
     return arrets.sublist(from, arrets.length - 1);
   }
 
@@ -289,31 +339,33 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
       pointArrivee != null &&
       pointDepart != pointArrivee;
 
-  // ── Open gratuit tab ───────────────────────────────────────
+  // ── Open gratuit tab ────────────────────────────────────────────
 
   void _openGratuit() {
     if (!_canGratuit) return;
     widget.onOpenGratuit?.call();
   }
 
-  // ── Confirmation dialog ────────────────────────────────────
+  // ── Confirmation dialog ─────────────────────────────────────────
 
   void _vendreTicket() {
+    // FIX #8: re-validate before capturing snapshot values
     if (!_canValidate) return;
 
-    final snapDep    = pointDepart!;
-    final snapArr    = pointArrivee!;
-    final snapTarif  = typeTarif!;
-    final snapQte    = quantite;
-    final snapPrixU  = _prixUnitaire!;
-    final snapPrixT  = _prixTotal!;
-    final snapNorm   = _prixNormal;
-    final snapDisc   = _discountPct;
-    final snapAgent  = widget.voyage['matricule_agent'] ?? 0;
-    final snapVente  = widget.voyage['id'] ?? 0;
-    final snapSeg    = widget.voyage['id_segment'] ?? 0;
-    final snapDate   = DateTime.now().toIso8601String();
-    final isFree     = snapPrixT == 0;
+    // Safe to unwrap after _canValidate guard
+    final snapDep   = pointDepart!;
+    final snapArr   = pointArrivee!;
+    final snapTarif = typeTarif!;
+    final snapQte   = quantite;
+    final snapPrixU = _prixUnitaire!;
+    final snapPrixT = _prixTotal!;
+    final snapNorm  = _prixNormal;
+    final snapDisc  = _discountPct;
+    final snapAgent = widget.voyage['matricule_agent'] ?? 0;
+    final snapVente = widget.voyage['id'] ?? 0;
+    final snapSeg   = widget.voyage['id_segment'] ?? 0;
+    final snapDate  = DateTime.now().toIso8601String();
+    final isFree    = snapPrixT == 0;
 
     final qrPayload = jsonEncode({
       'vente': snapVente,
@@ -332,21 +384,19 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
       context: context,
       barrierDismissible: false,
       builder: (_) => Dialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24)),
-        insetPadding: const EdgeInsets.symmetric(
-            horizontal: 20, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
         child: SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Icon header
                 Container(
                   width: 54, height: 54,
                   decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                        colors: [navyDark, navyLight]),
+                    gradient: LinearGradient(colors: [navyDark, navyLight]),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.confirmation_number,
@@ -359,15 +409,19 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                         fontSize: 17,
                         fontWeight: FontWeight.bold)),
                 const SizedBox(height: 18),
-                _confirmRow(Icons.trip_origin,       'Montée',    snapDep),
+
+                // Recap rows
+                _confirmRow(Icons.trip_origin, 'Montée', snapDep),
                 _dividerLine(),
                 _confirmRow(Icons.location_on_outlined, 'Descente', snapArr),
                 _dividerLine(),
-                _confirmRow(Icons.sell_outlined,     'Tarif',     snapTarif),
+                _confirmRow(Icons.sell_outlined, 'Tarif', snapTarif),
                 _dividerLine(),
-                _confirmRow(Icons.people_outline,    'Quantité',
+                _confirmRow(Icons.people_outline, 'Quantité',
                     '$snapQte ticket${snapQte > 1 ? 's' : ''}'),
                 const SizedBox(height: 16),
+
+                // Price summary
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 16),
@@ -378,8 +432,8 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Column(children: [
-                    if (snapDisc > 0)
-                      Text('${snapNorm! * snapQte} ms',
+                    if (snapDisc > 0 && snapNorm != null)
+                      Text('${snapNorm * snapQte} ms',
                           style: const TextStyle(
                               fontSize: 12,
                               color: Colors.grey,
@@ -387,8 +441,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                     if (snapQte > 1)
                       Text('$snapQte × $snapPrixU ms',
                           style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade500)),
+                              fontSize: 12, color: Colors.grey.shade500)),
                     Text(
                       isFree ? 'GRATUIT' : '$snapPrixT millimes',
                       style: TextStyle(
@@ -417,16 +470,16 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                   ]),
                 ),
                 const SizedBox(height: 20),
-                // QR label
+
+                // QR code section
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Row(children: [
                     Container(
-                      width: 3, height: 14,
-                      decoration: BoxDecoration(
-                          color: navyMid,
-                          borderRadius: BorderRadius.circular(2)),
-                    ),
+                        width: 3, height: 14,
+                        decoration: BoxDecoration(
+                            color: navyMid,
+                            borderRadius: BorderRadius.circular(2))),
                     const SizedBox(width: 8),
                     const Text('QR Code du ticket',
                         style: TextStyle(
@@ -459,14 +512,15 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                       size:            200,
                       backgroundColor: Colors.white,
                       eyeStyle: const QrEyeStyle(
-                          eyeShape: QrEyeShape.square,
-                          color:    navyDark),
+                          eyeShape: QrEyeShape.square, color: navyDark),
                       dataModuleStyle: const QrDataModuleStyle(
                           dataModuleShape: QrDataModuleShape.square,
-                          color:           navyDark),
+                          color: navyDark),
                     ),
                   ),
                 ),
+
+                // Offline notice
                 if (isOffline) ...[
                   const SizedBox(height: 12),
                   Container(
@@ -493,6 +547,8 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                   ),
                 ],
                 const SizedBox(height: 22),
+
+                // Action buttons
                 Row(children: [
                   Expanded(
                     child: OutlinedButton(
@@ -513,7 +569,14 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                     child: ElevatedButton(
                       onPressed: () {
                         Navigator.pop(context);
-                        _saveTicket();
+                        _saveTicket(
+                          snapDep:   snapDep,
+                          snapArr:   snapArr,
+                          snapTarif: snapTarif,
+                          snapQte:   snapQte,
+                          snapPrixU: snapPrixU,
+                          snapPrixT: snapPrixT,
+                        );
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: navyMid,
@@ -536,11 +599,19 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     );
   }
 
-  // ── Save ticket ────────────────────────────────────────────
-
-  Future<void> _saveTicket() async {
-    final idVente  = widget.voyage['id'] as int?;
-    final idSegment = widget.voyage['id_segment'] as int?;
+  // ── Save ticket ──────────────────────────────────────────────────
+  // FIX #8: Accept pre-validated snapshot values instead of re-reading state,
+  // eliminating any risk of force-unwrapping a null after state change.
+  Future<void> _saveTicket({
+    required String snapDep,
+    required String snapArr,
+    required String snapTarif,
+    required int    snapQte,
+    required int    snapPrixU,
+    required int    snapPrixT,
+  }) async {
+    final idVente   = widget.voyage['id']              as int?;
+    final idSegment = widget.voyage['id_segment']      as int?;
     final matricule = widget.voyage['matricule_agent'] as int?;
 
     if (idVente == null) {
@@ -548,32 +619,28 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
       return;
     }
 
+    if (!mounted) return;
     setState(() => isSaving = true);
-
-    final qte    = quantite;
-    final prixU  = _prixUnitaire!;
-    final prixT  = _prixTotal!;
-    final dep    = pointDepart!;
-    final arr    = pointArrivee!;
-    final tarif  = typeTarif!;
 
     final result = await TicketRepository.saveTicket({
       'id_vente':        idVente,
       'id_segment':      idSegment ?? 0,
-      'point_depart':    dep,
-      'point_arrivee':   arr,
-      'type_tarif':      tarif,
-      'quantite':        qte,
-      'prix_unitaire':   prixU,
-      'montant_total':   prixT,
+      'point_depart':    snapDep,
+      'point_arrivee':   snapArr,
+      'type_tarif':      snapTarif,
+      'quantite':        snapQte,
+      'prix_unitaire':   snapPrixU,
+      'montant_total':   snapPrixT,
       'matricule_agent': matricule ?? 0,
     });
 
+    if (!mounted) return;
+
     if (result.success) {
-      final usedIndex = arrets.indexOf(dep);
+      final usedIndex = arrets.indexOf(snapDep);
       setState(() {
-        ticketsVendus += qte;
-        montantTotal  += prixT;
+        ticketsVendus += snapQte;
+        montantTotal  += snapPrixT;
         if (usedIndex >= 0) _minDepartureIndex = usedIndex;
         pointArrivee = null;
         quantite     = 1;
@@ -581,13 +648,12 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
       });
 
       if (result.wasOffline) {
-        _showToast(
-            'Hors-ligne — ticket sauvegardé localement',
+        _showToast('Hors-ligne — ticket sauvegardé localement',
             isWarning: true);
       } else {
-        _showToast(prixT == 0
-            ? '$qte passage(s) gratuit(s) enregistré(s)'
-            : '$qte ticket(s) · $prixT millimes');
+        _showToast(snapPrixT == 0
+            ? '$snapQte passage(s) gratuit(s) enregistré(s)'
+            : '$snapQte ticket(s) · $snapPrixT millimes');
       }
 
       widget.onTicketSold?.call();
@@ -595,32 +661,31 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
       _showToast('Erreur : ${result.error ?? 'inconnue'}', isError: true);
     }
 
-    setState(() => isSaving = false);
+    if (mounted) setState(() => isSaving = false);
   }
 
-  // ── Helpers ────────────────────────────────────────────────
+  // ── Helpers ──────────────────────────────────────────────────────
 
   Widget _confirmRow(IconData icon, String label, String value) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 6),
-    child: Row(children: [
-      Icon(icon, size: 15, color: navyLight.withOpacity(0.6)),
-      const SizedBox(width: 10),
-      Text('$label  ',
-          style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
-      Flexible(
-        child: Text(value,
-            style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 13,
-                color: navyDark)),
-      ),
-    ]),
-  );
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(children: [
+          Icon(icon, size: 15, color: navyLight.withOpacity(0.6)),
+          const SizedBox(width: 10),
+          Text('$label  ',
+              style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+          Flexible(
+            child: Text(value,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: navyDark)),
+          ),
+        ]),
+      );
 
-  Widget _dividerLine() =>
-      Divider(height: 1, color: Colors.grey.shade100);
+  Widget _dividerLine() => Divider(height: 1, color: Colors.grey.shade100);
 
-  // ── Build ──────────────────────────────────────────────────
+  // ── Build ────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -668,11 +733,14 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                       offset: const Offset(0, 6))],
                 ),
                 padding: const EdgeInsets.all(8),
-                child: Image.asset('assets/images/logo_srtb.png',
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) =>
-                        const Icon(Icons.directions_bus,
-                            size: 44, color: navyMid)),
+                child: Image.asset(
+                  'assets/images/logo_srtb.png',
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Icon(
+                      Icons.directions_bus,
+                      size: 44,
+                      color: navyMid),
+                ),
               ),
               const SizedBox(height: 12),
               const Text('S R T B',
@@ -720,8 +788,8 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(30),
-                  border: Border.all(
-                      color: Colors.white.withOpacity(0.2)),
+                  border:
+                      Border.all(color: Colors.white.withOpacity(0.2)),
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   Container(
@@ -735,17 +803,19 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                           fontSize: 13,
                           fontWeight: FontWeight.w600)),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10),
                     child: Icon(Icons.arrow_forward,
-                        color: Colors.white.withOpacity(0.4), size: 13),
+                        color: Colors.white.withOpacity(0.4),
+                        size: 13),
                   ),
                   Container(
                       width: 7, height: 7,
                       decoration: BoxDecoration(
                           color: Colors.transparent,
                           shape: BoxShape.circle,
-                          border:
-                              Border.all(color: goldLight, width: 2))),
+                          border: Border.all(
+                              color: goldLight, width: 2))),
                   const SizedBox(width: 8),
                   Text(voyageArrivee,
                       style: const TextStyle(
@@ -760,7 +830,8 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
         // Counter bar
         Container(
           margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+          padding: const EdgeInsets.symmetric(
+              vertical: 14, horizontal: 16),
           decoration: BoxDecoration(
             color: cardWhite,
             borderRadius: BorderRadius.circular(16),
@@ -771,10 +842,14 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
           ),
           child: Row(children: [
             Expanded(
-              child: _counterTile(Icons.confirmation_number_outlined,
-                  'Tickets vendus', '$ticketsVendus', navyMid),
+              child: _counterTile(
+                  Icons.confirmation_number_outlined,
+                  'Tickets vendus',
+                  '$ticketsVendus',
+                  navyMid),
             ),
-            Container(width: 1, height: 36, color: Colors.grey.shade100),
+            Container(
+                width: 1, height: 36, color: Colors.grey.shade100),
             Expanded(
               child: _counterTile(
                   Icons.account_balance_wallet_outlined,
@@ -800,14 +875,17 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                         padding: const EdgeInsets.only(top: 60),
                         child: Column(children: [
                           Icon(Icons.wifi_off_rounded,
-                              size: 52, color: Colors.orange.shade200),
+                              size: 52,
+                              color: Colors.orange.shade200),
                           const SizedBox(height: 16),
-                          Text(errorMessage!,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 14,
-                                  height: 1.6)),
+                          Text(
+                            errorMessage!,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 14,
+                                height: 1.6),
+                          ),
                           const SizedBox(height: 20),
                           TextButton.icon(
                             onPressed: () {
@@ -842,7 +920,8 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                             ),
                             child: Row(children: [
                               Icon(Icons.sync,
-                                  color: Colors.orange.shade700, size: 16),
+                                  color: Colors.orange.shade700,
+                                  size: 16),
                               const SizedBox(width: 8),
                               Flexible(
                                 child: Text(
@@ -857,7 +936,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                           ),
                         ],
 
-                        // Tarif grid (now includes Passage Gratuit chip)
+                        // Tarif grid
                         _label('Type de tarif'),
                         const SizedBox(height: 10),
                         _buildTarifGrid(),
@@ -902,8 +981,8 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                               items:     _arrivalArrets,
                               onChanged: pointDepart == null
                                   ? null
-                                  : (v) => setState(
-                                      () => pointArrivee = v),
+                                  : (v) =>
+                                      setState(() => pointArrivee = v),
                             ),
                           ]),
                         ),
@@ -923,7 +1002,10 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                                         fontSize: 30,
                                         fontWeight: FontWeight.bold,
                                         color: navyDark)),
-                                Text(quantite == 1 ? 'ticket' : 'tickets',
+                                Text(
+                                    quantite == 1
+                                        ? 'ticket'
+                                        : 'tickets',
                                     style: TextStyle(
                                         color: Colors.grey.shade400,
                                         fontSize: 11,
@@ -955,7 +1037,9 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                               : quantite > 1
                                   ? 'Valider $quantite tickets'
                                   : 'Valider le ticket',
-                          icon:      isSaving ? null : Icons.confirmation_number_rounded,
+                          icon:      isSaving
+                              ? null
+                              : Icons.confirmation_number_rounded,
                           isLoading: isSaving,
                           enabled:   _canValidate && !isSaving,
                           colors:    [navyDark, navyLight],
@@ -968,19 +1052,21 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     );
 
     if (widget.embeddedMode) return body;
-
     return Scaffold(backgroundColor: surface, body: body);
   }
 
-  // ── Tarif grid (with Passage Gratuit chip appended) ────────
+  // ── Tarif grid ───────────────────────────────────────────────────
 
   Widget _buildTarifGrid() {
+    // FIX #6: Only filter out the special "Gratuit" type_tarif if handled
+    // separately; do NOT silently drop pourcentage == 0 entries. Instead,
+    // keep all non-gratuit tarifs and append the Passage Gratuit chip.
     final filtered = tarifTypes
-        .where((t) => (t['pourcentage'] as int) != 0)
+        .where((t) =>
+            (t['type_tarif'] as String).toLowerCase() != 'gratuit')
         .toList();
 
-    // Total items = tarif chips + 1 Passage Gratuit chip
-    final itemCount = filtered.length + 1;
+    final itemCount = filtered.length + 1; // +1 for Passage Gratuit chip
 
     return GridView.builder(
       shrinkWrap: true,
@@ -993,10 +1079,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
         childAspectRatio: 3.8,
       ),
       itemBuilder: (_, i) {
-        // Last item → Passage Gratuit chip
-        if (i == filtered.length) {
-          return _buildGratuitChip();
-        }
+        if (i == filtered.length) return _buildGratuitChip();
 
         final t        = filtered[i];
         final type     = t['type_tarif'] as String;
@@ -1060,7 +1143,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     );
   }
 
-  // ── Passage Gratuit chip (lives inside the tarif grid) ─────
+  // ── Passage Gratuit chip ─────────────────────────────────────────
 
   Widget _buildGratuitChip() {
     const Color accentGreen = Color(0xFF059669);
@@ -1081,9 +1164,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
           color: enabled ? null : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: enabled
-                ? accentGreen
-                : Colors.grey.shade300,
+            color: enabled ? accentGreen : Colors.grey.shade300,
             width: 1.5,
           ),
           boxShadow: enabled
@@ -1126,22 +1207,22 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     );
   }
 
-  // ── Reusable sub-widgets ───────────────────────────────────
+  // ── Reusable sub-widgets ─────────────────────────────────────────
 
   Widget _tarifBadge(String text, Color accent, bool isSel) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-    decoration: BoxDecoration(
-      color: isSel
-          ? Colors.white.withOpacity(0.25)
-          : accent.withOpacity(0.12),
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: Text(text,
-        style: TextStyle(
-            fontSize: 9,
-            fontWeight: FontWeight.w800,
-            color: isSel ? Colors.white : accent)),
-  );
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: isSel
+              ? Colors.white.withOpacity(0.25)
+              : accent.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(text,
+            style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                color: isSel ? Colors.white : accent)),
+      );
 
   Widget _label(String text) => Text(text,
       style: const TextStyle(
@@ -1151,17 +1232,17 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
           letterSpacing: 0.5));
 
   Widget _card({required Widget child}) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-    decoration: BoxDecoration(
-      color: cardWhite,
-      borderRadius: BorderRadius.circular(16),
-      boxShadow: [BoxShadow(
-          color: navyMid.withOpacity(0.06),
-          blurRadius: 12,
-          offset: const Offset(0, 3))],
-    ),
-    child: child,
-  );
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: cardWhite,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(
+              color: navyMid.withOpacity(0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 3))],
+        ),
+        child: child,
+      );
 
   Widget _counterTile(
           IconData icon, String label, String value, Color color) =>
@@ -1170,7 +1251,9 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
         const SizedBox(height: 4),
         Text(value,
             style: TextStyle(
-                fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: color)),
         Text(label,
             style: TextStyle(
                 fontSize: 10,
@@ -1216,7 +1299,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                         color: Colors.grey.shade400, fontSize: 13)),
                 isExpanded: true,
                 isDense:    true,
-                icon:       Icon(Icons.expand_more,
+                icon: Icon(Icons.expand_more,
                     color: onChanged == null
                         ? Colors.grey.shade300
                         : navyLight.withOpacity(0.5),
@@ -1273,7 +1356,8 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     required VoidCallback onTap,
   }) =>
       SizedBox(
-        width: double.infinity, height: 54,
+        width: double.infinity,
+        height: 54,
         child: Material(
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(14),
@@ -1300,34 +1384,39 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
               child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                if (isLoading)
-                  const SizedBox(
-                      width: 20, height: 20,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2))
-                else if (icon != null)
-                  Icon(icon,
-                      color: enabled ? Colors.white : Colors.grey.shade400,
-                      size: 20),
-                const SizedBox(width: 8),
-                Text(label,
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.3,
-                        color: enabled ? Colors.white : Colors.grey.shade400)),
-              ]),
+                    if (isLoading)
+                      const SizedBox(
+                          width: 20, height: 20,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2))
+                    else if (icon != null)
+                      Icon(icon,
+                          color: enabled
+                              ? Colors.white
+                              : Colors.grey.shade400,
+                          size: 20),
+                    const SizedBox(width: 8),
+                    Text(label,
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.3,
+                            color: enabled
+                                ? Colors.white
+                                : Colors.grey.shade400)),
+                  ]),
             ),
           ),
         ),
       );
 }
 
-// ── Price card ─────────────────────────────────────────────────
+// ── Price card ──────────────────────────────────────────────────────
 
 class _PriceCard extends StatelessWidget {
   final int? prixNormal;
   final int prixUnitaire, prixTotal, quantite, discountPct;
+
   const _PriceCard({
     required this.prixNormal,
     required this.prixUnitaire,
@@ -1371,11 +1460,11 @@ class _PriceCard extends StatelessWidget {
         if (quantite > 1 || discountPct > 0) ...[
           const SizedBox(height: 8),
           Wrap(
-            spacing: 8, runSpacing: 6,
+            spacing: 8,
+            runSpacing: 6,
             alignment: WrapAlignment.center,
             children: [
-              if (quantite > 1)
-                _pill('$quantite × $prixUnitaire ms', navyMid),
+              if (quantite > 1) _pill('$quantite × $prixUnitaire ms', navyMid),
               if (discountPct > 0)
                 _pill('−$discountPct%', Colors.orange.shade700),
               if (discountPct > 0 && prixNormal != null)
@@ -1392,24 +1481,27 @@ class _PriceCard extends StatelessWidget {
   }
 
   Widget _pill(String text, Color color) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-    decoration: BoxDecoration(
-      color: color.withOpacity(0.1),
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: color.withOpacity(0.25)),
-    ),
-    child: Text(text,
-        style: TextStyle(
-            fontSize: 11, color: color, fontWeight: FontWeight.w700)),
-  );
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withOpacity(0.25)),
+        ),
+        child: Text(text,
+            style: TextStyle(
+                fontSize: 11,
+                color: color,
+                fontWeight: FontWeight.w700)),
+      );
 }
 
-// ── Toast widget ────────────────────────────────────────────────
+// ── Toast widget ────────────────────────────────────────────────────
 
 class _ToastWidget extends StatefulWidget {
   final String msg;
   final Color color;
   final IconData icon;
+
   const _ToastWidget(
       {required this.msg, required this.color, required this.icon});
 
@@ -1427,14 +1519,21 @@ class _ToastWidgetState extends State<_ToastWidget>
   void initState() {
     super.initState();
     _ctrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 220));
-    _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+        vsync: this,
+        duration: const Duration(milliseconds: 220));
+    _opacity =
+        CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
     _slide = Tween<Offset>(
             begin: const Offset(1.0, 0), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
+        .animate(
+            CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
     _ctrl.forward();
-    Future.delayed(const Duration(milliseconds: 2100),
-        () { if (mounted) _ctrl.reverse(); });
+    Future.delayed(
+      const Duration(milliseconds: 2100),
+      () {
+        if (mounted) _ctrl.reverse();
+      },
+    );
   }
 
   @override
@@ -1444,42 +1543,50 @@ class _ToastWidgetState extends State<_ToastWidget>
   }
 
   @override
-  Widget build(BuildContext context) => Positioned(
-    top: MediaQuery.of(context).padding.top + 16,
-    right: 16,
-    child: FadeTransition(
-      opacity: _opacity,
-      child: SlideTransition(
-        position: _slide,
-        child: Material(
-          color: Colors.transparent,
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 300),
-            padding: const EdgeInsets.symmetric(
-                horizontal: 18, vertical: 11),
-            decoration: BoxDecoration(
-              color: widget.color,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [BoxShadow(
-                  color: widget.color.withOpacity(0.35),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4))],
-            ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(widget.icon, color: Colors.white, size: 16),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(widget.msg,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        height: 1.3)),
+  Widget build(BuildContext context) {
+    // FIX #10: use SafeArea + Align instead of bare Positioned so the widget
+    // has a valid layout context inside the OverlayEntry's Stack.
+    return SafeArea(
+      child: Align(
+        alignment: Alignment.topRight,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 16, right: 16),
+          child: FadeTransition(
+            opacity: _opacity,
+            child: SlideTransition(
+              position: _slide,
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 300),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 18, vertical: 11),
+                  decoration: BoxDecoration(
+                    color: widget.color,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [BoxShadow(
+                        color: widget.color.withOpacity(0.35),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4))],
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(widget.icon, color: Colors.white, size: 16),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(widget.msg,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              height: 1.3)),
+                    ),
+                  ]),
+                ),
               ),
-            ]),
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

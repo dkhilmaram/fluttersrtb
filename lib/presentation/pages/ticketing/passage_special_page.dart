@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../ticket_repository.dart';
+import '../../../data/repositories/ticket_repository.dart';
 
 const Color navyDark  = Color(0xFF0D1B3E);
 const Color navyMid   = Color(0xFF1A3260);

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'NouveauticketPage.dart';
+import '../../pages/ticketing/NouveauTicketPage.dart';
 import 'passage_special_page.dart';
-import 'scan_tab_page.dart';
+import '../scan/scan_tab_page.dart';
 
 const Color navyDark  = Color(0xFF0D1B3E);
 const Color navyMid   = Color(0xFF1A3260);

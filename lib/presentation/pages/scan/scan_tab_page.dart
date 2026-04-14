@@ -23,7 +23,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:nfc_manager/nfc_manager.dart';
-import '../ticket_repository.dart';
+import '../../../data/repositories/ticket_repository.dart';
 
 // ── Palette ───────────────────────────────────────────────────
 const Color navyDark  = Color(0xFF0D1B3E);

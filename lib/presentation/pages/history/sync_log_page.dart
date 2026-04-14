@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
-import 'local_database.dart';
-import 'sync_service.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../data/database/daos/ticket_dao.dart';
+import '../../../data/database/daos/log_dao.dart';
+import '../../../services/sync_service.dart';
 
-// ── Palette ──
+// ── Palette ───────────────────────────────────────────────────
 const Color _dark0   = Color(0xFF0B1120);
 const Color _dark1   = Color(0xFF111827);
 const Color _dark2   = Color(0xFF1C2A3A);
 const Color _dark3   = Color(0xFF243347);
-const Color _surface = Color(0xFFF2F5FB);
 
-// ── Status colours ──
 const Color _clrOk      = Color(0xFF22C55E);
 const Color _clrErr     = Color(0xFFEF4444);
 const Color _clrPending = Color(0xFFD97706);
 const Color _clrInfo    = Color(0xFF60A5FA);
 
 class SyncLogPage extends StatefulWidget {
-  final Map<String, dynamic> agent; // ← ADDED
-  const SyncLogPage({super.key, required this.agent}); // ← ADDED
+  final Map<String, dynamic> agent;
+  const SyncLogPage({super.key, required this.agent});
 
   @override
   State<SyncLogPage> createState() => _SyncLogPageState();
@@ -31,9 +31,9 @@ class _SyncLogPageState extends State<SyncLogPage>
   bool    _loading     = false;
   String? _syncMessage;
 
-  // ── Agent matricule ──
   int get _matricule =>
-      widget.agent['matricule_agent'] ?? widget.agent['matricule'];
+      widget.agent['matricule_agent'] as int? ??
+      widget.agent['matricule']       as int? ?? 0;
 
   @override
   void initState() {
@@ -48,13 +48,14 @@ class _SyncLogPageState extends State<SyncLogPage>
     super.dispose();
   }
 
+  // ── Data ─────────────────────────────────────────────────
+
   Future<void> _load() async {
     setState(() => _loading = true);
 
-    final allTickets = await LocalDatabase.getAllTickets();
-    final allLogs    = await LocalDatabase.getLogs();
+    final allTickets = await TicketDao.getAllTickets();
+    final allLogs    = await LogDao.getLogs();
 
-    // ── Filter by agent + limit to last 50 ──
     _tickets = allTickets
         .where((t) => t['matricule_agent'] == _matricule)
         .take(50)
@@ -77,6 +78,8 @@ class _SyncLogPageState extends State<SyncLogPage>
           '✓ ${result.synced} synchronisés   ✗ ${result.failed} échoués';
     });
   }
+
+  // ── Helpers ───────────────────────────────────────────────
 
   Color _statusColor(String? s) {
     switch (s) {
@@ -102,7 +105,7 @@ class _SyncLogPageState extends State<SyncLogPage>
     }
   }
 
-  String _fmtDateTime(String? raw) {
+  String _fmtTime(String? raw) {
     if (raw == null) return '—';
     try {
       final dt = DateTime.parse(raw);
@@ -121,9 +124,7 @@ class _SyncLogPageState extends State<SyncLogPage>
     } catch (_) { return raw; }
   }
 
-  // ════════════════════════════════════════════════════
-  // Build
-  // ════════════════════════════════════════════════════
+  // ── Build ─────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -133,12 +134,13 @@ class _SyncLogPageState extends State<SyncLogPage>
     final total   = _tickets.length;
 
     return Scaffold(
-      backgroundColor: _surface,
+      backgroundColor: AppTheme.offWhite,
       body: Column(children: [
         _buildHeader(pending, failed, synced, total),
         Expanded(
           child: _loading
-              ? const Center(child: CircularProgressIndicator(color: _clrInfo))
+              ? const Center(
+                  child: CircularProgressIndicator(color: _clrInfo))
               : TabBarView(
                   controller: _tabs,
                   children: [
@@ -152,9 +154,7 @@ class _SyncLogPageState extends State<SyncLogPage>
     );
   }
 
-  // ════════════════════════════════════════════════════
-  // Header
-  // ════════════════════════════════════════════════════
+  // ── Header ────────────────────────────────────────────────
 
   Widget _buildHeader(int pending, int failed, int synced, int total) {
     final successRate = total == 0 ? 0 : (synced / total * 100).round();
@@ -165,7 +165,7 @@ class _SyncLogPageState extends State<SyncLogPage>
       padding: const EdgeInsets.fromLTRB(20, 52, 20, 0),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-        // ── Top bar ──
+        // Top bar
         Row(children: [
           GestureDetector(
             onTap: () => Navigator.pop(context),
@@ -184,10 +184,11 @@ class _SyncLogPageState extends State<SyncLogPage>
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Text('Journaux de synchronisation',
                   style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.2)),
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.2,
+                  )),
               const SizedBox(height: 2),
               Row(children: [
                 Container(
@@ -203,9 +204,10 @@ class _SyncLogPageState extends State<SyncLogPage>
                       ? '$pending requête(s) en attente'
                       : 'Réseau opérationnel',
                   style: TextStyle(
-                      color: Colors.white.withOpacity(0.5),
-                      fontSize: 11,
-                      fontFamily: 'monospace'),
+                    color: Colors.white.withOpacity(0.5),
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                  ),
                 ),
               ]),
             ]),
@@ -231,20 +233,20 @@ class _SyncLogPageState extends State<SyncLogPage>
 
         const SizedBox(height: 20),
 
-        // ── KPI row ──
+        // KPI row
         Row(children: [
-          _opsKpi('200 OK', '$synced', _clrOk),
-          _opsKpiDivider(),
-          _opsKpi('5xx Erreur', '$failed', _clrErr),
-          _opsKpiDivider(),
-          _opsKpi('En file', '$pending', _clrPending),
-          _opsKpiDivider(),
-          _opsKpi('Taux réussite', '$successRate%', _clrInfo),
+          _kpi('200 OK',       '$synced',        _clrOk),
+          _kpiDivider(),
+          _kpi('5xx Erreur',   '$failed',        _clrErr),
+          _kpiDivider(),
+          _kpi('En file',      '$pending',       _clrPending),
+          _kpiDivider(),
+          _kpi('Taux réussite','$successRate%',  _clrInfo),
         ]),
 
         const SizedBox(height: 14),
 
-        // ── Sync result message ──
+        // Sync result message
         if (_syncMessage != null)
           Container(
             margin: const EdgeInsets.only(bottom: 10),
@@ -267,14 +269,15 @@ class _SyncLogPageState extends State<SyncLogPage>
             ]),
           ),
 
-        // ── Tab bar ──
+        // Tab bar
         TabBar(
           controller: _tabs,
           indicatorColor: _clrInfo,
           indicatorWeight: 2,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white38,
-          labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          labelStyle:
+              const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
           unselectedLabelStyle: const TextStyle(fontSize: 12),
           tabs: const [
             Tab(text: 'File d\'attente'),
@@ -286,34 +289,33 @@ class _SyncLogPageState extends State<SyncLogPage>
     );
   }
 
-  Widget _opsKpi(String label, String value, Color color) {
+  Widget _kpi(String label, String value, Color color) {
     return Expanded(
       child: Column(children: [
         Text(value,
             style: TextStyle(
-                color: color,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                fontFamily: 'monospace')),
+              color: color,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              fontFamily: 'monospace',
+            )),
         Text(label,
             textAlign: TextAlign.center,
             style: TextStyle(
-                color: Colors.white.withOpacity(0.4),
-                fontSize: 9,
-                letterSpacing: 0.3)),
+              color: Colors.white.withOpacity(0.4),
+              fontSize: 9,
+              letterSpacing: 0.3,
+            )),
         const SizedBox(height: 4),
       ]),
     );
   }
 
-  Widget _opsKpiDivider() => Container(
-        width: 0.5, height: 32,
-        color: Colors.white.withOpacity(0.1),
-      );
+  Widget _kpiDivider() => Container(
+      width: 0.5, height: 32,
+      color: Colors.white.withOpacity(0.1));
 
-  // ════════════════════════════════════════════════════
-  // Tab 1 — Queue
-  // ════════════════════════════════════════════════════
+  // ── Tab 1 — Queue ─────────────────────────────────────────
 
   Widget _buildQueueTab(int pending, int failed) {
     final queue = _tickets
@@ -333,9 +335,10 @@ class _SyncLogPageState extends State<SyncLogPage>
           const SizedBox(height: 12),
           const Text('File d\'attente vide',
               style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold)),
+                color: Colors.white70,
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+              )),
           const SizedBox(height: 4),
           Text('Tous les tickets sont synchronisés',
               style: TextStyle(
@@ -379,8 +382,9 @@ class _SyncLogPageState extends State<SyncLogPage>
             Container(
               width: 36, height: 36,
               decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(9)),
+                color: color.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(9),
+              ),
               child: Icon(_statusIcon(status), color: color, size: 18),
             ),
             const SizedBox(width: 12),
@@ -391,9 +395,10 @@ class _SyncLogPageState extends State<SyncLogPage>
                   Text(
                     '${t['point_depart']} → ${t['point_arrivee']}',
                     style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold),
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 3),
@@ -414,10 +419,10 @@ class _SyncLogPageState extends State<SyncLogPage>
               ),
             ),
             const SizedBox(width: 8),
-            if (t['tentatives'] != null && (t['tentatives'] as int) > 0)
+            if ((t['tentatives'] as int? ?? 0) > 0)
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: _clrErr.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(8),
@@ -426,10 +431,11 @@ class _SyncLogPageState extends State<SyncLogPage>
                 child: Text(
                   '${t['tentatives']}× retry',
                   style: const TextStyle(
-                      color: _clrErr,
-                      fontSize: 10,
-                      fontFamily: 'monospace',
-                      fontWeight: FontWeight.bold),
+                    color: _clrErr,
+                    fontSize: 10,
+                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
           ]),
@@ -438,7 +444,8 @@ class _SyncLogPageState extends State<SyncLogPage>
           Container(
             width: double.infinity,
             margin: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
             decoration: BoxDecoration(
               color: _clrErr.withOpacity(0.07),
               borderRadius: BorderRadius.circular(7),
@@ -450,10 +457,11 @@ class _SyncLogPageState extends State<SyncLogPage>
               Flexible(
                 child: Text(erreur,
                     style: const TextStyle(
-                        color: _clrErr,
-                        fontSize: 11,
-                        fontFamily: 'monospace',
-                        fontStyle: FontStyle.italic)),
+                      color: _clrErr,
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                      fontStyle: FontStyle.italic,
+                    )),
               ),
             ]),
           ),
@@ -461,9 +469,7 @@ class _SyncLogPageState extends State<SyncLogPage>
     );
   }
 
-  // ════════════════════════════════════════════════════
-  // Tab 2 — HTTP Requests
-  // ════════════════════════════════════════════════════
+  // ── Tab 2 — HTTP Requests ─────────────────────────────────
 
   Widget _buildRequestsTab() {
     if (_logs.isEmpty) {
@@ -492,14 +498,10 @@ class _SyncLogPageState extends State<SyncLogPage>
   }
 
   Widget _buildRequestCard(Map<String, dynamic> l) {
-    final status  = l['statut'] as String? ?? 'pending';
-    final color   = _statusColor(status);
-    final date    = DateTime.tryParse(l['date_tentative'] ?? '');
-    final timeStr = date != null
-        ? '${date.hour.toString().padLeft(2, '0')}:'
-          '${date.minute.toString().padLeft(2, '0')}:'
-          '${date.second.toString().padLeft(2, '0')}'
-        : '—';
+    final status   = l['statut'] as String? ?? 'pending';
+    final color    = _statusColor(status);
+    final date     = DateTime.tryParse(l['date_tentative'] ?? '');
+    final timeStr  = date != null ? _fmtTime(l['date_tentative']) : '—';
     final dateStr  = date != null ? _fmtDate(l['date_tentative']) : '—';
     final message  = l['message'] as String? ?? '';
     final httpCode = status == 'synced' ? '200' : status == 'failed' ? '503' : '—';
@@ -512,13 +514,12 @@ class _SyncLogPageState extends State<SyncLogPage>
         border: Border.all(color: _dark3),
       ),
       child: Column(children: [
-
-        // ── HTTP request line ──
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(5),
@@ -526,10 +527,11 @@ class _SyncLogPageState extends State<SyncLogPage>
               ),
               child: Text('POST',
                   style: TextStyle(
-                      color: color,
-                      fontSize: 10,
-                      fontFamily: 'monospace',
-                      fontWeight: FontWeight.bold)),
+                    color: color,
+                    fontSize: 10,
+                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.bold,
+                  )),
             ),
             const SizedBox(width: 9),
             Expanded(
@@ -537,37 +539,39 @@ class _SyncLogPageState extends State<SyncLogPage>
                 '/billetterie/tickets/vendre',
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
-                    fontSize: 11,
-                    fontFamily: 'monospace'),
+                  color: Colors.white.withOpacity(0.7),
+                  fontSize: 11,
+                  fontFamily: 'monospace',
+                ),
               ),
             ),
             const SizedBox(width: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(5),
               ),
               child: Text(httpCode,
                   style: TextStyle(
-                      color: color,
-                      fontSize: 10,
-                      fontFamily: 'monospace',
-                      fontWeight: FontWeight.bold)),
+                    color: color,
+                    fontSize: 10,
+                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.bold,
+                  )),
             ),
           ]),
         ),
-
-        // ── Meta row ──
         Container(
           width: double.infinity,
           decoration: BoxDecoration(
             color: _dark0.withOpacity(0.5),
-            borderRadius: const BorderRadius.vertical(
-                bottom: Radius.circular(11)),
+            borderRadius:
+                const BorderRadius.vertical(bottom: Radius.circular(11)),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -587,9 +591,10 @@ class _SyncLogPageState extends State<SyncLogPage>
                   message,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                      color: Colors.white.withOpacity(0.3),
-                      fontSize: 10,
-                      fontFamily: 'monospace'),
+                    color: Colors.white.withOpacity(0.3),
+                    fontSize: 10,
+                    fontFamily: 'monospace',
+                  ),
                 ),
               ],
             ],
@@ -605,15 +610,14 @@ class _SyncLogPageState extends State<SyncLogPage>
       const SizedBox(width: 4),
       Text(text,
           style: const TextStyle(
-              color: Colors.white38,
-              fontSize: 10,
-              fontFamily: 'monospace')),
+            color: Colors.white38,
+            fontSize: 10,
+            fontFamily: 'monospace',
+          )),
     ]);
   }
 
-  // ════════════════════════════════════════════════════
-  // Tab 3 — Console
-  // ════════════════════════════════════════════════════
+  // ── Tab 3 — Console ───────────────────────────────────────
 
   Widget _buildConsoleTab() {
     return Container(
@@ -625,7 +629,7 @@ class _SyncLogPageState extends State<SyncLogPage>
         child: ListView(
           padding: const EdgeInsets.all(14),
           children: [
-            // ── Console window ──
+            // Console window
             Container(
               decoration: BoxDecoration(
                 color: const Color(0xFF080F1A),
@@ -633,32 +637,32 @@ class _SyncLogPageState extends State<SyncLogPage>
                 border: Border.all(color: _dark3),
               ),
               child: Column(children: [
-                // title bar
+                // Title bar
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 9),
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: _dark2,
-                    borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(12)),
-                    border: const Border(
-                        bottom: BorderSide(color: _dark3)),
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(12)),
+                    border: Border(bottom: BorderSide(color: _dark3)),
                   ),
                   child: Row(children: [
-                    _trafficDot(const Color(0xFFFF5F56)),
+                    _dot(const Color(0xFFFF5F56)),
                     const SizedBox(width: 6),
-                    _trafficDot(const Color(0xFFFFBD2E)),
+                    _dot(const Color(0xFFFFBD2E)),
                     const SizedBox(width: 6),
-                    _trafficDot(const Color(0xFF27C93F)),
+                    _dot(const Color(0xFF27C93F)),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         'sync_log — ${_logs.length} entrées',
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                            color: Colors.white.withOpacity(0.4),
-                            fontSize: 11,
-                            fontFamily: 'monospace'),
+                          color: Colors.white.withOpacity(0.4),
+                          fontSize: 11,
+                          fontFamily: 'monospace',
+                        ),
                       ),
                     ),
                     GestureDetector(
@@ -669,8 +673,7 @@ class _SyncLogPageState extends State<SyncLogPage>
                     ),
                   ]),
                 ),
-
-                // log lines
+                // Log lines
                 Padding(
                   padding: const EdgeInsets.all(12),
                   child: _logs.isEmpty
@@ -678,9 +681,10 @@ class _SyncLogPageState extends State<SyncLogPage>
                           padding: EdgeInsets.symmetric(vertical: 24),
                           child: Text('Aucun log disponible',
                               style: TextStyle(
-                                  color: Colors.white24,
-                                  fontSize: 12,
-                                  fontFamily: 'monospace')),
+                                color: Colors.white24,
+                                fontSize: 12,
+                                fontFamily: 'monospace',
+                              )),
                         )
                       : Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -721,17 +725,18 @@ class _SyncLogPageState extends State<SyncLogPage>
                                 children: [
                                   Text(ts,
                                       style: TextStyle(
-                                          color: Colors.white
-                                              .withOpacity(0.25),
-                                          fontSize: 10,
-                                          fontFamily: 'monospace')),
+                                        color: Colors.white.withOpacity(0.25),
+                                        fontSize: 10,
+                                        fontFamily: 'monospace',
+                                      )),
                                   const SizedBox(width: 10),
                                   Text(prefix,
                                       style: TextStyle(
-                                          color: lineColor,
-                                          fontSize: 11,
-                                          fontFamily: 'monospace',
-                                          fontWeight: FontWeight.bold)),
+                                        color: lineColor,
+                                        fontSize: 11,
+                                        fontFamily: 'monospace',
+                                        fontWeight: FontWeight.bold,
+                                      )),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: RichText(
@@ -739,21 +744,21 @@ class _SyncLogPageState extends State<SyncLogPage>
                                         TextSpan(
                                           text: route,
                                           style: TextStyle(
-                                              color: lineColor
-                                                  .withOpacity(0.9),
-                                              fontSize: 11,
-                                              fontFamily: 'monospace',
-                                              fontWeight:
-                                                  FontWeight.bold),
+                                            color: lineColor.withOpacity(0.9),
+                                            fontSize: 11,
+                                            fontFamily: 'monospace',
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
                                         if (msg.isNotEmpty)
                                           TextSpan(
                                             text: '  $msg',
                                             style: TextStyle(
-                                                color: Colors.white
-                                                    .withOpacity(0.35),
-                                                fontSize: 10,
-                                                fontFamily: 'monospace'),
+                                              color: Colors.white
+                                                  .withOpacity(0.35),
+                                              fontSize: 10,
+                                              fontFamily: 'monospace',
+                                            ),
                                           ),
                                       ]),
                                     ),
@@ -769,7 +774,7 @@ class _SyncLogPageState extends State<SyncLogPage>
 
             const SizedBox(height: 14),
 
-            // ── Tickets summary ──
+            // Tickets summary
             Container(
               decoration: BoxDecoration(
                 color: _dark2,
@@ -781,7 +786,8 @@ class _SyncLogPageState extends State<SyncLogPage>
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 10),
                   decoration: const BoxDecoration(
-                    border: Border(bottom: BorderSide(color: _dark3)),
+                    border:
+                        Border(bottom: BorderSide(color: _dark3)),
                   ),
                   child: Row(children: [
                     const Icon(Icons.storage_rounded,
@@ -790,10 +796,11 @@ class _SyncLogPageState extends State<SyncLogPage>
                     Text(
                       'Tickets locaux — ${_tickets.length} entrées',
                       style: const TextStyle(
-                          color: _clrInfo,
-                          fontSize: 12,
-                          fontFamily: 'monospace',
-                          fontWeight: FontWeight.bold),
+                        color: _clrInfo,
+                        fontSize: 12,
+                        fontFamily: 'monospace',
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ]),
                 ),
@@ -802,12 +809,13 @@ class _SyncLogPageState extends State<SyncLogPage>
                     padding: EdgeInsets.all(16),
                     child: Text('Aucun ticket local',
                         style: TextStyle(
-                            color: Colors.white38,
-                            fontSize: 12,
-                            fontFamily: 'monospace')),
+                          color: Colors.white38,
+                          fontSize: 12,
+                          fontFamily: 'monospace',
+                        )),
                   )
                 else
-                  ..._tickets.map((t) => _buildConsoleTicketRow(t)),
+                  ..._tickets.map(_buildConsoleTicketRow),
               ]),
             ),
           ],
@@ -819,7 +827,6 @@ class _SyncLogPageState extends State<SyncLogPage>
   Widget _buildConsoleTicketRow(Map<String, dynamic> t) {
     final status = t['statut_sync'] as String? ?? 'pending';
     final color  = _statusColor(status);
-    final label  = _statusLabel(status);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
@@ -834,28 +841,28 @@ class _SyncLogPageState extends State<SyncLogPage>
             '${t['point_depart']} → ${t['point_arrivee']}',
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 11,
-                fontFamily: 'monospace'),
+              color: Colors.white70,
+              fontSize: 11,
+              fontFamily: 'monospace',
+            ),
           ),
         ),
         const SizedBox(width: 8),
         Text(
           '${t['quantite']}× · ${t['montant_total']} DT',
           style: TextStyle(
-              color: Colors.white.withOpacity(0.35),
-              fontSize: 10,
-              fontFamily: 'monospace'),
+            color: Colors.white.withOpacity(0.35),
+            fontSize: 10,
+            fontFamily: 'monospace',
+          ),
         ),
         const SizedBox(width: 10),
-        _monoChip(label, color),
+        _monoChip(_statusLabel(status), color),
       ]),
     );
   }
 
-  // ════════════════════════════════════════════════════
-  // Micro-widgets
-  // ════════════════════════════════════════════════════
+  // ── Micro-widgets ─────────────────────────────────────────
 
   Widget _monoChip(String label, Color color) {
     return Container(
@@ -867,16 +874,16 @@ class _SyncLogPageState extends State<SyncLogPage>
       ),
       child: Text(label,
           style: TextStyle(
-              color: color,
-              fontSize: 9,
-              fontFamily: 'monospace',
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.5)),
+            color: color,
+            fontSize: 9,
+            fontFamily: 'monospace',
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
+          )),
     );
   }
 
-  Widget _trafficDot(Color color) => Container(
-        width: 10, height: 10,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      );
+  Widget _dot(Color color) => Container(
+      width: 10, height: 10,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle));
 }

@@ -1,22 +1,23 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:path_provider/path_provider.dart';
-import 'package:excel/excel.dart' as xl;
-import '../local_database.dart';
-import '../sync_service.dart';
-import '../route_observer.dart';
+import '../../../core/constants/api_constants.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/route_observer.dart';
+import '../../../data/database/daos/ticket_dao.dart';
 
-// ── Palette ──
-const Color navyDark  = Color(0xFF0D1B3E);
-const Color navyMid   = Color(0xFF1A3260);
-const Color navyLight = Color(0xFF1E4080);
-const Color goldLight = Color(0xFFF5C842);
-const Color surface   = Color(0xFFF2F5FB);
-const Color cardWhite = Color(0xFFFFFFFF);
+// ── Local palette aliases ─────────────────────────────────────
+const _navyDark  = AppTheme.navyDark;
+const _navyMid   = AppTheme.navyMid;
+const _navyLight = AppTheme.navyLight;
+const _goldLight = AppTheme.goldLight;
+const _surface   = AppTheme.offWhite;
+const _cardWhite = Colors.white;
+
+// ─────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────
 
 String? _resolveSegment(Map<String, dynamic> map) {
   const keys = [
@@ -33,17 +34,20 @@ String? _resolveSegment(Map<String, dynamic> map) {
   return null;
 }
 
-/// Returns true if [dateStr] is today (local date).
 bool _isToday(String? dateStr) {
   if (dateStr == null) return false;
   try {
-    final dt    = DateTime.parse(dateStr).toLocal();
-    final now   = DateTime.now();
+    final dt  = DateTime.parse(dateStr).toLocal();
+    final now = DateTime.now();
     return dt.year == now.year && dt.month == now.month && dt.day == now.day;
   } catch (_) {
     return false;
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// HistoriquePage
+// ─────────────────────────────────────────────────────────────
 
 class HistoriquePage extends StatefulWidget {
   final Map<String, dynamic> voyage;
@@ -57,21 +61,22 @@ class _HistoriquePageState extends State<HistoriquePage>
     with SingleTickerProviderStateMixin
     implements RouteAware {
   late TabController _tabs;
-  // All tickets loaded from DB / server (unfiltered)
   List<dynamic> _allTickets = [];
-  // Today-only view used everywhere in the UI
-  List<dynamic> _tickets    = [];
-  bool isLoading = true;
+  List<dynamic> _tickets    = []; // today-only
+
+  bool    isLoading    = true;
   String? errorMessage;
 
   OverlayEntry? _toastEntry;
-  Timer? _toastTimer;
+  Timer?        _toastTimer;
 
-  // ─── Toast ──────────────────────────────────────────────────
-  void _showToast(String msg, {bool isError = false, bool isInfo = false}) {
+  // ── Toast ─────────────────────────────────────────────────
+  void _showToast(String msg,
+      {bool isError = false, bool isInfo = false}) {
     _toastTimer?.cancel();
     _toastEntry?.remove();
     _toastEntry = null;
+
     final color = isError
         ? Colors.red.shade700
         : isInfo
@@ -82,6 +87,7 @@ class _HistoriquePageState extends State<HistoriquePage>
         : isInfo
             ? Icons.info_outline_rounded
             : Icons.check_circle_outline;
+
     final entry = OverlayEntry(
       builder: (_) => _ToastWidget(msg: msg, color: color, icon: icon),
     );
@@ -93,7 +99,7 @@ class _HistoriquePageState extends State<HistoriquePage>
     });
   }
 
-  // ─── Lifecycle ──────────────────────────────────────────────
+  // ── Lifecycle ─────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
@@ -104,85 +110,83 @@ class _HistoriquePageState extends State<HistoriquePage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    routeObserver.subscribe(this, ModalRoute.of(context)!);
+    appRouteObserver.subscribe(this, ModalRoute.of(context)!);
   }
 
   @override
   void dispose() {
-    routeObserver.unsubscribe(this);
+    appRouteObserver.unsubscribe(this);
     _toastTimer?.cancel();
     _toastEntry?.remove();
     _tabs.dispose();
     super.dispose();
   }
 
-  @override
-  void didPopNext() => _fetchAll();
-  @override
-  void didPush() {}
-  @override
-  void didPop() {}
-  @override
-  void didPushNext() {}
+  @override void didPopNext()  => _fetchAll();
+  @override void didPush()     {}
+  @override void didPop()      {}
+  @override void didPushNext() {}
 
-  // ─── Fetch ──────────────────────────────────────────────────
+  // ── Fetch ─────────────────────────────────────────────────
   Future<void> _fetchAll() async {
-    setState(() {
-      isLoading = true;
-      errorMessage = null;
-    });
+    setState(() { isLoading = true; errorMessage = null; });
+
     final id = widget.voyage['id'] as int?;
     if (id == null) {
-      setState(() {
-        errorMessage = 'ID du voyage manquant';
-        isLoading = false;
-      });
+      setState(() { errorMessage = 'ID du voyage manquant'; isLoading = false; });
       _showToast('ID du voyage manquant', isError: true);
       return;
     }
 
-    final localRows = await LocalDatabase.getTicketsByVoyage(id);
+    // Local first
+    final localRows = await TicketDao.getTicketsByVoyage(id);
     final allLocal  = localRows.map(_mapLocalTicket).toList();
     if (allLocal.isNotEmpty) {
       _sortByDate(allLocal);
       setState(() {
         _allTickets = allLocal;
-        _tickets    = allLocal.where((t) => _isToday(t['date_heure'] as String?)).toList();
+        _tickets    = allLocal
+            .where((t) => _isToday(t['date_heure'] as String?))
+            .toList();
         isLoading   = false;
       });
     }
 
+    // Then try server
     try {
       final response = await http
           .get(Uri.parse(
-              'http://192.168.1.16:8000/billetterie/voyages/$id/tickets'))
-          .timeout(const Duration(seconds: 6));
+              '${ApiConstants.billetterie}/voyages/$id/tickets'))
+          .timeout(ApiConstants.defaultTimeout);
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
           final serverList =
-              (data['tickets'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+              (data['tickets'] as List<dynamic>? ?? [])
+                  .cast<Map<String, dynamic>>();
           final localByServerId = {
             for (final t in localRows)
               if (t['id_serveur'] != null) t['id_serveur'] as int: t,
           };
+
           for (final st in serverList) {
-            final sid = st['id_ticket'] as int?;
+            final sid    = st['id_ticket'] as int?;
             if (sid == null) continue;
-            final segValue = _resolveSegment(st) ?? '0';
-            final segInt   = int.tryParse(segValue) ?? 0;
+            final segInt =
+                int.tryParse((_resolveSegment(st) ?? '0')) ?? 0;
+
             if (localByServerId.containsKey(sid)) {
-              final localRow  = localByServerId[sid]!;
-              final storedSeg = localRow['id_segment'];
-              if (storedSeg == null || storedSeg == 0) {
+              final lr = localByServerId[sid]!;
+              if (lr['id_segment'] == null || lr['id_segment'] == 0) {
                 try {
-                  await LocalDatabase.updateTicketSegment(
-                      localRow['id'] as int, segInt);
+                  await TicketDao.updateTicketSegment(
+                      lr['id'] as int, segInt);
                 } catch (_) {}
               }
             } else {
               try {
-                await LocalDatabase.insertTicket({
+                await TicketDao.insertTicket({
                   'id_vente':        id,
                   'id_segment':      segInt,
                   'point_depart':    st['point_depart']    ?? '',
@@ -199,11 +203,10 @@ class _HistoriquePageState extends State<HistoriquePage>
               } catch (_) {}
             }
           }
-          final freshRows = await LocalDatabase.getTicketsByVoyage(id);
-          final merged    = freshRows.map(_mapLocalTicket).toList();
-          _sortByDate(merged);
 
-          // ── Apply today filter ──────────────────────────────
+          final freshRows   = await TicketDao.getTicketsByVoyage(id);
+          final merged      = freshRows.map(_mapLocalTicket).toList();
+          _sortByDate(merged);
           final todayMerged = merged
               .where((t) => _isToday(t['date_heure'] as String?))
               .toList();
@@ -221,7 +224,8 @@ class _HistoriquePageState extends State<HistoriquePage>
 
           if (pendingCount > 0 || failedCount > 0) {
             _showToast(
-              '${todayMerged.length} ticket(s) aujourd\'hui · $pendingCount en attente · $failedCount échoué(s)',
+              '${todayMerged.length} ticket(s) aujourd\'hui · '
+              '$pendingCount en attente · $failedCount échoué(s)',
               isInfo: true,
             );
           } else {
@@ -235,8 +239,13 @@ class _HistoriquePageState extends State<HistoriquePage>
     }
 
     if (allLocal.isEmpty) setState(() => isLoading = false);
-    final todayLocal   = allLocal.where((t) => _isToday(t['date_heure'] as String?)).toList();
-    final pendingCount = todayLocal.where((t) => t['_statut_sync'] == 'pending').length;
+
+    final todayLocal   = allLocal
+        .where((t) => _isToday(t['date_heure'] as String?))
+        .toList();
+    final pendingCount =
+        todayLocal.where((t) => t['_statut_sync'] == 'pending').length;
+
     _showToast(
       todayLocal.isEmpty
           ? 'Hors-ligne — aucun ticket local aujourd\'hui'
@@ -258,28 +267,28 @@ class _HistoriquePageState extends State<HistoriquePage>
   Map<String, dynamic> _mapLocalTicket(Map<String, dynamic> t) {
     final segValue = _resolveSegment(t);
     return {
-      'id_ticket':      t['id'],
-      'point_depart':   t['point_depart'],
-      'point_arrivee':  t['point_arrivee'],
-      'type_tarif':     t['type_tarif'],
-      'quantite':       (t['quantite']      as num? ?? 0).toInt(),
-      'prix_unitaire':  (t['prix_unitaire'] as num? ?? 0).toInt(),
-      'montant_total':  (t['montant_total'] as num? ?? 0).toInt(),
-      'date_heure':     t['date_heure'],
-      'segment_ordre':  segValue,
-      'nom_ligne':      t['nom_ligne'],
-      'agent':          t['agent'],
-      'id_serveur':     t['id_serveur'],
-      '_statut_sync':   t['statut_sync'] ?? 'synced',
-      '_is_local':      true,
+      'id_ticket':     t['id'],
+      'point_depart':  t['point_depart'],
+      'point_arrivee': t['point_arrivee'],
+      'type_tarif':    t['type_tarif'],
+      'quantite':      (t['quantite']      as num? ?? 0).toInt(),
+      'prix_unitaire': (t['prix_unitaire'] as num? ?? 0).toInt(),
+      'montant_total': (t['montant_total'] as num? ?? 0).toInt(),
+      'date_heure':    t['date_heure'],
+      'segment_ordre': segValue,
+      'nom_ligne':     t['nom_ligne'],
+      'agent':         t['agent'],
+      'id_serveur':    t['id_serveur'],
+      '_statut_sync':  t['statut_sync'] ?? 'synced',
+      '_is_local':     true,
     };
   }
 
-  // ─── Financial helpers (operate on today-filtered _tickets) ─
+  // ── Financial helpers ─────────────────────────────────────
   int get _totalRecette => _tickets.fold(
       0, (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt()));
-  int get _totalTickets =>
-      _tickets.fold(0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
+  int get _totalTickets => _tickets.fold(
+      0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
   int get _totalGratuits => _tickets
       .where((t) => ((t['montant_total'] as num? ?? 0).toInt()) == 0)
       .fold(0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
@@ -288,8 +297,8 @@ class _HistoriquePageState extends State<HistoriquePage>
     final payants =
         _tickets.where((t) => ((t['montant_total'] as num? ?? 0).toInt()) > 0).toList();
     if (payants.isEmpty) return 0;
-    final total = payants.fold(
-        0, (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt()));
+    final total =
+        payants.fold(0, (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt()));
     final qty =
         payants.fold(0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
     return qty == 0 ? 0 : (total / qty).round();
@@ -300,7 +309,7 @@ class _HistoriquePageState extends State<HistoriquePage>
     for (final t in _tickets) {
       final rawType = (t['type_tarif'] ?? '').toString().trim();
       final type    = rawType.isEmpty ? 'Inconnu' : rawType;
-      final qty     = (t['quantite']     as num? ?? 1).toInt();
+      final qty     = (t['quantite']      as num? ?? 1).toInt();
       final total   = (t['montant_total'] as num? ?? 0).toInt();
       final unit    = (t['prix_unitaire'] as num? ?? 0).toInt();
       map[type] ??= {'count': 0, 'total': 0, 'unitaire': 0};
@@ -334,7 +343,7 @@ class _HistoriquePageState extends State<HistoriquePage>
     return Map.fromEntries(entries);
   }
 
-  // ─── Tarif helpers ──────────────────────────────────────────
+  // ── Tarif helpers ─────────────────────────────────────────
   Color _tarifColor(String type) {
     final t = type.toLowerCase();
     if (t.contains('gratuit')) return const Color(0xFF16A34A);
@@ -352,25 +361,26 @@ class _HistoriquePageState extends State<HistoriquePage>
     if (t.contains('barcode') || t.contains('scan'))
       return const Color(0xFF6B21A8);
     if (t.contains('50') || t.contains('reduit')) return const Color(0xFF7C3AED);
-    return navyLight;
+    return _navyLight;
   }
 
   IconData _tarifIcon(String type) {
     final t = type.toLowerCase();
-    if (t.contains('gratuit')) return Icons.card_giftcard_rounded;
+    if (t.contains('gratuit'))  return Icons.card_giftcard_rounded;
     if (t.contains('armee') || t.contains('garde')) return Icons.shield_rounded;
-    if (t.contains('police')) return Icons.local_police_rounded;
-    if (t.contains('douane')) return Icons.account_balance_rounded;
-    if (t.contains('ministere')) return Icons.domain_rounded;
+    if (t.contains('police'))   return Icons.local_police_rounded;
+    if (t.contains('douane'))   return Icons.account_balance_rounded;
+    if (t.contains('ministere'))return Icons.domain_rounded;
     if (t.contains('municipalite')) return Icons.location_city_rounded;
     if (t.contains('scolaire')) return Icons.school_rounded;
     if (t.contains('institution') || t.contains('autre'))
       return Icons.groups_rounded;
     if (t.contains('abonnement')) return Icons.confirmation_number_rounded;
-    if (t.contains('agent')) return Icons.badge_rounded;
-    if (t.contains('nfc')) return Icons.nfc_rounded;
-    if (t.contains('barcode') || t.contains('scan')) return Icons.qr_code_2_rounded;
-    if (t.contains('reduit')) return Icons.discount_rounded;
+    if (t.contains('agent'))    return Icons.badge_rounded;
+    if (t.contains('nfc'))      return Icons.nfc_rounded;
+    if (t.contains('barcode') || t.contains('scan'))
+      return Icons.qr_code_2_rounded;
+    if (t.contains('reduit'))   return Icons.discount_rounded;
     return Icons.person_rounded;
   }
 
@@ -378,37 +388,34 @@ class _HistoriquePageState extends State<HistoriquePage>
     if (raw == null) return '—';
     try {
       final dt = DateTime.parse(raw);
-      return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return raw;
-    }
+      return '${dt.hour.toString().padLeft(2, '0')}:'
+             '${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) { return raw; }
   }
 
   String _formatDay(String? raw) {
     if (raw == null) return '—';
     try {
       final dt = DateTime.parse(raw);
-      return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
-    } catch (_) {
-      return raw;
-    }
+      return '${dt.day.toString().padLeft(2, '0')}/'
+             '${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+    } catch (_) { return raw; }
   }
 
-  // ════════════════════════════════════════════════════
-  // Build
-  // ════════════════════════════════════════════════════
+  // ── Build ─────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final depart  = widget.voyage['depart']  ?? '?';
     final arrivee = widget.voyage['arrivee'] ?? '?';
+
     return Scaffold(
-      backgroundColor: surface,
+      backgroundColor: _surface,
       body: isLoading
           ? Column(children: [
               _buildHeader(depart, arrivee),
               const Expanded(
                   child: Center(
-                      child: CircularProgressIndicator(color: navyMid))),
+                      child: CircularProgressIndicator(color: _navyMid))),
             ])
           : errorMessage != null
               ? Column(children: [
@@ -417,119 +424,124 @@ class _HistoriquePageState extends State<HistoriquePage>
                 ])
               : NestedScrollView(
                   headerSliverBuilder: (_, __) => [
-                    SliverToBoxAdapter(child: _buildHeader(depart, arrivee)),
+                    SliverToBoxAdapter(
+                        child: _buildHeader(depart, arrivee)),
                   ],
                   body: TabBarView(
                     controller: _tabs,
                     children: [
-                      _TicketsMainTab(key: const ValueKey('tickets'), page: this),
-                      _FinanceMainTab(key: const ValueKey('finance'), page: this),
+                      _TicketsMainTab(
+                          key: const ValueKey('tickets'), page: this),
+                      _FinanceMainTab(
+                          key: const ValueKey('finance'), page: this),
                     ],
                   ),
                 ),
     );
   }
 
-  // ─── Header ─────────────────────────────────────────────────
+  // ── Header ────────────────────────────────────────────────
   Widget _buildHeader(String depart, String arrivee) {
     return Container(
       width: double.infinity,
-      color: navyDark,
+      color: _navyDark,
       padding: const EdgeInsets.fromLTRB(20, 52, 20, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              _iconBtn(Icons.arrow_back_ios_new, 17, () => Navigator.pop(context)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Historique du voyage',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        Container(
-                            width: 6, height: 6,
-                            decoration: const BoxDecoration(
-                                color: goldLight, shape: BoxShape.circle)),
-                        const SizedBox(width: 5),
-                        Flexible(
-                            child: Text(depart,
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                                style: const TextStyle(
-                                    color: Colors.white70, fontSize: 11))),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 5),
-                          child: Icon(Icons.arrow_forward,
-                              size: 10,
-                              color: Colors.white.withOpacity(0.35)),
-                        ),
-                        Container(
-                            width: 6, height: 6,
-                            decoration: BoxDecoration(
-                                color: Colors.transparent,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: goldLight, width: 1.5))),
-                        const SizedBox(width: 5),
-                        Flexible(
-                            child: Text(arrivee,
-                                overflow: TextOverflow.ellipsis,
-                                maxLines: 1,
-                                style: const TextStyle(
-                                    color: Colors.white70, fontSize: 11))),
-                      ],
+          Row(children: [
+            _iconBtn(Icons.arrow_back_ios_new, 17,
+                () => Navigator.pop(context)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Historique du voyage',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      )),
+                  const SizedBox(height: 3),
+                  Row(children: [
+                    Container(
+                        width: 6, height: 6,
+                        decoration: const BoxDecoration(
+                            color: _goldLight, shape: BoxShape.circle)),
+                    const SizedBox(width: 5),
+                    Flexible(
+                        child: Text(depart,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 11))),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 5),
+                      child: Icon(Icons.arrow_forward,
+                          size: 10,
+                          color: Colors.white.withOpacity(0.35)),
                     ),
-                  ],
-                ),
+                    Container(
+                        width: 6, height: 6,
+                        decoration: BoxDecoration(
+                          color: Colors.transparent,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: _goldLight, width: 1.5),
+                        )),
+                    const SizedBox(width: 5),
+                    Flexible(
+                        child: Text(arrivee,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 11))),
+                  ]),
+                ],
               ),
-              const SizedBox(width: 8),
-              // ── "Aujourd'hui" badge ──────────────────────────
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: goldLight.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: goldLight.withOpacity(0.4)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.today_rounded, color: goldLight, size: 11),
-                    const SizedBox(width: 4),
-                    Text(
-                      () {
-                        final now = DateTime.now();
-                        return '${now.day.toString().padLeft(2, '0')}/'
-                            '${now.month.toString().padLeft(2, '0')}/'
-                            '${now.year}';
-                      }(),
-                      style: const TextStyle(
-                          color: goldLight, fontSize: 10, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
+            ),
+            const SizedBox(width: 8),
+            // Today badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: _goldLight.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: _goldLight.withOpacity(0.4)),
               ),
-              const SizedBox(width: 8),
-              if (widget.voyage['id'] != null)
-                Text('#${widget.voyage['id']}',
-                    style: TextStyle(
-                        color: Colors.white.withOpacity(0.25), fontSize: 10)),
-              const SizedBox(width: 8),
-              _iconBtn(Icons.refresh, 18, _fetchAll, iconColor: Colors.white70),
-            ],
-          ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.today_rounded, color: _goldLight, size: 11),
+                  const SizedBox(width: 4),
+                  Text(
+                    () {
+                      final now = DateTime.now();
+                      return '${now.day.toString().padLeft(2, '0')}/'
+                          '${now.month.toString().padLeft(2, '0')}/'
+                          '${now.year}';
+                    }(),
+                    style: const TextStyle(
+                        color: _goldLight,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (widget.voyage['id'] != null)
+              Text('#${widget.voyage['id']}',
+                  style: TextStyle(
+                      color: Colors.white.withOpacity(0.25), fontSize: 10)),
+            const SizedBox(width: 8),
+            _iconBtn(Icons.refresh, 18, _fetchAll,
+                iconColor: Colors.white70),
+          ]),
           const SizedBox(height: 16),
           TabBar(
             controller: _tabs,
-            indicatorColor: goldLight,
+            indicatorColor: _goldLight,
             indicatorWeight: 3,
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white54,
@@ -537,8 +549,12 @@ class _HistoriquePageState extends State<HistoriquePage>
                 const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
             unselectedLabelStyle: const TextStyle(fontSize: 13),
             tabs: const [
-              Tab(icon: Icon(Icons.confirmation_number_outlined, size: 16), text: 'Tickets'),
-              Tab(icon: Icon(Icons.bar_chart_rounded, size: 16), text: 'Finance'),
+              Tab(
+                  icon: Icon(Icons.confirmation_number_outlined, size: 16),
+                  text: 'Tickets'),
+              Tab(
+                  icon: Icon(Icons.bar_chart_rounded, size: 16),
+                  text: 'Finance'),
             ],
           ),
         ],
@@ -546,7 +562,7 @@ class _HistoriquePageState extends State<HistoriquePage>
     );
   }
 
-  // ─── Shared micro-widgets ────────────────────────────────────
+  // ── Shared micro-widgets ──────────────────────────────────
   Widget sectionLabel(String label) => Text(
         label.toUpperCase(),
         style: TextStyle(
@@ -566,8 +582,9 @@ class _HistoriquePageState extends State<HistoriquePage>
             Container(
               width: 68, height: 68,
               decoration: BoxDecoration(
-                  color: navyMid.withOpacity(0.07), shape: BoxShape.circle),
-              child: Icon(icon, color: navyMid, size: 30),
+                  color: _navyMid.withOpacity(0.07),
+                  shape: BoxShape.circle),
+              child: Icon(icon, color: _navyMid, size: 30),
             ),
             const SizedBox(height: 14),
             Text(title,
@@ -575,11 +592,12 @@ class _HistoriquePageState extends State<HistoriquePage>
                 style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    color: navyDark)),
+                    color: _navyDark)),
             const SizedBox(height: 6),
             Text(subtitle,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
+                style: TextStyle(
+                    color: Colors.grey.shade400, fontSize: 13)),
           ],
         ),
       ),
@@ -645,7 +663,7 @@ class _HistoriquePageState extends State<HistoriquePage>
                 style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    color: color ?? navyDark)),
+                    color: color ?? _navyDark)),
             const SizedBox(height: 3),
             Text(label,
                 textAlign: TextAlign.center,
@@ -685,7 +703,7 @@ class _HistoriquePageState extends State<HistoriquePage>
                   borderRadius: BorderRadius.circular(12),
                   child: Ink(
                     decoration: BoxDecoration(
-                        color: navyMid,
+                        color: _navyMid,
                         borderRadius: BorderRadius.circular(12)),
                     child: const Center(
                       child: Row(
@@ -712,12 +730,14 @@ class _HistoriquePageState extends State<HistoriquePage>
   }
 }
 
-// ════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────
 // Tab 1 — TICKETS
-// ════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────
+
 class _TicketsMainTab extends StatefulWidget {
   final _HistoriquePageState page;
   const _TicketsMainTab({super.key, required this.page});
+
   @override
   State<_TicketsMainTab> createState() => _TicketsMainTabState();
 }
@@ -725,6 +745,7 @@ class _TicketsMainTab extends StatefulWidget {
 class _TicketsMainTabState extends State<_TicketsMainTab>
     with SingleTickerProviderStateMixin {
   late TabController _sub;
+
   @override
   void initState() {
     super.initState();
@@ -743,10 +764,10 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
     return Column(
       children: [
         Container(
-          color: navyDark,
+          color: _navyDark,
           child: TabBar(
             controller: _sub,
-            indicatorColor: goldLight,
+            indicatorColor: _goldLight,
             indicatorWeight: 2,
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white38,
@@ -766,12 +787,13 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
   }
 
   Widget _buildListeTab(_HistoriquePageState p) {
-    if (p._tickets.isEmpty)
+    if (p._tickets.isEmpty) {
       return p.emptyState(Icons.confirmation_number_outlined,
           'Aucun ticket aujourd\'hui',
           'Les tickets d\'aujourd\'hui apparaîtront ici');
+    }
     return RefreshIndicator(
-      color: navyMid,
+      color: _navyMid,
       onRefresh: p._fetchAll,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
@@ -801,33 +823,34 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
   Widget _dayChip(String day) => Row(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
             decoration: BoxDecoration(
-              color: navyMid.withOpacity(0.07),
+              color: _navyMid.withOpacity(0.07),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: navyMid.withOpacity(0.18)),
+              border: Border.all(color: _navyMid.withOpacity(0.18)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.calendar_today, size: 11, color: navyMid),
+                const Icon(Icons.calendar_today, size: 11, color: _navyMid),
                 const SizedBox(width: 6),
                 Text(day,
                     style: const TextStyle(
-                        color: navyMid,
+                        color: _navyMid,
                         fontSize: 12,
                         fontWeight: FontWeight.bold)),
               ],
             ),
           ),
           const SizedBox(width: 8),
-          Expanded(child: Divider(color: navyMid.withOpacity(0.1))),
+          Expanded(child: Divider(color: _navyMid.withOpacity(0.1))),
         ],
       );
 
   Widget _buildTicketCard(_HistoriquePageState p, Map<String, dynamic> t) {
-    final type   = (t['type_tarif'] ?? '').toString();
-    final color  = p._tarifColor(type);
+    final type  = (t['type_tarif'] ?? '').toString();
+    final color = p._tarifColor(type);
     final isFree = ((t['montant_total'] as num? ?? 0).toInt()) == 0;
     final qty    = (t['quantite'] as num? ?? 1).toInt();
     final rawSeg = t['segment_ordre'];
@@ -840,24 +863,28 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
 
     return Container(
       decoration: BoxDecoration(
-        color: cardWhite,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: navyMid.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2))
+            color: _navyMid.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          )
         ],
       ),
       child: Column(
         children: [
+          // Ticket header
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
               color: color.withOpacity(0.06),
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(16)),
-              border: Border(bottom: BorderSide(color: color.withOpacity(0.12))),
+              border:
+                  Border(bottom: BorderSide(color: color.withOpacity(0.12))),
             ),
             child: Row(
               children: [
@@ -873,7 +900,8 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                         Icon(p._tarifIcon(type), color: Colors.white, size: 12),
                         const SizedBox(width: 5),
                         Flexible(
-                          child: Text(type.isEmpty ? 'Inconnu' : type,
+                          child: Text(
+                              type.isEmpty ? 'Inconnu' : type,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                   color: Colors.white,
@@ -888,26 +916,28 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                 if (t['_statut_sync'] == 'pending')
                   _syncBadge(Colors.orange.shade600, Icons.sync, 'En attente')
                 else if (t['_statut_sync'] == 'failed')
-                  _syncBadge(Colors.red.shade600, Icons.sync_problem, 'Échec'),
+                  _syncBadge(
+                      Colors.red.shade600, Icons.sync_problem, 'Échec'),
                 Icon(Icons.access_time_rounded,
                     size: 11, color: Colors.grey.shade400),
                 const SizedBox(width: 4),
                 Text(p._formatTime(t['date_heure']),
-                    style:
-                        TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.grey.shade500)),
                 if (qty > 1) ...[
                   const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 7, vertical: 3),
                     decoration: BoxDecoration(
-                      color: navyMid.withOpacity(0.07),
+                      color: _navyMid.withOpacity(0.07),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: navyMid.withOpacity(0.15)),
+                      border:
+                          Border.all(color: _navyMid.withOpacity(0.15)),
                     ),
                     child: Text('×$qty',
                         style: const TextStyle(
-                            color: navyMid,
+                            color: _navyMid,
                             fontSize: 11,
                             fontWeight: FontWeight.bold)),
                   ),
@@ -915,6 +945,7 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
               ],
             ),
           ),
+          // Ticket body
           Padding(
             padding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -939,11 +970,10 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                                 style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 14,
-                                    color: navyDark)),
+                                    color: _navyDark)),
                           ),
                           Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
                             child: Icon(Icons.arrow_forward,
                                 size: 12, color: Colors.grey.shade300),
                           ),
@@ -962,7 +992,7 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                                 style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 14,
-                                    color: navyDark)),
+                                    color: _navyDark)),
                           ),
                         ],
                       ),
@@ -973,8 +1003,8 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                           runSpacing: 4,
                           children: [
                             if (seg != null)
-                              p.smallTag(Icons.route, 'Seg. $seg',
-                                  navyMid, navyMid.withOpacity(0.07)),
+                              p.smallTag(Icons.route, 'Seg. $seg', _navyMid,
+                                  _navyMid.withOpacity(0.07)),
                             if (t['nom_ligne'] != null)
                               p.smallTag(
                                   Icons.directions_bus,
@@ -1003,12 +1033,13 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                           fontWeight: FontWeight.bold,
                           color: isFree
                               ? const Color(0xFF16A34A)
-                              : navyDark),
+                              : _navyDark),
                     ),
                     if (!isFree)
                       Text('millimes',
                           style: TextStyle(
-                              fontSize: 10, color: Colors.grey.shade400)),
+                              fontSize: 10,
+                              color: Colors.grey.shade400)),
                   ],
                 ),
               ],
@@ -1021,8 +1052,7 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
 
   Widget _syncBadge(Color bg, IconData icon, String label) => Container(
         margin: const EdgeInsets.only(right: 6),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration:
             BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
         child: Row(
@@ -1042,36 +1072,33 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
   Widget _buildSegmentTab(_HistoriquePageState p) {
     final segs     = p._segmentBreakdown;
     final realSegs = Map.fromEntries(segs.entries.where((e) => e.key != '—'));
-    if (realSegs.isEmpty)
+    if (realSegs.isEmpty) {
       return p.emptyState(Icons.route, 'Aucun segment disponible',
           'Les informations de segment ne sont pas disponibles');
+    }
 
     String? bestSeg;
     int bestRev = -1;
     for (final e in realSegs.entries) {
       final rev = e.value.fold(
           0, (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt()));
-      if (rev > bestRev) {
-        bestRev = rev;
-        bestSeg = e.key;
-      }
+      if (rev > bestRev) { bestRev = rev; bestSeg = e.key; }
     }
 
     return RefreshIndicator(
-      color: navyMid,
+      color: _navyMid,
       onRefresh: p._fetchAll,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
         children: [
           Container(
             margin: const EdgeInsets.only(bottom: 16),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration:
-                BoxDecoration(color: navyDark, borderRadius: BorderRadius.circular(12)),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+                color: _navyDark, borderRadius: BorderRadius.circular(12)),
             child: Row(
               children: [
-                const Icon(Icons.route, color: goldLight, size: 16),
+                const Icon(Icons.route, color: _goldLight, size: 16),
                 const SizedBox(width: 8),
                 Text('${realSegs.length} segment(s)',
                     style: const TextStyle(
@@ -1087,7 +1114,7 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
           ),
           p.sectionLabel('Recette par segment'),
           const SizedBox(height: 10),
-          ...realSegs.entries.map((e) => _buildSegmentCard(p, e)).toList(),
+          ...realSegs.entries.map((e) => _buildSegmentCard(p, e)),
           if (segs.containsKey('—')) ...[
             const SizedBox(height: 4),
             _buildSegmentCard(
@@ -1096,28 +1123,28 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
           if (bestSeg != null) ...[
             const SizedBox(height: 4),
             Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 10),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: navyMid.withOpacity(0.07),
+                color: _navyMid.withOpacity(0.07),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: navyMid.withOpacity(0.15)),
+                border: Border.all(color: _navyMid.withOpacity(0.15)),
               ),
               child: Row(
                 children: [
                   const Icon(Icons.emoji_events_rounded,
-                      color: goldLight, size: 16),
+                      color: _goldLight, size: 16),
                   const SizedBox(width: 8),
                   Text('Segment le + rentable : seg. $bestSeg',
                       style: const TextStyle(
                           fontSize: 12,
-                          color: navyMid,
+                          color: _navyMid,
                           fontWeight: FontWeight.bold)),
                   const Spacer(),
                   Text('$bestRev ms',
                       style: const TextStyle(
                           fontSize: 12,
-                          color: navyDark,
+                          color: _navyDark,
                           fontWeight: FontWeight.bold)),
                 ],
               ),
@@ -1141,15 +1168,16 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
     final dep       = tickets.isNotEmpty ? tickets.first['point_depart'] ?? '' : '';
     final arr       = tickets.isNotEmpty ? tickets.first['point_arrivee'] ?? '' : '';
     final isUnknown = e.key == '—';
+    final clr       = isUnknown ? Colors.grey : _navyMid;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: cardWhite,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: navyMid.withOpacity(0.05),
+              color: _navyMid.withOpacity(0.05),
               blurRadius: 8,
               offset: const Offset(0, 2))
         ],
@@ -1157,15 +1185,13 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             decoration: BoxDecoration(
-              color: (isUnknown ? Colors.grey : navyMid).withOpacity(0.05),
+              color: clr.withOpacity(0.05),
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(16)),
-              border: Border(
-                  bottom: BorderSide(
-                      color: (isUnknown ? Colors.grey : navyMid)
-                          .withOpacity(0.1))),
+              border: Border(bottom: BorderSide(color: clr.withOpacity(0.1))),
             ),
             child: Row(
               children: [
@@ -1173,21 +1199,19 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                   padding: const EdgeInsets.symmetric(
                       horizontal: 11, vertical: 5),
                   decoration: BoxDecoration(
-                    color: (isUnknown ? Colors.grey : navyMid).withOpacity(0.1),
+                    color: clr.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: (isUnknown ? Colors.grey : navyMid)
-                            .withOpacity(0.2)),
+                    border: Border.all(color: clr.withOpacity(0.2)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(isUnknown ? Icons.help_outline : Icons.route,
-                          color: isUnknown ? Colors.grey : navyMid, size: 12),
+                          color: clr, size: 12),
                       const SizedBox(width: 5),
                       Text(isUnknown ? 'Non classé' : 'Segment ${e.key}',
                           style: TextStyle(
-                              color: isUnknown ? Colors.grey : navyMid,
+                              color: clr,
                               fontSize: 11,
                               fontWeight: FontWeight.bold)),
                     ],
@@ -1207,7 +1231,7 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                     style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: navyDark)),
+                        color: _navyDark)),
               ],
             ),
           ),
@@ -1231,12 +1255,14 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
   }
 }
 
-// ════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────
 // Tab 2 — FINANCE
-// ════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────
+
 class _FinanceMainTab extends StatefulWidget {
   final _HistoriquePageState page;
   const _FinanceMainTab({super.key, required this.page});
+
   @override
   State<_FinanceMainTab> createState() => _FinanceMainTabState();
 }
@@ -1244,6 +1270,7 @@ class _FinanceMainTab extends StatefulWidget {
 class _FinanceMainTabState extends State<_FinanceMainTab>
     with SingleTickerProviderStateMixin {
   late TabController _sub;
+
   @override
   void initState() {
     super.initState();
@@ -1262,10 +1289,10 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
     return Column(
       children: [
         Container(
-          color: navyDark,
+          color: _navyDark,
           child: TabBar(
             controller: _sub,
-            indicatorColor: goldLight,
+            indicatorColor: _goldLight,
             indicatorWeight: 2,
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white38,
@@ -1297,46 +1324,40 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
         ? '${((p._totalGratuits / p._totalTickets) * 100).round()}%'
         : '0%';
     return RefreshIndicator(
-      color: navyMid,
+      color: _navyMid,
       onRefresh: p._fetchAll,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
         children: [
-          Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                      child: _kpiCard('Recette totale', '${p._totalRecette} ms',
-                          sub: 'millimes DT',
-                          color: goldLight,
-                          icon: Icons.payments_rounded)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                      child: _kpiCard('Tickets vendus', '${p._totalTickets}',
-                          sub: 'aujourd\'hui',
-                          color: const Color(0xFF86EFAC),
-                          icon: Icons.confirmation_number_rounded)),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                      child: _kpiCard('Prix moyen', '${p._prixMoyen} ms',
-                          sub: 'ticket payant',
-                          color: Colors.lightBlue.shade200,
-                          icon: Icons.trending_up_rounded)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                      child: _kpiCard('Gratuits', '${p._totalGratuits}',
-                          sub: gratuitPct,
-                          color: Colors.green.shade300,
-                          icon: Icons.card_giftcard_rounded)),
-                ],
-              ),
-            ],
-          ),
+          Column(children: [
+            Row(children: [
+              Expanded(
+                  child: _kpiCard('Recette totale', '${p._totalRecette} ms',
+                      sub: 'millimes DT',
+                      color: _goldLight,
+                      icon: Icons.payments_rounded)),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: _kpiCard('Tickets vendus', '${p._totalTickets}',
+                      sub: 'aujourd\'hui',
+                      color: const Color(0xFF86EFAC),
+                      icon: Icons.confirmation_number_rounded)),
+            ]),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                  child: _kpiCard('Prix moyen', '${p._prixMoyen} ms',
+                      sub: 'ticket payant',
+                      color: Colors.lightBlue.shade200,
+                      icon: Icons.trending_up_rounded)),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: _kpiCard('Gratuits', '${p._totalGratuits}',
+                      sub: gratuitPct,
+                      color: Colors.green.shade300,
+                      icon: Icons.card_giftcard_rounded)),
+            ]),
+          ]),
           const SizedBox(height: 24),
           if (p._tarifBreakdown.isNotEmpty) ...[
             p.sectionLabel('Répartition des recettes'),
@@ -1357,7 +1378,7 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-          color: navyDark, borderRadius: BorderRadius.circular(14)),
+          color: _navyDark, borderRadius: BorderRadius.circular(14)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -1399,7 +1420,7 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
 
   Widget _buildTarifBar(_HistoriquePageState p) {
     final breakdown = p._tarifBreakdown;
-    final total = p._totalRecette.clamp(1, double.infinity);
+    final total     = p._totalRecette.clamp(1, double.infinity);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1449,10 +1470,12 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
     final maxTotal  = breakdown.values
         .map((v) => v['total']!)
         .fold(1, (a, b) => a > b ? a : b);
+
     return breakdown.entries.map((e) {
       final color  = p._tarifColor(e.key);
       final isFree = e.value['total']! == 0;
       final frac   = maxTotal == 0 ? 0.0 : e.value['total']! / maxTotal;
+
       return Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: Row(
@@ -1460,12 +1483,14 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
             SizedBox(
               width: 115,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 9, vertical: 5),
                 decoration: BoxDecoration(
                     color: color, borderRadius: BorderRadius.circular(20)),
                 child: Row(
                   children: [
-                    Icon(p._tarifIcon(e.key), color: Colors.white, size: 12),
+                    Icon(p._tarifIcon(e.key),
+                        color: Colors.white, size: 12),
                     const SizedBox(width: 5),
                     Expanded(
                         child: Text(e.key,
@@ -1484,7 +1509,7 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
                 borderRadius: BorderRadius.circular(4),
                 child: Container(
                   height: 8,
-                  color: navyMid.withOpacity(0.07),
+                  color: _navyMid.withOpacity(0.07),
                   alignment: Alignment.centerLeft,
                   child: FractionallySizedBox(
                     widthFactor: frac.clamp(0.02, 1.0),
@@ -1501,7 +1526,8 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
               width: 30,
               child: Text('×${e.value['count']}',
                   textAlign: TextAlign.right,
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                  style: TextStyle(
+                      fontSize: 11, color: Colors.grey.shade500)),
             ),
             const SizedBox(width: 8),
             SizedBox(
@@ -1511,7 +1537,9 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
                   style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
-                      color: isFree ? const Color(0xFF16A34A) : navyDark)),
+                      color: isFree
+                          ? const Color(0xFF16A34A)
+                          : _navyDark)),
             ),
           ],
         ),
@@ -1521,20 +1549,19 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
 
   Widget _buildParTarifTab(_HistoriquePageState p) {
     final breakdown = p._tarifBreakdown;
-    if (breakdown.isEmpty)
+    if (breakdown.isEmpty) {
       return p.emptyState(Icons.label_outline, 'Aucun tarif',
           'Les données apparaîtront ici');
+    }
     return RefreshIndicator(
-      color: navyMid,
+      color: _navyMid,
       onRefresh: p._fetchAll,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
         children: [
           p.sectionLabel('Détail financier par tarif'),
           const SizedBox(height: 10),
-          ...breakdown.entries
-              .map((e) => _buildTarifDetailCard(p, e))
-              .toList(),
+          ...breakdown.entries.map((e) => _buildTarifDetailCard(p, e)),
         ],
       ),
     );
@@ -1552,11 +1579,11 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: cardWhite,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: navyMid.withOpacity(0.05),
+              color: _navyMid.withOpacity(0.05),
               blurRadius: 8,
               offset: const Offset(0, 2))
         ],
@@ -1564,7 +1591,8 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             decoration: BoxDecoration(
               color: color.withOpacity(0.06),
               borderRadius:
@@ -1578,11 +1606,13 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
                   padding: const EdgeInsets.symmetric(
                       horizontal: 9, vertical: 5),
                   decoration: BoxDecoration(
-                      color: color, borderRadius: BorderRadius.circular(20)),
+                      color: color,
+                      borderRadius: BorderRadius.circular(20)),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(p._tarifIcon(e.key), color: Colors.white, size: 12),
+                      Icon(p._tarifIcon(e.key),
+                          color: Colors.white, size: 12),
                       const SizedBox(width: 5),
                       Text(e.key,
                           style: const TextStyle(
@@ -1606,7 +1636,8 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
               children: [
                 p.tarifStat('${e.value['count']}', 'tickets'),
                 p.vDivider(),
-                p.tarifStat(isFree ? '—' : '$unitaire', 'prix unitaire (ms)',
+                p.tarifStat(
+                    isFree ? '—' : '$unitaire', 'prix unitaire (ms)',
                     color: isFree ? const Color(0xFF16A34A) : null),
                 p.vDivider(),
                 p.tarifStat(pct, 'du total voyageurs', color: color),
@@ -1627,8 +1658,9 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
         manqueAGagner += e.value['count']! * p._prixMoyen;
       }
     }
+
     return RefreshIndicator(
-      color: navyMid,
+      color: _navyMid,
       onRefresh: p._fetchAll,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
@@ -1636,40 +1668,43 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-                color: navyDark, borderRadius: BorderRadius.circular(16)),
+                color: _navyDark,
+                borderRadius: BorderRadius.circular(16)),
             child: Column(
               children: [
-                const Text('Recette totale du voyage — aujourd\'hui',
+                const Text("Recette totale du voyage — aujourd'hui",
                     style: TextStyle(color: Colors.white60, fontSize: 13)),
                 const SizedBox(height: 8),
                 Text('${p._totalRecette} ms',
                     style: const TextStyle(
-                        color: goldLight,
+                        color: _goldLight,
                         fontSize: 36,
                         fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                Text('≈ ${(p._totalRecette / 1000).toStringAsFixed(3)} DT',
+                Text(
+                    '≈ ${(p._totalRecette / 1000).toStringAsFixed(3)} DT',
                     style: TextStyle(
-                        color: Colors.white.withOpacity(0.4), fontSize: 13)),
+                        color: Colors.white.withOpacity(0.4),
+                        fontSize: 13)),
               ],
             ),
           ),
           const SizedBox(height: 16),
-          _bilanRow('Tickets payants', '$payants', navyDark),
+          _bilanRow('Tickets payants', '$payants', _navyDark),
           _bilanRow('Tickets gratuits', '${p._totalGratuits}',
               const Color(0xFF16A34A)),
-          _bilanRow('Total voyageurs', '${p._totalTickets}', navyMid),
+          _bilanRow('Total voyageurs', '${p._totalTickets}', _navyMid),
           _bilanRow('Prix moyen (payants)', '${p._prixMoyen} ms',
               Colors.lightBlue.shade600),
           const SizedBox(height: 16),
-          Divider(color: navyMid.withOpacity(0.1)),
+          Divider(color: _navyMid.withOpacity(0.1)),
           const SizedBox(height: 16),
           p.sectionLabel('Analyse des gratuités'),
           const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: cardWhite,
+              color: Colors.white,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: const Color(0xFFE5E7EB)),
             ),
@@ -1679,7 +1714,7 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text('Manque à gagner estimé',
-                        style: TextStyle(fontSize: 13, color: navyDark)),
+                        style: TextStyle(fontSize: 13, color: _navyDark)),
                     Text('$manqueAGagner ms',
                         style: const TextStyle(
                             fontSize: 16,
@@ -1713,11 +1748,13 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
                       children: [
                         Flexible(
                             flex: (payants * 100).clamp(1, 10000),
-                            child: Container(color: navyMid)),
+                            child: Container(color: _navyMid)),
                         Flexible(
-                            flex: (p._totalGratuits * 100).clamp(1, 10000),
+                            flex:
+                                (p._totalGratuits * 100).clamp(1, 10000),
                             child: Container(
-                                color: const Color(0xFF16A34A).withOpacity(0.5))),
+                                color: const Color(0xFF16A34A)
+                                    .withOpacity(0.5))),
                       ],
                     ),
                   ),
@@ -1728,11 +1765,11 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
                     Container(
                         width: 8, height: 8,
                         decoration: const BoxDecoration(
-                            color: navyMid, shape: BoxShape.circle)),
+                            color: _navyMid, shape: BoxShape.circle)),
                     const SizedBox(width: 5),
                     Text('Payants ($payants)',
-                        style:
-                            TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                        style: TextStyle(
+                            fontSize: 10, color: Colors.grey.shade500)),
                     const SizedBox(width: 14),
                     Container(
                         width: 8, height: 8,
@@ -1741,8 +1778,8 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
                             shape: BoxShape.circle)),
                     const SizedBox(width: 5),
                     Text('Gratuits (${p._totalGratuits})',
-                        style:
-                            TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                        style: TextStyle(
+                            fontSize: 10, color: Colors.grey.shade500)),
                   ],
                 ),
               ],
@@ -1795,7 +1832,8 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(label,
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                style: TextStyle(
+                    fontSize: 13, color: Colors.grey.shade600)),
             Text(value,
                 style: TextStyle(
                     fontSize: 14,
@@ -1806,15 +1844,17 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
       );
 }
 
-// ════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────
 // Toast
-// ════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────
+
 class _ToastWidget extends StatefulWidget {
   final String msg;
   final Color color;
   final IconData icon;
   const _ToastWidget(
       {required this.msg, required this.color, required this.icon});
+
   @override
   State<_ToastWidget> createState() => _ToastWidgetState();
 }
@@ -1830,7 +1870,8 @@ class _ToastWidgetState extends State<_ToastWidget>
     super.initState();
     _ctrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 220));
-    _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+    _opacity =
+        CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
     _slide = Tween<Offset>(begin: const Offset(1.0, 0), end: Offset.zero)
         .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
     _ctrl.forward();
@@ -1857,8 +1898,8 @@ class _ToastWidgetState extends State<_ToastWidget>
             color: Colors.transparent,
             child: Container(
               constraints: const BoxConstraints(maxWidth: 300),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 18, vertical: 11),
               decoration: BoxDecoration(
                 color: widget.color,
                 borderRadius: BorderRadius.circular(12),

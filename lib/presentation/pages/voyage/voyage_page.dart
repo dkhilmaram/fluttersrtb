@@ -9,26 +9,20 @@ import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import '../local_database.dart';
-import 'vente_tickets.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../data/database/daos/voyage_dao.dart';
+import '../../../data/database/daos/ticket_dao.dart';
+import '../ticketing/vente_tickets.dart';
 
 // ─────────────────────────────────────────────────────────────
 // ⚠️  CONFIGURE THIS before shipping
 // ─────────────────────────────────────────────────────────────
-const String _kReportRecipient = 'dkhilmaram12@gmail.com';   // destination address
+const String _kReportRecipient = 'dkhilmaram12@gmail.com';
 const String _kSmtpHost       = 'smtp.gmail.com';
 const int    _kSmtpPort       = 587;
-const String _kSmtpUser       = 'dkhilmaram0@gmail.com';     // sender address
-const String _kSmtpPassword   = 'ppax xarr sfwc wejn';   // app password
+const String _kSmtpUser       = 'dkhilmaram0@gmail.com';
+const String _kSmtpPassword   = 'ppax xarr sfwc wejn';
 // ─────────────────────────────────────────────────────────────
-
-const Color navyDark  = Color(0xFF0D1B3E);
-const Color navyMid   = Color(0xFF1A3260);
-const Color navyLight = Color(0xFF1E4080);
-const Color gold      = Color(0xFFD4A017);
-const Color goldLight = Color(0xFFF5C842);
-const Color surface   = Color(0xFFF2F5FB);
-const Color cardWhite = Color(0xFFFFFFFF);
 
 class VoyageProgrammePage extends StatefulWidget {
   final Map<String, dynamic> agent;
@@ -42,20 +36,23 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
+  // ── Programmés state ──
   List<dynamic> voyagesProgrammes    = [];
   bool isLoadingProgrammes           = true;
   bool isOfflineProgrammes           = false;
   String? errorProgrammes;
 
+  // ── Non programmés state ──
   List<dynamic> voyagesNonProgrammes = [];
   bool isLoadingNonProgrammes        = true;
   bool isOfflineNonProgrammes        = false;
   String? errorNonProgrammes;
 
-  bool _clotureJourneeLoading     = false;
-  bool _clotureJourneeConfirming  = false;
-  bool _reopenJourneeLoading      = false;
-  bool _exportLoading             = false;  // ← NEW
+  // ── Shared top-level action state ──
+  bool _clotureConfirming  = false;
+  bool _clotureLoading     = false;
+  bool _reopenLoading      = false;
+  bool _exportLoading      = false;
 
   OverlayEntry? _toastEntry;
   Timer?        _toastTimer;
@@ -140,30 +137,45 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     return -1;
   }
 
-  bool get _allProgrammesClotures =>
-      voyagesProgrammes.isNotEmpty &&
-      voyagesProgrammes.every((v) => v['statut'] == 'cloture');
+  /// True only when EVERY voyage across both lists is clôturé.
+  bool get _allClotures {
+    final hasProg    = voyagesProgrammes.isNotEmpty;
+    final hasNonProg = voyagesNonProgrammes.isNotEmpty;
+    if (!hasProg && !hasNonProg) return false;
+    final progDone    = !hasProg    || voyagesProgrammes.every((v) => v['statut'] == 'cloture');
+    final nonProgDone = !hasNonProg || voyagesNonProgrammes.every((v) => v['statut'] == 'cloture');
+    return progDone && nonProgDone;
+  }
+
+  /// True when there is at least one open voyage in either list.
+  bool get _hasAnyOpen =>
+      voyagesProgrammes.any((v) => v['statut'] != 'cloture') ||
+      voyagesNonProgrammes.any((v) => v['statut'] != 'cloture');
+
+  /// True when there is at least one clôturé voyage in either list.
+  bool get _hasAnyCloture =>
+      voyagesProgrammes.any((v) => v['statut'] == 'cloture') ||
+      voyagesNonProgrammes.any((v) => v['statut'] == 'cloture');
 
   // ─────────────────────────────────────────────────────────────
   // Merge local offline statuts
   // ─────────────────────────────────────────────────────────────
 
   Future<List<dynamic>> _mergeLocalStatuts(List<dynamic> voyages) async {
-    final pendingClotures = await LocalDatabase.getPendingClotures();
+    final pendingClotures = await VoyageDao.getPendingClotures();
     final pendingIds =
         pendingClotures.map((r) => r['id_vente'] as int).toSet();
 
     final merged = <dynamic>[];
     for (final v in voyages) {
-      final voyage = Map<String, dynamic>.from(v as Map);
-      final idVente =
-          (voyage['id_vente'] ?? voyage['id']) as int?;
+      final voyage  = Map<String, dynamic>.from(v as Map);
+      final idVente = (voyage['id_vente'] ?? voyage['id']) as int?;
 
       if (idVente != null) {
         if (pendingIds.contains(idVente)) {
           voyage['statut'] = 'cloture';
         } else {
-          final localStatut = await LocalDatabase.getVoyageStatut(idVente);
+          final localStatut = await VoyageDao.getVoyageStatut(idVente);
           if (localStatut == 'cloture' || localStatut == 'cloture_pending') {
             voyage['statut'] = 'cloture';
           }
@@ -181,7 +193,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
   Future<void> _fetchProgrammes() async {
     setState(() {
       isLoadingProgrammes = true;
-      errorProgrammes = null;
+      errorProgrammes     = null;
     });
 
     try {
@@ -195,23 +207,23 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
 
       if (response.statusCode == 200) {
         final list = jsonDecode(response.body)['voyages'] as List<dynamic>;
-        await LocalDatabase.saveVoyages(_matricule, list);
+        await VoyageDao.saveVoyages(_matricule, list);
         setState(() {
-          voyagesProgrammes    = list;
-          isOfflineProgrammes  = false;
-          isLoadingProgrammes  = false;
+          voyagesProgrammes   = list;
+          isOfflineProgrammes = false;
+          isLoadingProgrammes = false;
         });
         return;
       }
     } catch (_) {}
 
-    final cached = await LocalDatabase.getVoyages(_matricule);
+    final cached = await VoyageDao.getVoyages(_matricule);
     if (cached != null) {
       final merged = await _mergeLocalStatuts(cached);
       setState(() {
-        voyagesProgrammes    = merged;
-        isOfflineProgrammes  = true;
-        isLoadingProgrammes  = false;
+        voyagesProgrammes   = merged;
+        isOfflineProgrammes = true;
+        isLoadingProgrammes = false;
       });
       _maybeShowOfflineToast();
     } else {
@@ -231,7 +243,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
   Future<void> _fetchNonProgrammes() async {
     setState(() {
       isLoadingNonProgrammes = true;
-      errorNonProgrammes = null;
+      errorNonProgrammes     = null;
     });
 
     try {
@@ -244,7 +256,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
           .timeout(const Duration(seconds: 6));
 
       if (response.statusCode == 200) {
-        final all = jsonDecode(response.body)['voyages'] as List<dynamic>;
+        final all  = jsonDecode(response.body)['voyages'] as List<dynamic>;
         final list = all
             .where((v) => v['type'] != 'programmé')
             .map((v) {
@@ -258,17 +270,17 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
             })
             .toList();
 
-        await LocalDatabase.saveVoyages(_matriculeNonProg, list);
+        await VoyageDao.saveVoyages(_matriculeNonProg, list);
         setState(() {
-          voyagesNonProgrammes    = list;
-          isOfflineNonProgrammes  = false;
-          isLoadingNonProgrammes  = false;
+          voyagesNonProgrammes   = list;
+          isOfflineNonProgrammes = false;
+          isLoadingNonProgrammes = false;
         });
         return;
       }
     } catch (_) {}
 
-    final cached = await LocalDatabase.getVoyages(_matriculeNonProg);
+    final cached = await VoyageDao.getVoyages(_matriculeNonProg);
     if (cached != null) {
       final list = cached.map((v) {
         final voyage = Map<String, dynamic>.from(v as Map);
@@ -282,9 +294,9 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
 
       final merged = await _mergeLocalStatuts(list);
       setState(() {
-        voyagesNonProgrammes    = merged;
-        isOfflineNonProgrammes  = true;
-        isLoadingNonProgrammes  = false;
+        voyagesNonProgrammes   = merged;
+        isOfflineNonProgrammes = true;
+        isLoadingNonProgrammes = false;
       });
       _maybeShowOfflineToast();
     } else {
@@ -304,32 +316,36 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Clôture Journée — bulk close
+  // Clôture Journée — BOTH tabs together
   // ─────────────────────────────────────────────────────────────
 
-  Future<void> _clotureJournee() async {
+  Future<void> _clotureJourneeAll() async {
     setState(() {
-      _clotureJourneeLoading    = true;
-      _clotureJourneeConfirming = false;
+      _clotureLoading    = true;
+      _clotureConfirming = false;
     });
 
-    final toClose = voyagesProgrammes
+    final toCloseProg = voyagesProgrammes
         .where((v) => v['statut'] != 'cloture')
         .toList();
+    final toCloseNonProg = voyagesNonProgrammes
+        .where((v) => v['statut'] != 'cloture')
+        .toList();
+    final allToClose = [...toCloseProg, ...toCloseNonProg];
 
-    if (toClose.isEmpty) {
-      setState(() => _clotureJourneeLoading = false);
+    if (allToClose.isEmpty) {
+      setState(() => _clotureLoading = false);
       _showToast('Tous les voyages sont déjà clôturés');
       return;
     }
 
-    final ids = toClose
+    final ids = allToClose
         .map((v) => (v['id_vente'] ?? v['id']) as int?)
         .whereType<int>()
         .toList();
 
-    bool success = false;
-    bool offline = false;
+    bool success  = false;
+    bool offline  = false;
     int  closedQt = 0;
 
     try {
@@ -344,14 +360,14 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        success   = data['success'] == true;
-        closedQt  = (data['closed'] as int?) ?? ids.length;
+        success  = data['success'] == true;
+        closedQt = (data['closed'] as int?) ?? ids.length;
       }
     } catch (_) {
       offline = true;
       for (final id in ids) {
-        await LocalDatabase.saveCloturePending(id);
-        await LocalDatabase.saveVoyageStatut(id, 'cloture');
+        await VoyageDao.saveCloturePending(id);
+        await VoyageDao.saveVoyageStatut(id, 'cloture');
       }
       success  = true;
       closedQt = ids.length;
@@ -361,8 +377,9 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
 
     if (success) {
       setState(() {
-        for (final v in toClose) v['statut'] = 'cloture';
-        _clotureJourneeLoading = false;
+        for (final v in toCloseProg)    v['statut'] = 'cloture';
+        for (final v in toCloseNonProg) v['statut'] = 'cloture';
+        _clotureLoading = false;
       });
       _showToast(
         offline
@@ -370,22 +387,27 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
             : 'Journée clôturée · $closedQt voyage(s)',
         isWarning: offline,
       );
-      if (!offline) await _fetchProgrammes();
+      if (!offline) {
+        await _fetchProgrammes();
+        await _fetchNonProgrammes();
+      }
     } else {
-      setState(() => _clotureJourneeLoading = false);
+      setState(() => _clotureLoading = false);
       _showToast('Échec de la clôture journée', isError: true);
     }
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Réouvrir Journée — bulk reopen ALL clôturés
+  // Réouvrir Journée — BOTH tabs together
   // ─────────────────────────────────────────────────────────────
 
-  Future<void> _reopenJournee() async {
-    final toClotures =
-        voyagesProgrammes.where((v) => v['statut'] == 'cloture').toList();
+  Future<void> _reopenJourneeAll() async {
+    final allClotures = [
+      ...voyagesProgrammes.where((v) => v['statut'] == 'cloture'),
+      ...voyagesNonProgrammes.where((v) => v['statut'] == 'cloture'),
+    ];
 
-    if (toClotures.isEmpty) {
+    if (allClotures.isEmpty) {
       _showToast('Aucun voyage clôturé à réouvrir');
       return;
     }
@@ -395,15 +417,15 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (_) => _ReopenJourneeConfirmSheet(
-          count: toClotures.length, todayLabel: _todayLabel),
+          count: allClotures.length, todayLabel: _todayLabel),
     );
 
     if (confirmed != true || !mounted) return;
 
-    setState(() => _reopenJourneeLoading = true);
+    setState(() => _reopenLoading = true);
     _showToast('Réouverture en cours…');
 
-    final ids = toClotures
+    final ids = allClotures
         .map((v) => (v['id_vente'] ?? v['id']) as int?)
         .whereType<int>()
         .toList();
@@ -427,7 +449,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       }
     } catch (_) {
       offline = true;
-      for (final id in ids) await LocalDatabase.clearVoyageStatut(id);
+      for (final id in ids) await VoyageDao.clearVoyageStatut(id);
       success = true;
     }
 
@@ -435,8 +457,8 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
 
     if (success) {
       setState(() {
-        for (final v in toClotures) v['statut'] = 'actif';
-        _reopenJourneeLoading = false;
+        for (final v in allClotures) v['statut'] = 'actif';
+        _reopenLoading = false;
       });
       _showToast(
         offline
@@ -444,15 +466,18 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
             : 'Journée réouverte · ${ids.length} voyage(s)',
         isWarning: offline,
       );
-      if (!offline) await _fetchProgrammes();
+      if (!offline) {
+        await _fetchProgrammes();
+        await _fetchNonProgrammes();
+      }
     } else {
-      setState(() => _reopenJourneeLoading = false);
+      setState(() => _reopenLoading = false);
       _showToast('Échec de la réouverture', isError: true);
     }
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Reopen a single clôturé voyage
+  // Reopen a single voyage
   // ─────────────────────────────────────────────────────────────
 
   Future<void> _reopenVoyage(Map<String, dynamic> voyage) async {
@@ -481,7 +506,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
-          await LocalDatabase.clearVoyageStatut(idVente);
+          await VoyageDao.clearVoyageStatut(idVente);
           setState(() => voyage['statut'] = 'actif');
           _showToast('Voyage réouvert avec succès');
           return;
@@ -496,13 +521,9 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
   }
 
   // ─────────────────────────────────────────────────────────────
-  // ══════════════════════════════════════════════════════════════
-  //  EXPORT — Ask format then send email
-  // ══════════════════════════════════════════════════════════════
+  // Export (uses all voyages from both tabs)
   // ─────────────────────────────────────────────────────────────
 
-  /// Shows a bottom sheet letting the agent choose Excel or PDF,
-  /// then builds the file and emails it to [_kReportRecipient].
   Future<void> _showExportDialog() async {
     final choice = await showModalBottomSheet<String>(
       context: context,
@@ -511,20 +532,17 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       builder: (_) => _ExportFormatSheet(todayLabel: _todayLabel),
     );
     if (choice == null || !mounted) return;
-    await _doExport(choice); // 'excel' or 'pdf'
+    await _doExport(choice);
   }
 
- // ══════════════════════════════════════════════════════════════
-  //  EXPORT — today-only filter applied before building the file
-  // ══════════════════════════════════════════════════════════════
-
-  /// Returns true if [dateStr] falls on today's local date.
   bool _isToday(String? dateStr) {
     if (dateStr == null) return false;
     try {
       final dt  = DateTime.parse(dateStr).toLocal();
       final now = DateTime.now();
-      return dt.year == now.year && dt.month == now.month && dt.day == now.day;
+      return dt.year == now.year &&
+             dt.month == now.month &&
+             dt.day == now.day;
     } catch (_) {
       return false;
     }
@@ -539,16 +557,17 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       isWarning: true,
     );
 
+    // Merge both voyage lists for the report
+    final allVoyages = [...voyagesProgrammes, ...voyagesNonProgrammes];
+
     try {
-      // ── Collect tickets for every clôturé voyage, TODAY only ──
       final List<Map<String, dynamic>> allTickets = [];
-      for (final v in voyagesProgrammes) {
+      for (final v in allVoyages) {
         final id = (v['id_vente'] ?? v['id']) as int?;
         if (id == null) continue;
-        final rows = await LocalDatabase.getTicketsByVoyage(id);
+        final rows = await TicketDao.getTicketsByVoyage(id);
         for (final r in rows) {
           final ticket = Map<String, dynamic>.from(r);
-          // ── TODAY FILTER ──────────────────────────────────────
           if (_isToday(ticket['date_heure'] as String?)) {
             allTickets.add(ticket);
           }
@@ -556,9 +575,10 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       }
 
       final agent     = widget.agent;
-      final agentName = '${agent['prenom'] ?? ''} ${agent['nom'] ?? ''}'.trim();
-      final now       = DateTime.now();
-      final dateStr   =
+      final agentName =
+          '${agent['prenom'] ?? ''} ${agent['nom'] ?? ''}'.trim();
+      final now     = DateTime.now();
+      final dateStr =
           '${now.day.toString().padLeft(2, '0')}-'
           '${now.month.toString().padLeft(2, '0')}-'
           '${now.year}';
@@ -577,8 +597,10 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       if (format == 'excel') {
         file = await _buildExcel(
           allTickets:    allTickets,
+          voyages:       allVoyages,
           agentName:     agentName,
           dateStr:       dateStr,
+          label:         'journee_complete',
           totalRecette:  totalRecette,
           totalTickets:  totalTickets,
           totalGratuits: totalGratuits,
@@ -587,6 +609,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       } else {
         file = await _buildPdf(
           allTickets:    allTickets,
+          voyages:       allVoyages,
           agentName:     agentName,
           dateStr:       dateStr,
           totalRecette:  totalRecette,
@@ -603,6 +626,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
         dateStr:      dateStr,
         totalRecette: totalRecette,
         totalTickets: totalTickets,
+        voyageCount:  allVoyages.length,
       );
 
       _showToast('Rapport (aujourd\'hui) envoyé à $_kReportRecipient ✓');
@@ -614,22 +638,25 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     }
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // Build Excel
+  // ─────────────────────────────────────────────────────────────
+
   Future<File> _buildExcel({
     required List<Map<String, dynamic>> allTickets,
+    required List<dynamic> voyages,
     required String agentName,
     required String dateStr,
+    required String label,
     required int totalRecette,
     required int totalTickets,
     required int totalGratuits,
     required Directory dir,
   }) async {
     final excel = xl.Excel.createExcel();
-    // Remove the auto-created default sheet so it is never empty
     excel.delete('Sheet1');
 
-    // ── SHEET 1 — Résumé ──────────────────────────────────────
     final resume = excel['Résumé'];
-
     _xlsCell(resume, 0, 0, 'RAPPORT JOURNÉE — $_todayLabel',
         bold: true, fgHex: '#0D1B3E');
     _xlsCell(resume, 1, 0, 'Agent : $agentName', fgHex: '#374151');
@@ -638,11 +665,15 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     _xlsHeader(resume, 4, 0, 'Indicateur');
     _xlsHeader(resume, 4, 1, 'Valeur');
 
-    final payants = totalTickets - totalGratuits;
+    final payants   = totalTickets - totalGratuits;
     final prixMoyen = payants > 0
         ? (allTickets
-                    .where((t) => (t['montant_total'] as num? ?? 0).toInt() > 0)
-                    .fold(0, (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt())) /
+                    .where((t) =>
+                        (t['montant_total'] as num? ?? 0).toInt() > 0)
+                    .fold(0,
+                        (s, t) =>
+                            s +
+                            ((t['montant_total'] as num? ?? 0).toInt())) /
                 payants)
             .round()
         : 0;
@@ -660,13 +691,16 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
             ? '${((totalGratuits / totalTickets) * 100).toStringAsFixed(1)}%'
             : '0%'
       ],
-      ['Voyages clôturés', voyagesProgrammes.length],
+      ['Voyages programmés', voyagesProgrammes.length],
+      ['Voyages non programmés', voyagesNonProgrammes.length],
+      ['Total voyages', voyages.length],
     ];
 
     for (int i = 0; i < kpis.length; i++) {
       final bg = i.isEven ? '#F2F5FB' : '#FFFFFF';
       _xlsCell(resume, 5 + i, 0, kpis[i][0], bgHex: bg, bold: true);
-      _xlsCell(resume, 5 + i, 1, kpis[i][1], bgHex: bg,
+      _xlsCell(resume, 5 + i, 1, kpis[i][1],
+          bgHex: bg,
           fgHex: kpis[i][0].toString().contains('Recette')
               ? '#0D1B3E'
               : kpis[i][0].toString().contains('gratuit')
@@ -677,7 +711,6 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     resume.setColumnWidth(0, 32);
     resume.setColumnWidth(1, 22);
 
-    // ── SHEET 2 — Tickets ─────────────────────────────────────
     final ticketsSheet = excel['Tickets'];
     final headers = [
       '#', 'Date', 'Heure', 'Départ', 'Arrivée',
@@ -688,10 +721,10 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     }
 
     for (int i = 0; i < allTickets.length; i++) {
-      final t   = allTickets[i];
+      final t      = allTickets[i];
       final isFree = ((t['montant_total'] as num? ?? 0).toInt()) == 0;
-      final dt  = DateTime.tryParse(t['date_heure'] ?? '');
-      final bg  = i.isEven ? '#F9FAFB' : '#FFFFFF';
+      final dt     = DateTime.tryParse(t['date_heure'] ?? '');
+      final bg     = i.isEven ? '#F9FAFB' : '#FFFFFF';
 
       _xlsCell(ticketsSheet, i + 1, 0, i + 1, bgHex: bg);
       _xlsCell(ticketsSheet, i + 1, 1,
@@ -728,7 +761,6 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                   : '#16A34A');
     }
 
-    // Total row
     final totalRow = allTickets.length + 2;
     _xlsCell(ticketsSheet, totalRow, 6, 'TOTAL',
         bold: true, bgHex: '#1A3260', fgHex: '#FFFFFF');
@@ -737,13 +769,14 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     _xlsCell(ticketsSheet, totalRow, 9, totalRecette,
         bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
 
-    final widths = [5.0, 14.0, 10.0, 22.0, 22.0, 10.0, 28.0, 8.0, 16.0, 14.0, 12.0];
+    final widths = [
+      5.0, 14.0, 10.0, 22.0, 22.0, 10.0, 28.0, 8.0, 16.0, 14.0, 12.0
+    ];
     for (int c = 0; c < widths.length; c++) {
       ticketsSheet.setColumnWidth(c, widths[c]);
     }
 
-    // ── SHEET 3 — Par tarif ───────────────────────────────────
-    final tarifSheet = excel['Par tarif'];
+    final tarifSheet   = excel['Par tarif'];
     final tarifHeaders = [
       'Type de tarif', 'Quantité', 'Prix unitaire (ms)', 'Total (ms)', '% du total',
     ];
@@ -756,12 +789,12 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       final type = ((t['type_tarif'] ?? '') as String).trim().isEmpty
           ? 'Inconnu'
           : (t['type_tarif'] as String).trim();
-      final qty   = (t['quantite'] as num? ?? 1).toInt();
-      final total = (t['montant_total'] as num? ?? 0).toInt();
-      final unit  = (t['prix_unitaire'] as num? ?? 0).toInt();
-      tarifMap[type] ??= {'count': 0, 'total': 0, 'unitaire': 0};
-      tarifMap[type]!['count'] = tarifMap[type]!['count']! + qty;
-      tarifMap[type]!['total'] = tarifMap[type]!['total']! + total;
+      final qty    = (t['quantite'] as num? ?? 1).toInt();
+      final total  = (t['montant_total'] as num? ?? 0).toInt();
+      final unit   = (t['prix_unitaire'] as num? ?? 0).toInt();
+      tarifMap[type]               ??= {'count': 0, 'total': 0, 'unitaire': 0};
+      tarifMap[type]!['count']      = tarifMap[type]!['count']! + qty;
+      tarifMap[type]!['total']      = tarifMap[type]!['total']! + total;
       if (unit > 0) tarifMap[type]!['unitaire'] = unit;
     }
     final tarifEntries = tarifMap.entries.toList()
@@ -770,7 +803,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     int tRow = 1;
     for (final e in tarifEntries) {
       final isFree = e.value['total']! == 0;
-      final pct = totalTickets > 0
+      final pct    = totalTickets > 0
           ? '${((e.value['count']! / totalTickets) * 100).toStringAsFixed(1)}%'
           : '0%';
       final bg = tRow.isOdd ? '#F9FAFB' : '#FFFFFF';
@@ -784,7 +817,6 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       tRow++;
     }
 
-    // Totals
     _xlsCell(tarifSheet, tRow + 1, 0, 'TOTAL',
         bold: true, bgHex: '#1A3260', fgHex: '#FFFFFF');
     _xlsCell(tarifSheet, tRow + 1, 1, totalTickets,
@@ -800,70 +832,69 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     tarifSheet.setColumnWidth(3, 16);
     tarifSheet.setColumnWidth(4, 14);
 
-    // ── SHEET 4 — Par voyage ──────────────────────────────────
     final voyageSheet = excel['Par voyage'];
-    final vHeaders = [
-      'Voyage', 'Trajet', 'Tickets', 'Gratuits', 'Payants', 'Recette (ms)',
+    final vHeaders    = [
+      'Voyage', 'Type', 'Trajet', 'Tickets', 'Gratuits', 'Payants', 'Recette (ms)',
     ];
     for (int c = 0; c < vHeaders.length; c++) {
       _xlsHeader(voyageSheet, 0, c, vHeaders[c]);
     }
 
     int vRow = 1;
-    for (final v in voyagesProgrammes) {
-      final id      = (v['id_vente'] ?? v['id']) as int?;
-      final depart  = v['depart'] ?? '?';
-      final arrivee = v['arrivee'] ?? '?';
+    for (final v in voyages) {
+      final id       = (v['id_vente'] ?? v['id']) as int?;
+      final depart   = v['depart'] ?? '?';
+      final arrivee  = v['arrivee'] ?? '?';
+      final typeStr  = (v['type'] as String?) ?? 'programmé';
       final vTickets = id == null
           ? <Map<String, dynamic>>[]
           : allTickets.where((t) => t['id_vente'] == id).toList();
-      final vTotal   = vTickets.fold(
+      final vTotal  = vTickets.fold(
           0, (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt()));
-      final vCount   = vTickets.fold(
+      final vCount  = vTickets.fold(
           0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
-      final vGratis  = vTickets
+      final vGratis = vTickets
           .where((t) => ((t['montant_total'] as num? ?? 0).toInt()) == 0)
           .fold(0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
       final bg = vRow.isOdd ? '#F9FAFB' : '#FFFFFF';
 
       _xlsCell(voyageSheet, vRow, 0, '#${id ?? '?'}', bgHex: bg, bold: true);
-      _xlsCell(voyageSheet, vRow, 1, '$depart → $arrivee', bgHex: bg);
-      _xlsCell(voyageSheet, vRow, 2, vCount, bgHex: bg);
-      _xlsCell(voyageSheet, vRow, 3, vGratis,
+      _xlsCell(voyageSheet, vRow, 1, typeStr, bgHex: bg);
+      _xlsCell(voyageSheet, vRow, 2, '$depart → $arrivee', bgHex: bg);
+      _xlsCell(voyageSheet, vRow, 3, vCount, bgHex: bg);
+      _xlsCell(voyageSheet, vRow, 4, vGratis,
           bgHex: bg, fgHex: vGratis > 0 ? '#16A34A' : '#111827');
-      _xlsCell(voyageSheet, vRow, 4, vCount - vGratis, bgHex: bg);
-      _xlsCell(voyageSheet, vRow, 5, vTotal,
+      _xlsCell(voyageSheet, vRow, 5, vCount - vGratis, bgHex: bg);
+      _xlsCell(voyageSheet, vRow, 6, vTotal,
           bgHex: bg, bold: true, fgHex: '#0D1B3E');
       vRow++;
     }
 
     voyageSheet.setColumnWidth(0, 10);
-    voyageSheet.setColumnWidth(1, 32);
-    voyageSheet.setColumnWidth(2, 12);
+    voyageSheet.setColumnWidth(1, 16);
+    voyageSheet.setColumnWidth(2, 32);
     voyageSheet.setColumnWidth(3, 12);
     voyageSheet.setColumnWidth(4, 12);
-    voyageSheet.setColumnWidth(5, 16);
+    voyageSheet.setColumnWidth(5, 12);
+    voyageSheet.setColumnWidth(6, 16);
 
-    // ── Save ──────────────────────────────────────────────────
     final bytes    = excel.encode()!;
-    final fileName = 'rapport_journee_${_matricule}_$dateStr.xlsx';
+    final fileName = 'rapport_${label}_${_matricule}_$dateStr.xlsx';
     final file     = File('${dir.path}/$fileName');
     await file.writeAsBytes(bytes);
     return file;
   }
 
-  // ── Excel cell helpers ──────────────────────────────────────
-
   void _xlsHeader(xl.Sheet s, int row, int col, String text) {
     final cell = s.cell(xl.CellIndex.indexByColumnRow(
         columnIndex: col, rowIndex: row));
-    cell.value = xl.TextCellValue(text);
-    cell.cellStyle = xl.CellStyle(
+    cell.value      = xl.TextCellValue(text);
+    cell.cellStyle  = xl.CellStyle(
       bold: true,
-      fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
+      fontColorHex:       xl.ExcelColor.fromHexString('#FFFFFF'),
       backgroundColorHex: xl.ExcelColor.fromHexString('#1A3260'),
-      horizontalAlign: xl.HorizontalAlign.Center,
-      verticalAlign: xl.VerticalAlign.Center,
+      horizontalAlign:    xl.HorizontalAlign.Center,
+      verticalAlign:      xl.VerticalAlign.Center,
     );
   }
 
@@ -889,10 +920,13 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     );
   }
 
-  // ─── Build PDF ───────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
+  // Build PDF
+  // ─────────────────────────────────────────────────────────────
 
   Future<File> _buildPdf({
     required List<Map<String, dynamic>> allTickets,
+    required List<dynamic> voyages,
     required String agentName,
     required String dateStr,
     required int totalRecette,
@@ -900,28 +934,31 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     required int totalGratuits,
     required Directory dir,
   }) async {
-    final pdf = pw.Document();
+    final pdf      = pw.Document();
     final payants  = totalTickets - totalGratuits;
     final prixMoyen = payants > 0
         ? (allTickets
-                    .where((t) => (t['montant_total'] as num? ?? 0).toInt() > 0)
-                    .fold(0, (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt())) /
+                    .where((t) =>
+                        (t['montant_total'] as num? ?? 0).toInt() > 0)
+                    .fold(0,
+                        (s, t) =>
+                            s +
+                            ((t['montant_total'] as num? ?? 0).toInt())) /
                 payants)
             .round()
         : 0;
 
-    // ── Cover / Summary page ──────────────────────────────────
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(32),
         build: (ctx) => [
-          // Title block
           pw.Container(
             padding: const pw.EdgeInsets.all(16),
             decoration: pw.BoxDecoration(
               color: PdfColor.fromHex('0D1B3E'),
-              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+              borderRadius:
+                  const pw.BorderRadius.all(pw.Radius.circular(8)),
             ),
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -938,7 +975,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                 pw.Text(
                   'Agent : $agentName   |   Généré le $dateStr',
                   style: const pw.TextStyle(
-                   color: PdfColor.fromInt(0xB3FFFFFF),
+                    color: PdfColor.fromInt(0xB3FFFFFF),
                     fontSize: 11,
                   ),
                 ),
@@ -946,8 +983,6 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
             ),
           ),
           pw.SizedBox(height: 20),
-
-          // KPI grid
           pw.Text('INDICATEURS CLÉS',
               style: pw.TextStyle(
                   fontSize: 11,
@@ -959,31 +994,36 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                 color: PdfColor.fromHex('E5E7EB'), width: 0.5),
             children: [
               _pdfTableRow(
-                  ['Recette totale', '$totalRecette ms',
+                  ['Recette totale',
+                   '$totalRecette ms',
                    '≈ ${(totalRecette / 1000).toStringAsFixed(3)} DT'],
-                  isHeader: false, highlight: true),
-              _pdfTableRow(
-                  ['Total tickets', '$totalTickets', '$payants payants + $totalGratuits gratuits'],
-                  isHeader: false),
+                  highlight: true),
+              _pdfTableRow([
+                'Total tickets',
+                '$totalTickets',
+                '$payants payants + $totalGratuits gratuits'
+              ]),
               _pdfTableRow(
                   ['Prix moyen (payants)', '$prixMoyen ms', ''],
-                  isHeader: false, highlight: true),
+                  highlight: true),
+              _pdfTableRow([
+                'Taux de gratuité',
+                totalTickets > 0
+                    ? '${((totalGratuits / totalTickets) * 100).toStringAsFixed(1)}%'
+                    : '0%',
+                ''
+              ]),
               _pdfTableRow(
-                  ['Taux de gratuité',
-                   totalTickets > 0
-                       ? '${((totalGratuits / totalTickets) * 100).toStringAsFixed(1)}%'
-                       : '0%',
-                   ''],
-                  isHeader: false),
+                  ['Voyages programmés', '${voyagesProgrammes.length}', ''],
+                  highlight: true),
               _pdfTableRow(
-                  ['Voyages programmés clôturés',
-                   '${voyagesProgrammes.length}', ''],
-                  isHeader: false, highlight: true),
+                  ['Voyages non programmés', '${voyagesNonProgrammes.length}', '']),
+              _pdfTableRow(
+                  ['Total voyages', '${voyages.length}', ''],
+                  highlight: true),
             ],
           ),
           pw.SizedBox(height: 24),
-
-          // Tarif breakdown
           pw.Text('RÉPARTITION PAR TARIF',
               style: pw.TextStyle(
                   fontSize: 11,
@@ -992,8 +1032,6 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
           pw.SizedBox(height: 8),
           _buildPdfTarifTable(allTickets, totalTickets),
           pw.SizedBox(height: 24),
-
-          // Tickets table
           pw.Text('DÉTAIL DES TICKETS',
               style: pw.TextStyle(
                   fontSize: 11,
@@ -1021,18 +1059,22 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                 ? PdfColor.fromHex('F2F5FB')
                 : PdfColors.white,
       ),
-      children: cells.map((c) => pw.Padding(
-            padding: const pw.EdgeInsets.symmetric(
-                horizontal: 8, vertical: 6),
-            child: pw.Text(
-              c,
-              style: pw.TextStyle(
-                fontSize: 10,
-                fontWeight: isHeader ? pw.FontWeight.bold : null,
-                color: isHeader ? PdfColors.white : PdfColor.fromHex('111827'),
-              ),
-            ),
-          )).toList(),
+      children: cells
+          .map((c) => pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 6),
+                child: pw.Text(
+                  c,
+                  style: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: isHeader ? pw.FontWeight.bold : null,
+                    color: isHeader
+                        ? PdfColors.white
+                        : PdfColor.fromHex('111827'),
+                  ),
+                ),
+              ))
+          .toList(),
     );
   }
 
@@ -1045,16 +1087,16 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
           : (t['type_tarif'] as String).trim();
       final qty   = (t['quantite'] as num? ?? 1).toInt();
       final total = (t['montant_total'] as num? ?? 0).toInt();
-      tarifMap[type] ??= {'count': 0, 'total': 0};
-      tarifMap[type]!['count'] = tarifMap[type]!['count']! + qty;
-      tarifMap[type]!['total'] = tarifMap[type]!['total']! + total;
+      tarifMap[type]             ??= {'count': 0, 'total': 0};
+      tarifMap[type]!['count']   = tarifMap[type]!['count']! + qty;
+      tarifMap[type]!['total']   = tarifMap[type]!['total']! + total;
     }
     final entries = tarifMap.entries.toList()
       ..sort((a, b) => b.value['total']!.compareTo(a.value['total']!));
 
     return pw.Table(
-      border:
-          pw.TableBorder.all(color: PdfColor.fromHex('E5E7EB'), width: 0.5),
+      border: pw.TableBorder.all(
+          color: PdfColor.fromHex('E5E7EB'), width: 0.5),
       children: [
         _pdfTableRow(
             ['Type de tarif', 'Qté', 'Total (ms)', '% voyageurs'],
@@ -1071,7 +1113,12 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
           ], highlight: entries.indexOf(e).isEven);
         }),
         _pdfTableRow(
-            ['TOTAL', '$totalTickets', '${tickets.fold(0, (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt()))}', '100%'],
+            [
+              'TOTAL',
+              '$totalTickets',
+              '${tickets.fold(0, (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt()))}',
+              '100%'
+            ],
             isHeader: true),
       ],
     );
@@ -1079,8 +1126,8 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
 
   pw.Widget _buildPdfTicketsTable(List<Map<String, dynamic>> tickets) {
     return pw.Table(
-      border:
-          pw.TableBorder.all(color: PdfColor.fromHex('E5E7EB'), width: 0.5),
+      border: pw.TableBorder.all(
+          color: PdfColor.fromHex('E5E7EB'), width: 0.5),
       columnWidths: const {
         0: pw.FixedColumnWidth(25),
         1: pw.FlexColumnWidth(2),
@@ -1090,7 +1137,8 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
         5: pw.FixedColumnWidth(55),
       },
       children: [
-        _pdfTableRow(['#', 'Départ', 'Arrivée', 'Tarif', 'Qté', 'Total (ms)'],
+        _pdfTableRow(
+            ['#', 'Départ', 'Arrivée', 'Tarif', 'Qté', 'Total (ms)'],
             isHeader: true),
         ...tickets.asMap().entries.map((entry) {
           final i = entry.key;
@@ -1108,7 +1156,9 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     );
   }
 
-  // ─── Send email ──────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
+  // Send email
+  // ─────────────────────────────────────────────────────────────
 
   Future<void> _sendEmail({
     required File file,
@@ -1117,6 +1167,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     required String dateStr,
     required int totalRecette,
     required int totalTickets,
+    required int voyageCount,
   }) async {
     final smtpServer = SmtpServer(
       _kSmtpHost,
@@ -1125,24 +1176,22 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       password: _kSmtpPassword,
     );
 
-    final mimeType = format == 'excel'
-        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        : 'application/pdf';
-
     final message = Message()
       ..from = Address(_kSmtpUser, 'SRTB Billetterie')
       ..recipients.add(_kReportRecipient)
       ..subject =
-          'Rapport journée $dateStr — Agent $agentName — $_totalRecetteLabel ms'
+          'Rapport journée $dateStr — Agent $agentName — $totalRecette ms'
       ..text = '''
 Rapport de journée du $_todayLabel
 Agent : $agentName
 Matricule : $_matricule
 
 Récapitulatif :
-  • Recette totale : $totalRecette ms (≈ ${(totalRecette / 1000).toStringAsFixed(3)} DT)
-  • Total tickets  : $totalTickets
-  • Voyages clôturés : ${voyagesProgrammes.length}
+  • Recette totale  : $totalRecette ms (≈ ${(totalRecette / 1000).toStringAsFixed(3)} DT)
+  • Total tickets   : $totalTickets
+  • Voyages programmés   : ${voyagesProgrammes.length}
+  • Voyages non programmés : ${voyagesNonProgrammes.length}
+  • Total voyages clôturés : $voyageCount
 
 Fichier joint : ${file.path.split('/').last}
 '''.trim()
@@ -1152,15 +1201,6 @@ Fichier joint : ${file.path.split('/').last}
 
     // ignore: deprecated_member_use
     await send(message, smtpServer);
-  }
-
-  String get _totalRecetteLabel {
-    int total = 0;
-    for (final v in voyagesProgrammes) {
-      // We display a placeholder here; actual sum is in _doExport
-      total += 0;
-    }
-    return total.toString();
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -1195,13 +1235,15 @@ Fichier joint : ${file.path.split('/').last}
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: surface,
+      backgroundColor: AppTheme.surface,
       body: NestedScrollView(
         headerSliverBuilder: (_, __) => [
           SliverToBoxAdapter(child: _buildHeader()),
         ],
         body: Column(
           children: [
+            // ── Shared action bar (above the tab bar) ──
+            _buildSharedActionBar(),
             _buildTabBar(),
             Expanded(
               child: TabBarView(
@@ -1219,149 +1261,192 @@ Fichier joint : ${file.path.split('/').last}
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Header
+  // Shared Action Bar — sits above tabs, covers both lists
   // ─────────────────────────────────────────────────────────────
 
-  Widget _buildHeader() {
-    final agent = widget.agent;
+  Widget _buildSharedActionBar() {
+    final bool loading = isLoadingProgrammes || isLoadingNonProgrammes;
+    if (loading) return const SizedBox.shrink();
+
+    final bool nothingToShow =
+        voyagesProgrammes.isEmpty && voyagesNonProgrammes.isEmpty;
+    if (nothingToShow) return const SizedBox.shrink();
+
     return Container(
-      width: double.infinity,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [navyDark, navyMid, navyLight],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+      color: AppTheme.navyDark,
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        transitionBuilder: (child, anim) =>
+            FadeTransition(opacity: anim, child: child),
+        child: _clotureConfirming
+            ? _buildClotureConfirmCard()
+            : _allClotures
+                ? _buildPostClotureActions()
+                : _buildClotureJourneeBtn(),
       ),
-      padding: const EdgeInsets.fromLTRB(20, 52, 20, 20),
+    );
+  }
+
+  /// Inline confirm card.
+  Widget _buildClotureConfirmCard() {
+    final allToClose = [
+      ...voyagesProgrammes.where((v) => v['statut'] != 'cloture'),
+      ...voyagesNonProgrammes.where((v) => v['statut'] != 'cloture'),
+    ];
+
+    return Container(
+      key: const ValueKey('cj_confirm'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.navyMid.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+            color: Colors.red.shade300.withOpacity(0.5), width: 1.5),
+      ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Back ──
-          Align(
-            alignment: Alignment.topLeft,
-            child: GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.arrow_back_ios_new,
-                    color: Colors.white, size: 17),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // ── Logo ──
-          Container(
-            width: 72,
-            height: 72,
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6))
-              ],
-            ),
-            child: Image.asset(
-              'assets/images/logo_srtb.png',
-              fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.directions_bus, size: 44, color: navyMid),
-            ),
-          ),
-          const SizedBox(height: 10),
-
-          const Text('S R T B',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 7)),
-          const SizedBox(height: 3),
-          Text('Mes Voyages',
-              style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
-                  fontSize: 12,
-                  letterSpacing: 1.5)),
-          const SizedBox(height: 10),
-
-          // ── Agent + date pills ──
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 8,
-            runSpacing: 6,
+          Row(
             children: [
-              _headerPill(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                        width: 7,
-                        height: 7,
-                        decoration: const BoxDecoration(
-                            color: goldLight, shape: BoxShape.circle)),
-                    const SizedBox(width: 8),
-                    Text('${agent['prenom']} ${agent['nom']}',
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600)),
-                  ],
+              Icon(Icons.warning_amber_rounded,
+                  color: Colors.red.shade300, size: 17),
+              const SizedBox(width: 7),
+              Text('Clôturer toute la journée ?',
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: Colors.red.shade300)),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Text(
+            '${allToClose.length} voyage(s)  pour le $_todayLabel.',
+            style: const TextStyle(
+                color: Colors.white70, fontSize: 11, height: 1.4),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 40,
+                  child: OutlinedButton(
+                    onPressed: _clotureLoading
+                        ? null
+                        : () => setState(() => _clotureConfirming = false),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: const BorderSide(color: Colors.white24),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: const Text('Annuler',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
                 ),
               ),
-              _headerPill(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.calendar_today_rounded,
-                        color: goldLight, size: 12),
-                    const SizedBox(width: 6),
-                    Text(_todayLabel,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600)),
-                  ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: SizedBox(
+                  height: 40,
+                  child: ElevatedButton(
+                    onPressed: _clotureLoading ? null : _clotureJourneeAll,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.red.shade900,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: _clotureLoading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2))
+                        : const Text('Confirmer',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
                 ),
               ),
             ],
           ),
-
-          // ── Action buttons ──
-          if (voyagesProgrammes.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
-              transitionBuilder: (child, anim) =>
-                  FadeTransition(opacity: anim, child: child),
-              child: _clotureJourneeConfirming
-                  ? _buildClotureJourneeConfirmCard()
-                  : _allProgrammesClotures
-                      ? _buildPostClotureActions()   // ← NEW: export + reopen
-                      : _buildClotureJourneeBtn(),
-            ),
-          ],
         ],
       ),
     );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Post-clôture action row: Export button + Réouvrir button
-  // ─────────────────────────────────────────────────────────────
+  /// Red "Clôture Journée" button — all voyages open.
+  Widget _buildClotureJourneeBtn() {
+    return SizedBox(
+      key: const ValueKey('cj_btn'),
+      width: double.infinity,
+      height: 48,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: _clotureLoading
+              ? null
+              : () => setState(() => _clotureConfirming = true),
+          borderRadius: BorderRadius.circular(14),
+          child: Ink(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF7B1212), Color(0xFFB91C1C)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                    color: const Color(0xFF9B1C1C).withOpacity(0.45),
+                    blurRadius: 14,
+                    offset: const Offset(0, 4))
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (_clotureLoading)
+                  const SizedBox(
+                      width: 17,
+                      height: 17,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 2))
+                else
+                  const Icon(Icons.event_busy_rounded,
+                      color: Colors.white, size: 19),
+                const SizedBox(width: 9),
+                Text(
+                  _clotureLoading
+                      ? 'Clôture en cours…'
+                      : 'Clôture Journée  ',
+                  style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.3,
+                      color: Colors.white),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
+  /// Post-clôture: export + réouvrir.
   Widget _buildPostClotureActions() {
     return Column(
       key: const ValueKey('post_cloture'),
       children: [
-        // ── Export button (prominent) ──────────────────────────
+        // Export button
         SizedBox(
           width: double.infinity,
           height: 48,
@@ -1400,7 +1485,9 @@ Fichier joint : ${file.path.split('/').last}
                           color: Colors.white, size: 19),
                     const SizedBox(width: 9),
                     Text(
-                      _exportLoading ? 'Envoi en cours…' : 'Exporter & Envoyer le rapport',
+                      _exportLoading
+                          ? 'Envoi en cours…'
+                          : 'Exporter & Envoyer le rapport',
                       style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
@@ -1415,7 +1502,7 @@ Fichier joint : ${file.path.split('/').last}
         ),
         const SizedBox(height: 10),
 
-        // ── Réouvrir journée (secondary) ───────────────────────
+        // Réouvrir journée button
         SizedBox(
           width: double.infinity,
           height: 42,
@@ -1423,35 +1510,35 @@ Fichier joint : ${file.path.split('/').last}
             color: Colors.transparent,
             borderRadius: BorderRadius.circular(14),
             child: InkWell(
-              onTap: _reopenJourneeLoading ? null : _reopenJournee,
+              onTap: _reopenLoading ? null : _reopenJourneeAll,
               borderRadius: BorderRadius.circular(14),
               child: Ink(
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.10),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.white.withOpacity(0.30)),
+                  border: Border.all(color: Colors.white24),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    if (_reopenJourneeLoading)
+                    if (_reopenLoading)
                       const SizedBox(
                           width: 15,
                           height: 15,
                           child: CircularProgressIndicator(
-                              color: Colors.white70, strokeWidth: 2))
+                              color: Colors.white, strokeWidth: 2))
                     else
                       const Icon(Icons.lock_open_outlined,
-                          color: Colors.white70, size: 17),
+                          color: Colors.white, size: 17),
                     const SizedBox(width: 8),
                     Text(
-                      _reopenJourneeLoading
+                      _reopenLoading
                           ? 'Réouverture…'
                           : 'Réouvrir la Journée',
                       style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: Colors.white70),
+                          color: Colors.white),
                     ),
                   ],
                 ),
@@ -1464,155 +1551,113 @@ Fichier joint : ${file.path.split('/').last}
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Clôture Journée button
+  // Header
   // ─────────────────────────────────────────────────────────────
 
-  Widget _buildClotureJourneeBtn() {
-    return SizedBox(
-      key: const ValueKey('cj_btn'),
+  Widget _buildHeader() {
+    final agent = widget.agent;
+    return Container(
       width: double.infinity,
-      height: 48,
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
-          onTap: _clotureJourneeLoading
-              ? null
-              : () => setState(() => _clotureJourneeConfirming = true),
-          borderRadius: BorderRadius.circular(14),
-          child: Ink(
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF7B1212), Color(0xFFB91C1C)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                    color: const Color(0xFF9B1C1C).withOpacity(0.45),
-                    blurRadius: 14,
-                    offset: const Offset(0, 4))
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (_clotureJourneeLoading)
-                  const SizedBox(
-                      width: 17,
-                      height: 17,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2))
-                else
-                  const Icon(Icons.event_busy_rounded,
-                      color: Colors.white, size: 19),
-                const SizedBox(width: 9),
-                Text(
-                  _clotureJourneeLoading
-                      ? 'Clôture en cours…'
-                      : 'Clôture Journée',
-                  style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.3,
-                      color: Colors.white),
-                ),
-              ],
-            ),
-          ),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppTheme.navyDark, AppTheme.navyMid, AppTheme.navyLight],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
       ),
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // Clôture Journée confirm card
-  // ─────────────────────────────────────────────────────────────
-
-  Widget _buildClotureJourneeConfirmCard() {
-    final activeCount =
-        voyagesProgrammes.where((v) => v['statut'] != 'cloture').length;
-
-    return Container(
-      key: const ValueKey('cj_confirm'),
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-            color: Colors.red.shade300.withOpacity(0.5), width: 1.5),
-      ),
+      padding: const EdgeInsets.fromLTRB(20, 52, 20, 20),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.warning_amber_rounded,
-                  color: Colors.red.shade300, size: 17),
-              const SizedBox(width: 7),
-              Text('Clôturer toute la journée ?',
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: Colors.red.shade200)),
-            ],
+          Align(
+            alignment: Alignment.topLeft,
+            child: GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.arrow_back_ios_new,
+                    color: Colors.white, size: 17),
+              ),
+            ),
           ),
-          const SizedBox(height: 5),
-          Text(
-            '$activeCount voyage(s) seront clôturés pour le $_todayLabel.',
-            style: const TextStyle(
-                color: Colors.white70, fontSize: 11, height: 1.4),
+          const SizedBox(height: 16),
+
+          Container(
+            width: 72,
+            height: 72,
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6))
+              ],
+            ),
+            child: Image.asset(
+              'assets/images/logo_srtb.png',
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) =>
+                  const Icon(Icons.directions_bus, size: 44, color: AppTheme.navyMid),
+            ),
           ),
-          const SizedBox(height: 12),
-          Row(
+          const SizedBox(height: 10),
+
+          const Text('S R T B',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 7)),
+          const SizedBox(height: 3),
+          Text('Mes Voyages',
+              style: TextStyle(
+                  color: Colors.white.withOpacity(0.7),
+                  fontSize: 12,
+                  letterSpacing: 1.5)),
+          const SizedBox(height: 10),
+
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
             children: [
-              Expanded(
-                child: SizedBox(
-                  height: 40,
-                  child: OutlinedButton(
-                    onPressed: _clotureJourneeLoading
-                        ? null
-                        : () => setState(() => _clotureJourneeConfirming = false),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white70,
-                      side: BorderSide(
-                          color: Colors.white.withOpacity(0.2)),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                    ),
-                    child: const Text('Annuler',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 12)),
-                  ),
+              _headerPill(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                        width: 7,
+                        height: 7,
+                        decoration: const BoxDecoration(
+                            color: AppTheme.goldLight, shape: BoxShape.circle)),
+                    const SizedBox(width: 8),
+                    Text('${agent['prenom']} ${agent['nom']}',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600)),
+                  ],
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: SizedBox(
-                  height: 40,
-                  child: ElevatedButton(
-                    onPressed:
-                        _clotureJourneeLoading ? null : _clotureJournee,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade700,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: Colors.red.shade900,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                    ),
-                    child: _clotureJourneeLoading
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2))
-                        : const Text('Confirmer',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 12)),
-                  ),
+              _headerPill(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.calendar_today_rounded,
+                        color: AppTheme.goldLight, size: 12),
+                    const SizedBox(width: 6),
+                    Text(_todayLabel,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600)),
+                  ],
                 ),
               ),
             ],
@@ -1640,12 +1685,12 @@ Fichier joint : ${file.path.split('/').last}
 
   Widget _buildTabBar() {
     return Container(
-      color: navyDark,
+      color: AppTheme.navyDark,
       child: TabBar(
         controller: _tabController,
-        indicatorColor: goldLight,
+        indicatorColor: AppTheme.goldLight,
         indicatorWeight: 3,
-        labelColor: goldLight,
+        labelColor: AppTheme.goldLight,
         unselectedLabelColor: Colors.white54,
         labelStyle:
             const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
@@ -1694,7 +1739,7 @@ Fichier joint : ${file.path.split('/').last}
   Widget _buildProgrammesTab() {
     if (isLoadingProgrammes)
       return const Center(
-          child: CircularProgressIndicator(color: navyMid));
+          child: CircularProgressIndicator(color: AppTheme.navyMid));
     if (errorProgrammes != null)
       return _buildError(errorProgrammes!, _fetchProgrammes);
 
@@ -1705,22 +1750,22 @@ Fichier joint : ${file.path.split('/').last}
         if (voyagesProgrammes.isNotEmpty)
           _buildStatsBar([
             _statTile(Icons.directions_bus_outlined, 'Total',
-                '${voyagesProgrammes.length}', navyMid),
+                '${voyagesProgrammes.length}', AppTheme.navyMid),
             _statTile(Icons.check_circle_outline, 'Clôturés',
                 '${voyagesProgrammes.where((v) => v['statut'] == 'cloture').length}',
                 Colors.grey),
             _statTile(Icons.play_circle_outline, 'En cours',
                 activeIdx >= 0 ? '1' : '0', const Color(0xFF16A34A)),
           ]),
+
         Expanded(
           child: voyagesProgrammes.isEmpty
               ? _buildEmpty('Aucun voyage programmé')
               : ListView.builder(
-                  padding:
-                      const EdgeInsets.fromLTRB(16, 14, 16, 40),
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 40),
                   itemCount: voyagesProgrammes.length,
                   itemBuilder: (_, i) {
-                    final v = voyagesProgrammes[i]
+                    final v         = voyagesProgrammes[i]
                         as Map<String, dynamic>;
                     final isCloture = v['statut'] == 'cloture';
                     final isActive  = i == activeIdx;
@@ -1732,9 +1777,9 @@ Fichier joint : ${file.path.split('/').last}
                       bgColor     = Colors.grey.shade50;
                       borderColor = Colors.grey.shade200;
                     } else if (isActive) {
-                      accent      = navyMid;
+                      accent      = AppTheme.navyMid;
                       bgColor     = const Color(0xFFEBF0FF);
-                      borderColor = navyLight;
+                      borderColor = AppTheme.navyLight;
                     } else {
                       accent      = Colors.orange.shade700;
                       bgColor     = Colors.orange.shade50;
@@ -1742,14 +1787,14 @@ Fichier joint : ${file.path.split('/').last}
                     }
 
                     return _buildVoyageCard(
-                      voyage: v,
-                      accent: accent,
-                      bgColor: bgColor,
+                      voyage:      v,
+                      accent:      accent,
+                      bgColor:     bgColor,
                       borderColor: borderColor,
-                      isActive: isActive,
-                      isCloture: isCloture,
-                      isLocked: isLocked,
-                      onTap: isCloture
+                      isActive:    isActive,
+                      isCloture:   isCloture,
+                      isLocked:    isLocked,
+                      onTap:       isCloture
                           ? () => _reopenVoyage(v)
                           : isLocked
                               ? _showLockedSnack
@@ -1777,7 +1822,7 @@ Fichier joint : ${file.path.split('/').last}
   Widget _buildNonProgrammesTab() {
     if (isLoadingNonProgrammes)
       return const Center(
-          child: CircularProgressIndicator(color: navyMid));
+          child: CircularProgressIndicator(color: AppTheme.navyMid));
     if (errorNonProgrammes != null)
       return _buildError(errorNonProgrammes!, _fetchNonProgrammes);
 
@@ -1786,7 +1831,7 @@ Fichier joint : ${file.path.split('/').last}
         if (voyagesNonProgrammes.isNotEmpty)
           _buildStatsBar([
             _statTile(Icons.directions_bus_outlined, 'Total',
-                '${voyagesNonProgrammes.length}', navyMid),
+                '${voyagesNonProgrammes.length}', AppTheme.navyMid),
             _statTile(Icons.check_circle_outline, 'Clôturés',
                 '${voyagesNonProgrammes.where((v) => v['statut'] == 'cloture').length}',
                 Colors.grey),
@@ -1794,15 +1839,15 @@ Fichier joint : ${file.path.split('/').last}
                 '${voyagesNonProgrammes.where((v) => v['statut'] != 'cloture').length}',
                 const Color(0xFF16A34A)),
           ]),
+
         Expanded(
           child: voyagesNonProgrammes.isEmpty
               ? _buildEmpty('Aucun voyage non programmé')
               : ListView.builder(
-                  padding:
-                      const EdgeInsets.fromLTRB(16, 14, 16, 40),
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 40),
                   itemCount: voyagesNonProgrammes.length,
                   itemBuilder: (_, i) {
-                    final v = voyagesNonProgrammes[i]
+                    final v         = voyagesNonProgrammes[i]
                         as Map<String, dynamic>;
                     final isCloture = v['statut'] == 'cloture';
 
@@ -1823,14 +1868,14 @@ Fichier joint : ${file.path.split('/').last}
                             : 'Spontané';
 
                     return _buildVoyageCard(
-                      voyage: v,
-                      accent: accent,
-                      bgColor: bgColor,
+                      voyage:      v,
+                      accent:      accent,
+                      bgColor:     bgColor,
                       borderColor: borderColor,
-                      isActive: !isCloture,
-                      isCloture: isCloture,
-                      isLocked: false,
-                      onTap: isCloture
+                      isActive:    !isCloture,
+                      isCloture:   isCloture,
+                      isLocked:    false,
+                      onTap:       isCloture
                           ? () => _reopenVoyage(v)
                           : () => _openVoyage(v),
                       extraLabel: isCloture
@@ -1847,7 +1892,7 @@ Fichier joint : ${file.path.split('/').last}
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Voyage card (unchanged)
+  // Voyage card
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildVoyageCard({
@@ -1925,7 +1970,7 @@ Fichier joint : ${file.path.split('/').last}
                             height: 6,
                             decoration: BoxDecoration(
                                 color: (isActive && !isLocked && !isCloture)
-                                    ? goldLight
+                                    ? AppTheme.goldLight
                                     : accent.withOpacity(0.6),
                                 shape: BoxShape.circle)),
                         const SizedBox(width: 6),
@@ -1938,7 +1983,7 @@ Fichier joint : ${file.path.split('/').last}
                                 fontSize: 14,
                                 color: isCloture
                                     ? Colors.grey.shade400
-                                    : navyDark),
+                                    : AppTheme.navyDark),
                           ),
                         ),
                       ],
@@ -1984,8 +2029,7 @@ Fichier joint : ${file.path.split('/').last}
                     decoration: BoxDecoration(
                       color: accent.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(20),
-                      border:
-                          Border.all(color: accent.withOpacity(0.25)),
+                      border: Border.all(color: accent.withOpacity(0.25)),
                     ),
                     child: Text(
                       isCloture
@@ -2026,19 +2070,18 @@ Fichier joint : ${file.path.split('/').last}
     for (int i = 0; i < tiles.length; i++) {
       separated.add(tiles[i]);
       if (i < tiles.length - 1)
-        separated.add(Container(
-            width: 1, height: 36, color: Colors.grey.shade100));
+        separated.add(
+            Container(width: 1, height: 36, color: Colors.grey.shade100));
     }
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-      padding:
-          const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
       decoration: BoxDecoration(
-        color: cardWhite,
+        color: AppTheme.cardWhite,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: navyMid.withOpacity(0.07),
+              color: AppTheme.navyMid.withOpacity(0.07),
               blurRadius: 16,
               offset: const Offset(0, 3))
         ],
@@ -2076,7 +2119,7 @@ Fichier joint : ${file.path.split('/').last}
       decoration: BoxDecoration(
           color: color,
           shape: BoxShape.circle,
-          border: Border.all(color: cardWhite, width: 1.5)),
+          border: Border.all(color: AppTheme.cardWhite, width: 1.5)),
       child: Icon(icon, color: Colors.white, size: iconSize),
     );
   }
@@ -2108,14 +2151,13 @@ Fichier joint : ${file.path.split('/').last}
             const SizedBox(height: 12),
             Text(message,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                    color: Colors.grey.shade500, height: 1.6)),
+                style: TextStyle(color: Colors.grey.shade500, height: 1.6)),
             const SizedBox(height: 16),
             TextButton.icon(
               onPressed: retry,
               icon: const Icon(Icons.refresh, size: 16),
               label: const Text('Réessayer'),
-              style: TextButton.styleFrom(foregroundColor: navyMid),
+              style: TextButton.styleFrom(foregroundColor: AppTheme.navyMid),
             ),
           ],
         ),
@@ -2156,14 +2198,12 @@ class _ExportFormatSheet extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(
           24, 20, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
       decoration: const BoxDecoration(
-        color: cardWhite,
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(22)),
+        color: AppTheme.cardWhite,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // handle
           Container(
               width: 40,
               height: 4,
@@ -2176,10 +2216,9 @@ class _ExportFormatSheet extends StatelessWidget {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-                color: navyMid.withOpacity(0.1),
+                color: AppTheme.navyMid.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(16)),
-            child:
-                const Icon(Icons.send_rounded, color: navyMid, size: 28),
+            child: const Icon(Icons.send_rounded, color: AppTheme.navyMid, size: 28),
           ),
           const SizedBox(height: 14),
 
@@ -2187,25 +2226,24 @@ class _ExportFormatSheet extends StatelessWidget {
               style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.bold,
-                  color: navyDark)),
+                  color: AppTheme.navyDark)),
           const SizedBox(height: 6),
           Text(
-            'Le rapport du $todayLabel sera envoyé\npar email à l\'adresse prédéfinie.',
+            'Le rapport complet du $todayLabel sera envoyé\npar email à ',
             textAlign: TextAlign.center,
             style: TextStyle(
                 fontSize: 13, color: Colors.grey.shade500, height: 1.5),
           ),
           const SizedBox(height: 6),
-          Text(
+          const Text(
             _kReportRecipient,
-            style: const TextStyle(
+            style: TextStyle(
                 fontSize: 12,
-                color: navyMid,
+                color: AppTheme.navyMid,
                 fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 24),
 
-          // Format buttons
           Row(
             children: [
               Expanded(
@@ -2219,7 +2257,7 @@ class _ExportFormatSheet extends StatelessWidget {
                         style: TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 13)),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: navyMid,
+                      backgroundColor: AppTheme.navyMid,
                       foregroundColor: Colors.white,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
@@ -2234,7 +2272,8 @@ class _ExportFormatSheet extends StatelessWidget {
                   height: 56,
                   child: ElevatedButton.icon(
                     onPressed: () => Navigator.pop(context, 'pdf'),
-                    icon: const Icon(Icons.picture_as_pdf_rounded, size: 20),
+                    icon:
+                        const Icon(Icons.picture_as_pdf_rounded, size: 20),
                     label: const Text('PDF\n.pdf',
                         textAlign: TextAlign.center,
                         style: TextStyle(
@@ -2279,9 +2318,8 @@ class _ReopenJourneeConfirmSheet extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(
           24, 20, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
       decoration: const BoxDecoration(
-        color: cardWhite,
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(22)),
+        color: AppTheme.cardWhite,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -2297,20 +2335,20 @@ class _ReopenJourneeConfirmSheet extends StatelessWidget {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-                color: navyMid.withOpacity(0.1),
+                color: AppTheme.navyMid.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(16)),
             child: const Icon(Icons.lock_open_outlined,
-                color: navyMid, size: 28),
+                color: AppTheme.navyMid, size: 28),
           ),
           const SizedBox(height: 14),
           const Text('Réouvrir toute la journée ?',
               style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.bold,
-                  color: navyDark)),
+                  color: AppTheme.navyDark)),
           const SizedBox(height: 6),
           Text(
-            '$count voyage(s) du $todayLabel seront remis au statut Actif.',
+            '$count voyage(s) du $todayLabel\n seront remis au statut Actif.',
             textAlign: TextAlign.center,
             style: TextStyle(
                 fontSize: 13, color: Colors.grey.shade500, height: 1.5),
@@ -2349,7 +2387,7 @@ class _ReopenJourneeConfirmSheet extends StatelessWidget {
                   child: ElevatedButton(
                     onPressed: () => Navigator.pop(context, true),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: navyMid,
+                      backgroundColor: AppTheme.navyMid,
                       foregroundColor: Colors.white,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
@@ -2386,9 +2424,8 @@ class _ReopenConfirmSheet extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(
           24, 20, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
       decoration: const BoxDecoration(
-        color: cardWhite,
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(22)),
+        color: AppTheme.cardWhite,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -2404,21 +2441,20 @@ class _ReopenConfirmSheet extends StatelessWidget {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-                color: navyMid.withOpacity(0.1),
+                color: AppTheme.navyMid.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(16)),
             child: const Icon(Icons.lock_open_outlined,
-                color: navyMid, size: 28),
+                color: AppTheme.navyMid, size: 28),
           ),
           const SizedBox(height: 14),
           const Text('Réouvrir ce voyage ?',
               style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.bold,
-                  color: navyDark)),
+                  color: AppTheme.navyDark)),
           const SizedBox(height: 6),
           Text('$depart → $arrivee',
-              style:
-                  TextStyle(fontSize: 14, color: Colors.grey.shade500)),
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade500)),
           const SizedBox(height: 8),
           Text(
             'Le voyage sera remis au statut Actif\net pourra être utilisé à nouveau.',
@@ -2453,7 +2489,7 @@ class _ReopenConfirmSheet extends StatelessWidget {
                   child: ElevatedButton(
                     onPressed: () => Navigator.pop(context, true),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: navyMid,
+                      backgroundColor: AppTheme.navyMid,
                       foregroundColor: Colors.white,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
@@ -2500,9 +2536,9 @@ class _ToastWidgetState extends State<_ToastWidget>
     _ctrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 220));
     _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
-    _slide = Tween<Offset>(
-            begin: const Offset(1.0, 0), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
+    _slide =
+        Tween<Offset>(begin: const Offset(1.0, 0), end: Offset.zero).animate(
+            CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
     _ctrl.forward();
     Future.delayed(const Duration(milliseconds: 2400),
         () { if (mounted) _ctrl.reverse(); });
