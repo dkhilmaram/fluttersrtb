@@ -258,7 +258,7 @@ class _HistoriquePageState
       final response = await http
           .get(
             Uri.parse(
-              'http://10.19.204.100:8000/billetterie/voyages/$id/tickets',
+              'http://192.168.1.16:8000/billetterie/voyages/$id/tickets',
             ),
           )
           .timeout(

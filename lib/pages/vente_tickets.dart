@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'HistoriquePage.dart';
 import 'cloture_voyage.dart';
-import 'segment_page.dart';
+import 'ticketing_page.dart';
 import '../sync_log_page.dart';
 import '../local_database.dart';
 
@@ -64,6 +64,8 @@ class _VenteTicketsPageState
         > {
   bool isCloture = false;
   bool isLoading = true;
+  bool _reopenConfirming = false;
+  bool _reopenLoading = false;
   int _pendingCount = 0;
 
   OverlayEntry? _toastEntry;
@@ -103,7 +105,6 @@ class _VenteTicketsPageState
         : const Color(
             0xFF16A34A,
           );
-
     final icon = isError
         ? Icons.error_outline
         : isWarning
@@ -120,14 +121,12 @@ class _VenteTicketsPageState
             icon: icon,
           ),
     );
-
     _toastEntry = entry;
     Overlay.of(
       context,
     ).insert(
       entry,
     );
-
     _toastTimer = Timer(
       const Duration(
         milliseconds: 2500,
@@ -157,13 +156,7 @@ class _VenteTicketsPageState
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Statut resolution — server always wins over local cache.
-  //
-  // Priority:
-  //   1. Ask the server (online) — most accurate, detects manual resets.
-  //   2. Fall back to local cache if offline — BUT pass the last known
-  //      server statut so stale 'cloture' entries are discarded when
-  //      the server has been manually reset to 'actif'.
+  // Statut resolution
   // ─────────────────────────────────────────────────────────────
 
   Future<
@@ -178,7 +171,6 @@ class _VenteTicketsPageState
     final id =
         widget.voyage['id']
             as int?;
-
     if (id ==
         null) {
       setState(
@@ -187,13 +179,12 @@ class _VenteTicketsPageState
       return;
     }
 
-    // ── Step 1: always try the server first ──
     String? serverStatut;
     try {
       final response = await http
           .get(
             Uri.parse(
-              'http://10.19.204.100:8000/billetterie/vente/$id/statut',
+              'http://192.168.1.16:8000/billetterie/vente/$id/statut',
             ),
           )
           .timeout(
@@ -213,13 +204,10 @@ class _VenteTicketsPageState
       }
     } catch (
       _
-    ) {
-      // Network unavailable — will fall through to offline path below.
-    }
+    ) {}
 
     if (serverStatut !=
         null) {
-      // ── Online path: server responded ──
       if (serverStatut !=
           'cloture') {
         await LocalDatabase.clearVoyageStatut(
@@ -239,15 +227,13 @@ class _VenteTicketsPageState
       return;
     }
 
-    // ── Offline path: server unreachable ──
-    final lastKnownServerStatut =
+    final lastKnown =
         widget.voyage['statut']
             as String? ??
         'actif';
-
     final localStatut = await LocalDatabase.getVoyageStatut(
       id,
-      currentServerStatut: lastKnownServerStatut,
+      currentServerStatut: lastKnown,
     );
 
     if (mounted) {
@@ -258,10 +244,95 @@ class _VenteTicketsPageState
                   'cloture' ||
               localStatut ==
                   'cloture_pending' ||
-              lastKnownServerStatut ==
+              lastKnown ==
                   'cloture';
           isLoading = false;
         },
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Reopen voyage — calls API, falls back to local on offline
+  // ─────────────────────────────────────────────────────────────
+
+  Future<
+    void
+  >
+  _reopenVoyage() async {
+    final id =
+        widget.voyage['id']
+            as int?;
+    if (id ==
+        null)
+      return;
+
+    setState(
+      () => _reopenLoading = true,
+    );
+
+    bool success = false;
+    bool offline = false;
+
+    try {
+      final response = await http
+          .put(
+            Uri.parse(
+              'http://192.168.1.16:8000/billetterie/vente/$id/reopen',
+            ),
+          )
+          .timeout(
+            const Duration(
+              seconds: 6,
+            ),
+          );
+
+      if (response.statusCode ==
+          200) {
+        final data = jsonDecode(
+          response.body,
+        );
+        success =
+            data['success'] ==
+            true;
+      }
+    } catch (
+      _
+    ) {
+      // Network unreachable — persist locally so it syncs later
+      offline = true;
+      await LocalDatabase.clearVoyageStatut(
+        id,
+      );
+      success = true;
+    }
+
+    if (!mounted) return;
+
+    if (success) {
+      setState(
+        () {
+          isCloture = false;
+          _reopenConfirming = false;
+          _reopenLoading = false;
+        },
+      );
+      _showToast(
+        offline
+            ? 'Réouverture enregistrée (hors-ligne)'
+            : 'Voyage réouvert avec succès',
+        isWarning: offline,
+      );
+    } else {
+      setState(
+        () {
+          _reopenConfirming = false;
+          _reopenLoading = false;
+        },
+      );
+      _showToast(
+        'Échec de la réouverture',
+        isError: true,
       );
     }
   }
@@ -333,7 +404,12 @@ class _VenteTicketsPageState
             if (isCloture)
               Container(
                 width: double.infinity,
-                color: Colors.red.shade700,
+                color: const Color.fromARGB(
+                  255,
+                  109,
+                  108,
+                  108,
+                ),
                 padding: const EdgeInsets.symmetric(
                   vertical: 10,
                 ),
@@ -349,7 +425,7 @@ class _VenteTicketsPageState
                       width: 8,
                     ),
                     Text(
-                      'Voyage clôturé — Aucune vente possible',
+                      'Voyage clôturé',
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -398,7 +474,7 @@ class _VenteTicketsPageState
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Button sets
+  // Clôturé state — Réouvrir + read-only buttons
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildClotureButtons(
@@ -406,6 +482,7 @@ class _VenteTicketsPageState
   ) {
     return Column(
       children: [
+        // Info banner
         Container(
           width: double.infinity,
           margin: const EdgeInsets.only(
@@ -437,10 +514,14 @@ class _VenteTicketsPageState
               ),
               Expanded(
                 child: Text(
-                  'Ce voyage est clôturé. Vous pouvez consulter '
-                  'l\'historique et les journaux en lecture seule.',
+                  'Ce voyage est clôturé. Réouvrez-le pour accéder à la billetterie.',
                   style: TextStyle(
-                    color: Colors.grey.shade500,
+                    color: const Color.from(
+                      alpha: 1,
+                      red: 0.62,
+                      green: 0.62,
+                      blue: 0.62,
+                    ),
                     fontSize: 12,
                     height: 1.4,
                   ),
@@ -449,6 +530,53 @@ class _VenteTicketsPageState
             ],
           ),
         ),
+
+        // Réouvrir button OR inline confirmation card
+        if (hasId) ...[
+          AnimatedSwitcher(
+            duration: const Duration(
+              milliseconds: 200,
+            ),
+            transitionBuilder:
+                (
+                  child,
+                  anim,
+                ) => FadeTransition(
+                  opacity: anim,
+                  child: child,
+                ),
+            child: _reopenConfirming
+                ? _buildReopenConfirmCard()
+                : _actionBtn(
+                    key: const ValueKey(
+                      'reopen_btn',
+                    ),
+                    label: 'Réouvrir le voyage',
+                    icon: Icons.lock_open_rounded,
+                    colors: [
+                      const Color.fromARGB(
+                        255,
+                        3,
+                        74,
+                        54,
+                      ),
+                      const Color.fromARGB(
+                        255,
+                        3,
+                        74,
+                        54,
+                      ),
+                    ],
+                    onTap: () => setState(
+                      () => _reopenConfirming = true,
+                    ),
+                  ),
+          ),
+          const SizedBox(
+            height: 12,
+          ),
+        ],
+
         _actionBtn(
           label: 'Historique',
           icon: Icons.history,
@@ -514,6 +642,191 @@ class _VenteTicketsPageState
     );
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // Inline confirmation card
+  // ─────────────────────────────────────────────────────────────
+
+  Widget _buildReopenConfirmCard() {
+    return Container(
+      key: const ValueKey(
+        'reopen_confirm',
+      ),
+      width: double.infinity,
+      padding: const EdgeInsets.all(
+        16,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(
+          14,
+        ),
+        border: Border.all(
+          color: const Color.fromARGB(
+            255,
+            39,
+            57,
+            56,
+          ),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                color: const Color.fromARGB(
+                  255,
+                  2,
+                  69,
+                  50,
+                ),
+                size: 18,
+              ),
+              const SizedBox(
+                width: 8,
+              ),
+              Text(
+                'Confirmer la réouverture ?',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: const Color.fromARGB(
+                    255,
+                    3,
+                    69,
+                    64,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(
+            height: 6,
+          ),
+          Text(
+            'Le voyage sera remis en statut actif et la billetterie sera accessible.',
+            style: TextStyle(
+              color: const Color.fromARGB(
+                255,
+                3,
+                69,
+                64,
+              ),
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(
+            height: 14,
+          ),
+          Row(
+            children: [
+              // Annuler
+              Expanded(
+                child: SizedBox(
+                  height: 44,
+                  child: OutlinedButton(
+                    onPressed: _reopenLoading
+                        ? null
+                        : () => setState(
+                            () => _reopenConfirming = false,
+                          ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color.fromARGB(
+                        255,
+                        2,
+                        61,
+                        30,
+                      ),
+                      side: BorderSide(
+                        color: const Color.fromARGB(
+                          255,
+                          3,
+                          62,
+                          26,
+                        ),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                          10,
+                        ),
+                      ),
+                    ),
+                    child: const Text(
+                      'Annuler',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(
+                width: 10,
+              ),
+              // Confirmer → calls _reopenVoyage()
+              Expanded(
+                child: SizedBox(
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed: _reopenLoading
+                        ? null
+                        : _reopenVoyage,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color.fromARGB(
+                        255,
+                        3,
+                        60,
+                        51,
+                      ),
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: const Color.fromARGB(
+                        255,
+                        3,
+                        60,
+                        51,
+                      ),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                          10,
+                        ),
+                      ),
+                    ),
+                    child: _reopenLoading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            'Réouvrir',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Active state buttons
+  // ─────────────────────────────────────────────────────────────
+
   Widget _buildActiveButtons(
     bool hasId,
   ) {
@@ -521,13 +834,13 @@ class _VenteTicketsPageState
       children: [
         if (hasId) ...[
           _actionBtn(
-            label: 'Secteurs du voyage',
-            icon: Icons.route,
-            colors: [
-              const Color(
+            label: 'Billetterie',
+            icon: Icons.confirmation_number_rounded,
+            colors: const [
+              Color(
                 0xFF0D6E5E,
               ),
-              const Color(
+              Color(
                 0xFF0D9E87,
               ),
             ],
@@ -537,8 +850,19 @@ class _VenteTicketsPageState
                 builder:
                     (
                       _,
-                    ) => SegmentPage(
+                    ) => TicketingPage(
                       voyage: widget.voyage,
+                      segment: {
+                        'point_depart':
+                            widget.voyage['depart'] ??
+                            '',
+                        'point_arrivee':
+                            widget.voyage['arrivee'] ??
+                            '',
+                        'id_segment':
+                            widget.voyage['id_segment'] ??
+                            0,
+                      },
                     ),
               ),
             ),
@@ -752,7 +1076,12 @@ class _VenteTicketsPageState
                           width: 16,
                           height: 16,
                           decoration: BoxDecoration(
-                            color: Colors.orange.shade600,
+                            color: const Color.fromARGB(
+                              255,
+                              3,
+                              90,
+                              55,
+                            ),
                             shape: BoxShape.circle,
                             border: Border.all(
                               color: Colors.white,
@@ -835,7 +1164,7 @@ class _VenteTicketsPageState
           ),
           Text(
             isCloture
-                ? 'Historique & Journaux'
+                ? 'Voyage clôturé'
                 : 'Vente & Historique',
             style: TextStyle(
               color: Colors.white.withOpacity(
@@ -1089,6 +1418,7 @@ class _VenteTicketsPageState
   // ─────────────────────────────────────────────────────────────
 
   Widget _actionBtn({
+    Key? key,
     required String label,
     required IconData icon,
     required List<
@@ -1101,6 +1431,7 @@ class _VenteTicketsPageState
         onTap !=
         null;
     return SizedBox(
+      key: key,
       width: double.infinity,
       height: 54,
       child: Material(
@@ -1177,7 +1508,7 @@ class _VenteTicketsPageState
 }
 
 // ─────────────────────────────────────────────────────────────
-// Toast widget — top-right, slides in from the right
+// Toast widget
 // ─────────────────────────────────────────────────────────────
 
 class _ToastWidget
@@ -1186,7 +1517,6 @@ class _ToastWidget
   final String msg;
   final Color color;
   final IconData icon;
-
   const _ToastWidget({
     required this.msg,
     required this.color,
@@ -1246,9 +1576,7 @@ class _ToastWidgetState
                 curve: Curves.easeOut,
               ),
             );
-
     _ctrl.forward();
-
     Future.delayed(
       const Duration(
         milliseconds: 2100,

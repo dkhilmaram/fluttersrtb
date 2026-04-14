@@ -79,8 +79,26 @@ class _VoyageProgrammePageState
   bool isOfflineNonProgrammes = false;
   String? errorNonProgrammes;
 
+  bool _clotureJourneeLoading = false;
+  bool _clotureJourneeConfirming = false;
+  bool _reopenJourneeLoading = false;
+
   OverlayEntry? _toastEntry;
   Timer? _toastTimer;
+
+  final String _todayLabel = () {
+    final now = DateTime.now();
+    final d = now.day.toString().padLeft(
+      2,
+      '0',
+    );
+    final m = now.month.toString().padLeft(
+      2,
+      '0',
+    );
+    final y = now.year.toString();
+    return '$d/$m/$y';
+  }();
 
   @override
   void initState() {
@@ -102,7 +120,7 @@ class _VoyageProgrammePageState
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Toast — top-right slide-in
+  // Toast
   // ─────────────────────────────────────────────────────────────
 
   void _showToast(
@@ -193,6 +211,16 @@ class _VoyageProgrammePageState
     return -1;
   }
 
+  bool get _allProgrammesClotures =>
+      voyagesProgrammes.isNotEmpty &&
+      voyagesProgrammes.every(
+        (
+          v,
+        ) =>
+            v['statut'] ==
+            'cloture',
+      );
+
   // ─────────────────────────────────────────────────────────────
   // Merge local offline statuts
   // ─────────────────────────────────────────────────────────────
@@ -281,7 +309,7 @@ class _VoyageProgrammePageState
       final response = await http
           .get(
             Uri.parse(
-              'http://10.19.204.100:8000/billetterie/ventes/programmees/$_matricule',
+              'http://192.168.1.16:8000/billetterie/ventes/programmees/$_matricule',
             ),
             headers: {
               'Content-Type': 'application/json',
@@ -366,7 +394,7 @@ class _VoyageProgrammePageState
       final response = await http
           .get(
             Uri.parse(
-              'http://10.19.204.100:8000/billetterie/ventes/agent/$_matricule',
+              'http://192.168.1.16:8000/billetterie/ventes/agent/$_matricule',
             ),
             headers: {
               'Content-Type': 'application/json',
@@ -483,10 +511,6 @@ class _VoyageProgrammePageState
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Show offline toast only once even if both tabs are offline
-  // ─────────────────────────────────────────────────────────────
-
   void _maybeShowOfflineToast() {
     if (_toastEntry ==
         null) {
@@ -498,19 +522,385 @@ class _VoyageProgrammePageState
   }
 
   // ─────────────────────────────────────────────────────────────
+  // Clôture Journée — bulk close
+  // ─────────────────────────────────────────────────────────────
+
+  Future<
+    void
+  >
+  _clotureJournee() async {
+    setState(
+      () {
+        _clotureJourneeLoading = true;
+        _clotureJourneeConfirming = false;
+      },
+    );
+
+    final toClose = voyagesProgrammes
+        .where(
+          (
+            v,
+          ) =>
+              v['statut'] !=
+              'cloture',
+        )
+        .toList();
+
+    if (toClose.isEmpty) {
+      setState(
+        () => _clotureJourneeLoading = false,
+      );
+      _showToast(
+        'Tous les voyages sont déjà clôturés',
+      );
+      return;
+    }
+
+    final ids = toClose
+        .map(
+          (
+            v,
+          ) =>
+              (v['id_vente'] ??
+                      v['id'])
+                  as int?,
+        )
+        .whereType<
+          int
+        >()
+        .toList();
+
+    bool success = false;
+    bool offline = false;
+    int closedQt = 0;
+
+    try {
+      final response = await http
+          .put(
+            Uri.parse(
+              'http://192.168.1.16:8000/billetterie/ventes/cloturer-journee',
+            ),
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(
+              {
+                'ids': ids,
+              },
+            ),
+          )
+          .timeout(
+            const Duration(
+              seconds: 10,
+            ),
+          );
+
+      if (response.statusCode ==
+          200) {
+        final data = jsonDecode(
+          response.body,
+        );
+        success =
+            data['success'] ==
+            true;
+        closedQt =
+            (data['closed']
+                as int?) ??
+            ids.length;
+      }
+    } catch (
+      _
+    ) {
+      offline = true;
+      for (final id in ids) {
+        await LocalDatabase.saveCloturePending(
+          id,
+        );
+        await LocalDatabase.saveVoyageStatut(
+          id,
+          'cloture',
+        );
+      }
+      success = true;
+      closedQt = ids.length;
+    }
+
+    if (!mounted) return;
+
+    if (success) {
+      setState(
+        () {
+          for (final v in toClose) {
+            v['statut'] = 'cloture';
+          }
+          _clotureJourneeLoading = false;
+        },
+      );
+      _showToast(
+        offline
+            ? 'Journée clôturée (hors-ligne) · $closedQt voyage(s)'
+            : 'Journée clôturée · $closedQt voyage(s)',
+        isWarning: offline,
+      );
+      if (!offline) await _fetchProgrammes();
+    } else {
+      setState(
+        () => _clotureJourneeLoading = false,
+      );
+      _showToast(
+        'Échec de la clôture journée',
+        isError: true,
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Réouvrir Journée — bulk reopen ALL clôturés
+  // ─────────────────────────────────────────────────────────────
+
+  Future<
+    void
+  >
+  _reopenJournee() async {
+    final toClotures = voyagesProgrammes
+        .where(
+          (
+            v,
+          ) =>
+              v['statut'] ==
+              'cloture',
+        )
+        .toList();
+
+    if (toClotures.isEmpty) {
+      _showToast(
+        'Aucun voyage clôturé à réouvrir',
+      );
+      return;
+    }
+
+    final confirmed =
+        await showModalBottomSheet<
+          bool
+        >(
+          context: context,
+          backgroundColor: Colors.transparent,
+          isScrollControlled: true,
+          builder:
+              (
+                _,
+              ) => _ReopenJourneeConfirmSheet(
+                count: toClotures.length,
+                todayLabel: _todayLabel,
+              ),
+        );
+
+    if (confirmed !=
+            true ||
+        !mounted)
+      return;
+
+    setState(
+      () => _reopenJourneeLoading = true,
+    );
+    _showToast(
+      'Réouverture en cours…',
+    );
+
+    final ids = toClotures
+        .map(
+          (
+            v,
+          ) =>
+              (v['id_vente'] ??
+                      v['id'])
+                  as int?,
+        )
+        .whereType<
+          int
+        >()
+        .toList();
+
+    bool success = false;
+    bool offline = false;
+
+    try {
+      final response = await http
+          .put(
+            Uri.parse(
+              'http://192.168.1.16:8000/billetterie/ventes/reopen-journee',
+            ),
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(
+              {
+                'ids': ids,
+              },
+            ),
+          )
+          .timeout(
+            const Duration(
+              seconds: 10,
+            ),
+          );
+
+      if (response.statusCode ==
+          200) {
+        final data = jsonDecode(
+          response.body,
+        );
+        success =
+            data['success'] ==
+            true;
+      }
+    } catch (
+      _
+    ) {
+      // Offline: clear local statut overrides so cards go back to actif
+      offline = true;
+      for (final id in ids) {
+        await LocalDatabase.clearVoyageStatut(
+          id,
+        );
+      }
+      success = true;
+    }
+
+    if (!mounted) return;
+
+    if (success) {
+      setState(
+        () {
+          for (final v in toClotures) {
+            v['statut'] = 'actif';
+          }
+          _reopenJourneeLoading = false;
+        },
+      );
+      _showToast(
+        offline
+            ? 'Journée réouverte (hors-ligne) · ${ids.length} voyage(s)'
+            : 'Journée réouverte · ${ids.length} voyage(s)',
+        isWarning: offline,
+      );
+      if (!offline) await _fetchProgrammes();
+    } else {
+      setState(
+        () => _reopenJourneeLoading = false,
+      );
+      _showToast(
+        'Échec de la réouverture',
+        isError: true,
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Reopen a single clôturé voyage
+  // ─────────────────────────────────────────────────────────────
+
+  Future<
+    void
+  >
+  _reopenVoyage(
+    Map<
+      String,
+      dynamic
+    >
+    voyage,
+  ) async {
+    final idVente =
+        (voyage['id_vente'] ??
+                voyage['id'])
+            as int?;
+    if (idVente ==
+        null)
+      return;
+
+    final confirmed =
+        await showModalBottomSheet<
+          bool
+        >(
+          context: context,
+          backgroundColor: Colors.transparent,
+          isScrollControlled: true,
+          builder:
+              (
+                _,
+              ) => _ReopenConfirmSheet(
+                voyage: voyage,
+              ),
+        );
+
+    if (confirmed !=
+            true ||
+        !mounted)
+      return;
+
+    _showToast(
+      'Réouverture en cours…',
+    );
+
+    try {
+      final response = await http
+          .put(
+            Uri.parse(
+              'http://192.168.1.16:8000/billetterie/vente/$idVente/reopen',
+            ),
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          )
+          .timeout(
+            const Duration(
+              seconds: 8,
+            ),
+          );
+
+      if (response.statusCode ==
+          200) {
+        final data = jsonDecode(
+          response.body,
+        );
+        if (data['success'] ==
+            true) {
+          await LocalDatabase.clearVoyageStatut(
+            idVente,
+          );
+          setState(
+            () => voyage['statut'] = 'actif',
+          );
+          _showToast(
+            'Voyage réouvert avec succès',
+          );
+          return;
+        }
+        _showToast(
+          data['message'] ??
+              'Impossible de réouvrir',
+          isError: true,
+        );
+        return;
+      }
+      _showToast(
+        'Erreur serveur',
+        isError: true,
+      );
+    } catch (
+      _
+    ) {
+      _showToast(
+        'Hors-ligne — réouverture impossible',
+        isOffline: true,
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // Helpers
   // ─────────────────────────────────────────────────────────────
 
-  String
-  _getDate(
-    String? dh,
-  ) =>
-      dh
-          ?.split(
-            ' ',
-          )
-          .first ??
-      '';
   String
   _getTime(
     String? dh,
@@ -628,10 +1018,11 @@ class _VoyageProgrammePageState
         20,
         52,
         20,
-        24,
+        20,
       ),
       child: Column(
         children: [
+          // ── Back ──
           Align(
             alignment: Alignment.topLeft,
             child: GestureDetector(
@@ -659,8 +1050,10 @@ class _VoyageProgrammePageState
             ),
           ),
           const SizedBox(
-            height: 18,
+            height: 16,
           ),
+
+          // ── Logo ──
           Container(
             width: 72,
             height: 72,
@@ -701,8 +1094,9 @@ class _VoyageProgrammePageState
             ),
           ),
           const SizedBox(
-            height: 12,
+            height: 10,
           ),
+
           const Text(
             'S R T B',
             style: TextStyle(
@@ -713,7 +1107,7 @@ class _VoyageProgrammePageState
             ),
           ),
           const SizedBox(
-            height: 4,
+            height: 3,
           ),
           Text(
             'Mes Voyages',
@@ -728,51 +1122,446 @@ class _VoyageProgrammePageState
           const SizedBox(
             height: 10,
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 7,
+
+          // ── Agent + date pills ──
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              _headerPill(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: const BoxDecoration(
+                        color: goldLight,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(
+                      width: 8,
+                    ),
+                    Text(
+                      '${agent['prenom']} ${agent['nom']}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _headerPill(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.calendar_today_rounded,
+                      color: goldLight,
+                      size: 12,
+                    ),
+                    const SizedBox(
+                      width: 6,
+                    ),
+                    Text(
+                      _todayLabel,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          // ── Clôture / Réouvrir Journée buttons ──
+          if (voyagesProgrammes.isNotEmpty) ...[
+            const SizedBox(
+              height: 16,
             ),
+            AnimatedSwitcher(
+              duration: const Duration(
+                milliseconds: 220,
+              ),
+              transitionBuilder:
+                  (
+                    child,
+                    anim,
+                  ) => FadeTransition(
+                    opacity: anim,
+                    child: child,
+                  ),
+              child: _clotureJourneeConfirming
+                  ? _buildClotureJourneeConfirmCard()
+                  : _allProgrammesClotures
+                  ? _buildReopenJourneeBtn()
+                  : _buildClotureJourneeBtn(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Clôture Journée button (shown when voyages are still active)
+  // ─────────────────────────────────────────────────────────────
+
+  Widget _buildClotureJourneeBtn() {
+    return SizedBox(
+      key: const ValueKey(
+        'cj_btn',
+      ),
+      width: double.infinity,
+      height: 48,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(
+          14,
+        ),
+        child: InkWell(
+          onTap: _clotureJourneeLoading
+              ? null
+              : () => setState(
+                  () => _clotureJourneeConfirming = true,
+                ),
+          borderRadius: BorderRadius.circular(
+            14,
+          ),
+          child: Ink(
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(
-                0.1,
+              gradient: const LinearGradient(
+                colors: [
+                  Color(
+                    0xFF7B1212,
+                  ),
+                  Color(
+                    0xFFB91C1C,
+                  ),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(
-                30,
+                14,
               ),
-              border: Border.all(
-                color: Colors.white.withOpacity(
-                  0.2,
-                ),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: const BoxDecoration(
-                    color: goldLight,
-                    shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color:
+                      const Color(
+                        0xFF9B1C1C,
+                      ).withOpacity(
+                        0.45,
+                      ),
+                  blurRadius: 14,
+                  offset: const Offset(
+                    0,
+                    4,
                   ),
                 ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (_clotureJourneeLoading)
+                  const SizedBox(
+                    width: 17,
+                    height: 17,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                else
+                  const Icon(
+                    Icons.event_busy_rounded,
+                    color: Colors.white,
+                    size: 19,
+                  ),
                 const SizedBox(
-                  width: 8,
+                  width: 9,
                 ),
                 Text(
-                  '${agent['prenom']} ${agent['nom']}',
+                  _clotureJourneeLoading
+                      ? 'Clôture en cours…'
+                      : 'Clôture Journée',
                   style: const TextStyle(
-                    color: Colors.white,
                     fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.3,
+                    color: Colors.white,
                   ),
                 ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Réouvrir Journée button (shown when ALL voyages are clôturés)
+  // ─────────────────────────────────────────────────────────────
+
+  Widget _buildReopenJourneeBtn() {
+    return SizedBox(
+      key: const ValueKey(
+        'cj_reopen',
+      ),
+      width: double.infinity,
+      height: 48,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(
+          14,
+        ),
+        child: InkWell(
+          onTap: _reopenJourneeLoading
+              ? null
+              : _reopenJournee,
+          borderRadius: BorderRadius.circular(
+            14,
+          ),
+          child: Ink(
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(
+                0.10,
+              ),
+              borderRadius: BorderRadius.circular(
+                14,
+              ),
+              border: Border.all(
+                color: Colors.white.withOpacity(
+                  0.30,
+                ),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (_reopenJourneeLoading)
+                  const SizedBox(
+                    width: 17,
+                    height: 17,
+                    child: CircularProgressIndicator(
+                      color: Colors.white70,
+                      strokeWidth: 2,
+                    ),
+                  )
+                else
+                  const Icon(
+                    Icons.lock_open_outlined,
+                    color: Colors.white70,
+                    size: 19,
+                  ),
+                const SizedBox(
+                  width: 9,
+                ),
+                Text(
+                  _reopenJourneeLoading
+                      ? 'Réouverture en cours…'
+                      : 'Réouvrir la Journée',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.3,
+                    color: Colors.white70,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Clôture Journée confirm card
+  // ─────────────────────────────────────────────────────────────
+
+  Widget _buildClotureJourneeConfirmCard() {
+    final activeCount = voyagesProgrammes
+        .where(
+          (
+            v,
+          ) =>
+              v['statut'] !=
+              'cloture',
+        )
+        .length;
+
+    return Container(
+      key: const ValueKey(
+        'cj_confirm',
+      ),
+      width: double.infinity,
+      padding: const EdgeInsets.all(
+        14,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(
+          0.08,
+        ),
+        borderRadius: BorderRadius.circular(
+          14,
+        ),
+        border: Border.all(
+          color: Colors.red.shade300.withOpacity(
+            0.5,
+          ),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                color: Colors.red.shade300,
+                size: 17,
+              ),
+              const SizedBox(
+                width: 7,
+              ),
+              Text(
+                'Clôturer toute la journée ?',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Colors.red.shade200,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(
+            height: 5,
+          ),
+          Text(
+            '$activeCount voyage(s) seront clôturés pour le $_todayLabel.',
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 11,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(
+            height: 12,
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 40,
+                  child: OutlinedButton(
+                    onPressed: _clotureJourneeLoading
+                        ? null
+                        : () => setState(
+                            () => _clotureJourneeConfirming = false,
+                          ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      side: BorderSide(
+                        color: Colors.white.withOpacity(
+                          0.2,
+                        ),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                          10,
+                        ),
+                      ),
+                    ),
+                    child: const Text(
+                      'Annuler',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(
+                width: 10,
+              ),
+              Expanded(
+                child: SizedBox(
+                  height: 40,
+                  child: ElevatedButton(
+                    onPressed: _clotureJourneeLoading
+                        ? null
+                        : _clotureJournee,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.red.shade900,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                          10,
+                        ),
+                      ),
+                    ),
+                    child: _clotureJourneeLoading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            'Confirmer',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _headerPill({
+    required Widget child,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 7,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(
+          0.1,
+        ),
+        borderRadius: BorderRadius.circular(
+          30,
+        ),
+        border: Border.all(
+          color: Colors.white.withOpacity(
+            0.2,
+          ),
+        ),
+      ),
+      child: child,
     );
   }
 
@@ -911,6 +1700,7 @@ class _VoyageProgrammePageState
               ),
             ],
           ),
+
         Expanded(
           child: voyagesProgrammes.isEmpty
               ? _buildEmpty(
@@ -970,15 +1760,23 @@ class _VoyageProgrammePageState
                           isActive: isActive,
                           isCloture: isCloture,
                           isLocked: isLocked,
-                          onTap: isLocked
+                          onTap: isCloture
+                              ? () => _reopenVoyage(
+                                  v,
+                                )
+                              : isLocked
                               ? _showLockedSnack
                               : () => _openVoyage(
                                   v,
                                 ),
-                          extraLabel: isLocked
+                          extraLabel: isCloture
+                              ? 'Appuyez pour réouvrir'
+                              : isLocked
                               ? 'En attente du voyage précédent'
                               : null,
-                          extraLabelColor: Colors.orange.shade600,
+                          extraLabelColor: isCloture
+                              ? Colors.grey.shade400
+                              : Colors.orange.shade600,
                         );
                       },
                 ),
@@ -1096,13 +1894,19 @@ class _VoyageProgrammePageState
                           isActive: !isCloture,
                           isCloture: isCloture,
                           isLocked: false,
-                          onTap: () => _openVoyage(
-                            v,
-                          ),
+                          onTap: isCloture
+                              ? () => _reopenVoyage(
+                                  v,
+                                )
+                              : () => _openVoyage(
+                                  v,
+                                ),
                           extraLabel: isCloture
-                              ? null
+                              ? 'Appuyez pour réouvrir'
                               : typeLabel,
-                          extraLabelColor: accent,
+                          extraLabelColor: isCloture
+                              ? Colors.grey.shade400
+                              : accent,
                         );
                       },
                 ),
@@ -1131,9 +1935,10 @@ class _VoyageProgrammePageState
     String? extraLabel,
     Color? extraLabelColor,
   }) {
-    final dh =
-        voyage['date_heure']
-            as String?;
+    final timeLabel = _getTime(
+      voyage['date_heure']
+          as String?,
+    );
 
     return GestureDetector(
       onTap: onTap,
@@ -1230,12 +2035,11 @@ class _VoyageProgrammePageState
                 width: 14,
               ),
 
-              // ── Middle text column — EXPANDED so it can shrink ──
+              // ── Middle text ──
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Route row
                     Row(
                       children: [
                         Container(
@@ -1274,8 +2078,6 @@ class _VoyageProgrammePageState
                     const SizedBox(
                       height: 5,
                     ),
-
-                    // ── FIX: date/time row — text wrapped in Flexible ──
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -1289,7 +2091,9 @@ class _VoyageProgrammePageState
                         ),
                         Flexible(
                           child: Text(
-                            '${_getTime(dh)}  ·  ${_getDate(dh)}',
+                            timeLabel.isNotEmpty
+                                ? '$timeLabel  ·  $_todayLabel'
+                                : _todayLabel,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: Colors.grey.shade400,
@@ -1299,7 +2103,6 @@ class _VoyageProgrammePageState
                         ),
                       ],
                     ),
-
                     if (extraLabel !=
                             null &&
                         extraLabel.isNotEmpty) ...[
@@ -1325,7 +2128,7 @@ class _VoyageProgrammePageState
                 width: 10,
               ),
 
-              // ── Right badge + chevron ──
+              // ── Right badge + icon ──
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -1365,7 +2168,7 @@ class _VoyageProgrammePageState
                   ),
                   Icon(
                     isCloture
-                        ? Icons.history
+                        ? Icons.lock_open_outlined
                         : isLocked
                         ? Icons.lock_outline
                         : Icons.chevron_right,
@@ -1624,7 +2427,380 @@ class _VoyageProgrammePageState
 }
 
 // ─────────────────────────────────────────────────────────────
-// Toast widget — top-right, slides in from the right
+// Réouvrir Journée — confirmation bottom sheet
+// ─────────────────────────────────────────────────────────────
+
+class _ReopenJourneeConfirmSheet
+    extends
+        StatelessWidget {
+  final int count;
+  final String todayLabel;
+  const _ReopenJourneeConfirmSheet({
+    required this.count,
+    required this.todayLabel,
+  });
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        24,
+        20,
+        24,
+        24 +
+            MediaQuery.of(
+              context,
+            ).viewInsets.bottom,
+      ),
+      decoration: const BoxDecoration(
+        color: cardWhite,
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(
+            22,
+          ),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // handle
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(
+                2,
+              ),
+            ),
+          ),
+          const SizedBox(
+            height: 22,
+          ),
+
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: navyMid.withOpacity(
+                0.1,
+              ),
+              borderRadius: BorderRadius.circular(
+                16,
+              ),
+            ),
+            child: const Icon(
+              Icons.lock_open_outlined,
+              color: navyMid,
+              size: 28,
+            ),
+          ),
+          const SizedBox(
+            height: 14,
+          ),
+
+          const Text(
+            'Réouvrir toute la journée ?',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+              color: navyDark,
+            ),
+          ),
+          const SizedBox(
+            height: 6,
+          ),
+
+          Text(
+            '$count voyage(s) du $todayLabel seront remis au statut Actif.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade500,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(
+            height: 8,
+          ),
+
+          Text(
+            'Cette action est réversible.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey.shade400,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+          const SizedBox(
+            height: 24,
+          ),
+
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(
+                      context,
+                      false,
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.grey.shade600,
+                      side: BorderSide(
+                        color: Colors.grey.shade300,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                          12,
+                        ),
+                      ),
+                    ),
+                    child: const Text(
+                      'Annuler',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(
+                width: 12,
+              ),
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(
+                      context,
+                      true,
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: navyMid,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                          12,
+                        ),
+                      ),
+                    ),
+                    child: const Text(
+                      'Réouvrir tout',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Reopen single voyage — confirmation bottom sheet
+// ─────────────────────────────────────────────────────────────
+
+class _ReopenConfirmSheet
+    extends
+        StatelessWidget {
+  final Map<
+    String,
+    dynamic
+  >
+  voyage;
+  const _ReopenConfirmSheet({
+    required this.voyage,
+  });
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    final depart =
+        voyage['depart'] ??
+        '';
+    final arrivee =
+        voyage['arrivee'] ??
+        '';
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        24,
+        20,
+        24,
+        24 +
+            MediaQuery.of(
+              context,
+            ).viewInsets.bottom,
+      ),
+      decoration: const BoxDecoration(
+        color: cardWhite,
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(
+            22,
+          ),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // handle
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(
+                2,
+              ),
+            ),
+          ),
+          const SizedBox(
+            height: 22,
+          ),
+
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: navyMid.withOpacity(
+                0.1,
+              ),
+              borderRadius: BorderRadius.circular(
+                16,
+              ),
+            ),
+            child: const Icon(
+              Icons.lock_open_outlined,
+              color: navyMid,
+              size: 28,
+            ),
+          ),
+          const SizedBox(
+            height: 14,
+          ),
+
+          const Text(
+            'Réouvrir ce voyage ?',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+              color: navyDark,
+            ),
+          ),
+          const SizedBox(
+            height: 6,
+          ),
+
+          Text(
+            '$depart → $arrivee',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade500,
+            ),
+          ),
+          const SizedBox(
+            height: 8,
+          ),
+
+          Text(
+            'Le voyage sera remis au statut Actif\net pourra être utilisé à nouveau.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade500,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(
+            height: 24,
+          ),
+
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(
+                      context,
+                      false,
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.grey.shade600,
+                      side: BorderSide(
+                        color: Colors.grey.shade300,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                          12,
+                        ),
+                      ),
+                    ),
+                    child: const Text(
+                      'Annuler',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(
+                width: 12,
+              ),
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(
+                      context,
+                      true,
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: navyMid,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                          12,
+                        ),
+                      ),
+                    ),
+                    child: const Text(
+                      'Réouvrir',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Toast widget
 // ─────────────────────────────────────────────────────────────
 
 class _ToastWidget
@@ -1633,7 +2809,6 @@ class _ToastWidget
   final String msg;
   final Color color;
   final IconData icon;
-
   const _ToastWidget({
     required this.msg,
     required this.color,
@@ -1693,9 +2868,7 @@ class _ToastWidgetState
                 curve: Curves.easeOut,
               ),
             );
-
     _ctrl.forward();
-
     Future.delayed(
       const Duration(
         milliseconds: 2400,

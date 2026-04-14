@@ -53,6 +53,14 @@ class TicketSpecialData(BaseModel):
     metadata:        dict  = None
 
 
+class ClotureJourneeData(BaseModel):
+    ids: list[int]
+
+
+class ReopenJourneeData(BaseModel):
+    ids: list[int]
+
+
 # ─────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────
@@ -71,7 +79,6 @@ def _now() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 def _fmt_voyage_prog(v: dict) -> dict:
-    """Serialize a programmé voyage row (no id_billet)."""
     return {
         "id":              v["id_vente"],
         "id_vente":        v["id_vente"],
@@ -87,7 +94,6 @@ def _fmt_voyage_prog(v: dict) -> dict:
     }
 
 def _fmt_voyage_agent(v: dict) -> dict:
-    """Serialize a voyage row from the agent endpoint (no id_billet)."""
     return {
         "id":              v["id_vente"],
         "id_vente":        v["id_vente"],
@@ -110,7 +116,6 @@ def _fmt_voyage_agent(v: dict) -> dict:
 
 @router.post("/ajouter_vente")
 def ajouter_vente(data: VenteData):
-    """Create a new vente (voyage). id_billet column no longer exists."""
     conn = get_db()
     cursor = conn.cursor()
     try:
@@ -133,7 +138,6 @@ def ajouter_vente(data: VenteData):
 
 @router.get("/ventes/programmees/{matricule_agent}")
 def get_ventes_programmees(matricule_agent: int):
-    """Return all programmé voyages for an agent, newest first."""
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
@@ -160,7 +164,6 @@ def get_ventes_programmees(matricule_agent: int):
 
 @router.get("/ventes/agent/{matricule_agent}")
 def get_ventes_agent(matricule_agent: int):
-    """Return ALL voyages for an agent (programmés + non programmés)."""
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
@@ -236,12 +239,6 @@ def get_tarifs_ligne(id_ligne: int):
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute("""
-            SELECT nom_arret FROM billetterie.arret
-            WHERE id_ligne = %s ORDER BY ordre
-        """, (id_ligne,))
-        arrets = [r["nom_arret"] for r in cursor.fetchall()]
-
-        cursor.execute("""
             SELECT point_a, point_b, prix_normal
             FROM billetterie.tarif_segment
             WHERE id_ligne = %s
@@ -261,7 +258,7 @@ def get_tarifs_ligne(id_ligne: int):
 
         return {
             "success":     True,
-            "arrets":      arrets,
+            "arrets":      [],
             "prix_map":    prix_map,
             "tarif_types": tarif_types,
         }
@@ -272,7 +269,42 @@ def get_tarifs_ligne(id_ligne: int):
 
 
 # ─────────────────────────────────────────────────────────────
-# Voyage statut & cloture
+# Voyage stops
+# ─────────────────────────────────────────────────────────────
+
+@router.get("/voyages/{id_vente}/arrets")
+def get_arrets_voyage(id_vente: int):
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT point_depart, point_arrivee, ordre
+            FROM billetterie.segment_voyage
+            WHERE id_vente = %s
+            ORDER BY ordre ASC
+        """, (id_vente,))
+        segments = cursor.fetchall()
+
+        if not segments:
+            return {
+                "success": False,
+                "arrets":  [],
+                "message": "Aucun segment trouvé pour ce voyage",
+            }
+
+        arrets = [s["point_depart"] for s in segments]
+        arrets.append(segments[-1]["point_arrivee"])
+
+        return {"success": True, "arrets": arrets}
+    except Exception as e:
+        print(f"❌ get_arrets_voyage {id_vente}: {e}")
+        return {"success": False, "arrets": [], "error": str(e)}
+    finally:
+        conn.close()
+
+
+# ─────────────────────────────────────────────────────────────
+# Voyage statut, cloture & reopen
 # ─────────────────────────────────────────────────────────────
 
 @router.get("/vente/{id_vente}/statut")
@@ -294,15 +326,10 @@ def get_statut_voyage(id_vente: int):
 
 @router.put("/vente/{id_vente}/cloturer")
 def cloturer_voyage(id_vente: int):
-    """
-    Clôture a voyage and cascade-clôture all open segments.
-    Segments in 'en_attente' are briefly activated then immediately clôturés
-    so that DB constraints (only actif → cloture) are respected.
-    """
+    """Clôture a voyage (voyage statut only — segments are not touched)."""
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        # 1 — Fetch voyage
         cursor.execute(
             "SELECT * FROM billetterie.vente WHERE id_vente = %s", (id_vente,)
         )
@@ -314,31 +341,6 @@ def cloturer_voyage(id_vente: int):
 
         now = _now()
 
-        # 2 — Fetch all non-clôturé segments
-        cursor.execute("""
-            SELECT id_segment, statut
-            FROM billetterie.segment_voyage
-            WHERE id_vente = %s AND statut != 'cloture'
-            ORDER BY ordre
-        """, (id_vente,))
-        open_segments = cursor.fetchall()
-
-        # 3 — Cascade: activate (if needed) then clôture each segment
-        for seg in open_segments:
-            id_seg = seg["id_segment"]
-            if seg["statut"] == "en_attente":
-                cursor.execute("""
-                    UPDATE billetterie.segment_voyage
-                    SET statut = 'actif', date_ouverture = %s
-                    WHERE id_segment = %s
-                """, (now, id_seg))
-            cursor.execute("""
-                UPDATE billetterie.segment_voyage
-                SET statut = 'cloture', date_cloture = %s
-                WHERE id_segment = %s
-            """, (now, id_seg))
-
-        # 4 — Clôture the voyage itself
         cursor.execute(
             "UPDATE billetterie.vente "
             "SET statut = 'cloture', date_cloture = %s "
@@ -347,16 +349,11 @@ def cloturer_voyage(id_vente: int):
         )
         conn.commit()
 
-        segments_closed = len(open_segments)
-        print(
-            f"✅ Voyage {id_vente} clôturé à {now} — "
-            f"{segments_closed} segment(s) cascade-clôturés"
-        )
+        print(f"✅ Voyage {id_vente} clôturé à {now}")
         return {
-            "success":         True,
-            "message":         "Voyage clôturé",
-            "date_cloture":    now,
-            "segments_closed": segments_closed,
+            "success":      True,
+            "message":      "Voyage clôturé",
+            "date_cloture": now,
         }
 
     except Exception as e:
@@ -367,8 +364,123 @@ def cloturer_voyage(id_vente: int):
         conn.close()
 
 
+@router.put("/vente/{id_vente}/reopen")
+def reopen_voyage(id_vente: int):
+    """Réouvre un voyage clôturé en le remettant au statut 'actif'."""
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT statut FROM billetterie.vente WHERE id_vente = %s",
+            (id_vente,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return {"success": False, "message": "Voyage introuvable"}
+        if row["statut"] != "cloture":
+            return {"success": False, "message": "Voyage déjà actif"}
+
+        cursor.execute(
+            "UPDATE billetterie.vente "
+            "SET statut = 'actif', date_cloture = NULL "
+            "WHERE id_vente = %s",
+            (id_vente,),
+        )
+        conn.commit()
+
+        print(f"✅ Voyage {id_vente} réouvert à {_now()}")
+        return {"success": True, "message": "Voyage réouvert"}
+
+    except Exception as e:
+        conn.rollback()
+        print(f"❌ reopen_voyage {id_vente}: {e}")
+        return {"success": False, "error": str(e)}
+    finally:
+        conn.close()
+
+
 # ─────────────────────────────────────────────────────────────
-# Segments
+# Clôture Journée — bulk close multiple voyages in one request
+# ─────────────────────────────────────────────────────────────
+
+@router.put("/ventes/cloturer-journee")
+def cloturer_journee(data: ClotureJourneeData):
+    """
+    Bulk-close every voyage ID in data.ids that is not already clôturé.
+    Returns the number of rows actually updated.
+    """
+    if not data.ids:
+        return {"success": False, "message": "Aucun id fourni"}
+
+    conn   = get_db()
+    cursor = conn.cursor()
+    now    = _now()
+    closed = 0
+
+    try:
+        for id_vente in data.ids:
+            cursor.execute(
+                """UPDATE billetterie.vente
+                   SET statut = 'cloture', date_cloture = %s
+                   WHERE id_vente = %s AND statut != 'cloture'""",
+                (now, id_vente),
+            )
+            closed += cursor.rowcount
+
+        conn.commit()
+        print(f"✅ Clôture journée: {closed} voyage(s) clôturé(s) à {now}")
+        return {"success": True, "closed": closed, "date_cloture": now}
+
+    except Exception as e:
+        conn.rollback()
+        print(f"❌ cloturer_journee: {e}")
+        return {"success": False, "error": str(e)}
+    finally:
+        conn.close()
+
+
+# ─────────────────────────────────────────────────────────────
+# Réouvrir Journée — bulk reopen multiple voyages in one request
+# ─────────────────────────────────────────────────────────────
+
+@router.put("/ventes/reopen-journee")
+def reopen_journee(data: ReopenJourneeData):
+    """
+    Bulk-reopen every voyage ID in data.ids that is currently clôturé.
+    Returns the number of rows actually updated.
+    """
+    if not data.ids:
+        return {"success": False, "message": "Aucun id fourni"}
+
+    conn     = get_db()
+    cursor   = conn.cursor()
+    now      = _now()
+    reopened = 0
+
+    try:
+        for id_vente in data.ids:
+            cursor.execute(
+                """UPDATE billetterie.vente
+                   SET statut = 'actif', date_cloture = NULL
+                   WHERE id_vente = %s AND statut = 'cloture'""",
+                (id_vente,),
+            )
+            reopened += cursor.rowcount
+
+        conn.commit()
+        print(f"✅ Réouverture journée: {reopened} voyage(s) réouvert(s) à {now}")
+        return {"success": True, "reopened": reopened}
+
+    except Exception as e:
+        conn.rollback()
+        print(f"❌ reopen_journee: {e}")
+        return {"success": False, "error": str(e)}
+    finally:
+        conn.close()
+
+
+# ─────────────────────────────────────────────────────────────
+# Segments (read-only endpoints)
 # ─────────────────────────────────────────────────────────────
 
 @router.get("/voyages/{id_vente}/segment/actif")
@@ -376,7 +488,6 @@ def get_segment_actif(id_vente: int):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     try:
-        # Try to find the currently active segment
         cursor.execute("""
             SELECT * FROM billetterie.segment_voyage
             WHERE id_vente = %s AND statut = 'actif'
@@ -404,7 +515,6 @@ def get_segment_actif(id_vente: int):
             }
 
         if not segment:
-            # No active segment — find the next en_attente one
             cursor.execute("""
                 SELECT * FROM billetterie.segment_voyage
                 WHERE id_vente = %s AND statut = 'en_attente'
@@ -412,13 +522,12 @@ def get_segment_actif(id_vente: int):
             """, (id_vente,))
             prochain = cursor.fetchone()
             return {
-                "success":      True,
-                "segment":      None,
-                "prochain":     _fmt_prochain(prochain) if prochain else None,
+                "success":       True,
+                "segment":       None,
+                "prochain":      _fmt_prochain(prochain) if prochain else None,
                 "tous_clotures": prochain is None,
             }
 
-        # Active segment found — look for the next en_attente one
         cursor.execute("""
             SELECT * FROM billetterie.segment_voyage
             WHERE id_vente = %s AND ordre > %s AND statut = 'en_attente'
@@ -427,81 +536,13 @@ def get_segment_actif(id_vente: int):
         prochain = cursor.fetchone()
 
         return {
-            "success":      True,
-            "segment":      _fmt_seg(segment),
-            "prochain":     _fmt_prochain(prochain) if prochain else None,
+            "success":       True,
+            "segment":       _fmt_seg(segment),
+            "prochain":      _fmt_prochain(prochain) if prochain else None,
             "tous_clotures": False,
         }
     except Exception as e:
         print(f"❌ get_segment_actif {id_vente}: {e}")
-        return {"success": False, "error": str(e)}
-    finally:
-        conn.close()
-
-
-@router.put("/voyages/{id_vente}/segment/ouvrir")
-def ouvrir_segment(id_vente: int):
-    """Activate the next en_attente segment (only if no segment is currently active)."""
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("""
-            SELECT id_segment FROM billetterie.segment_voyage
-            WHERE id_vente = %s AND statut = 'actif'
-        """, (id_vente,))
-        if cursor.fetchone():
-            return {
-                "success": False,
-                "message": "Clôturez le segment actif avant d'ouvrir le suivant",
-            }
-
-        cursor.execute("""
-            SELECT id_segment FROM billetterie.segment_voyage
-            WHERE id_vente = %s AND statut = 'en_attente'
-            ORDER BY ordre LIMIT 1
-        """, (id_vente,))
-        row = cursor.fetchone()
-        if not row:
-            return {"success": False, "message": "Aucun segment disponible"}
-
-        cursor.execute("""
-            UPDATE billetterie.segment_voyage
-            SET statut = 'actif', date_ouverture = %s
-            WHERE id_segment = %s
-        """, (_now(), row["id_segment"]))
-        conn.commit()
-        return {"success": True, "message": "Segment ouvert", "id_segment": row["id_segment"]}
-    except Exception as e:
-        conn.rollback()
-        return {"success": False, "error": str(e)}
-    finally:
-        conn.close()
-
-
-@router.put("/voyages/{id_vente}/segments/{id_segment}/cloturer")
-def cloturer_segment(id_vente: int, id_segment: int):
-    conn = get_db()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("""
-            SELECT statut FROM billetterie.segment_voyage
-            WHERE id_segment = %s AND id_vente = %s
-        """, (id_segment, id_vente))
-        row = cursor.fetchone()
-        if not row:
-            return {"success": False, "message": "Segment introuvable"}
-        if row["statut"] != "actif":
-            return {"success": False, "message": "Ce segment n'est pas actif"}
-
-        cursor.execute("""
-            UPDATE billetterie.segment_voyage
-            SET statut = 'cloture', date_cloture = %s
-            WHERE id_segment = %s
-        """, (_now(), id_segment))
-        conn.commit()
-        return {"success": True, "message": "Segment clôturé"}
-    except Exception as e:
-        conn.rollback()
         return {"success": False, "error": str(e)}
     finally:
         conn.close()
@@ -576,7 +617,6 @@ def vendre_ticket(data: dict):
                 "error":   f"Passage spécial '{type_tarif}' doit avoir prix=0",
             }
 
-        # Resolve id_segment if not supplied
         if id_segment == 0:
             cursor.execute("""
                 SELECT id_segment FROM billetterie.segment_voyage
@@ -587,7 +627,6 @@ def vendre_ticket(data: dict):
             if row:
                 id_segment = row[0]
             else:
-                # Fall back to the last segment of the voyage
                 cursor.execute("""
                     SELECT id_segment FROM billetterie.segment_voyage
                     WHERE id_vente = %s

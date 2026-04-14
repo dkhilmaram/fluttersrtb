@@ -34,7 +34,7 @@ cardWhite = Color(
 );
 
 // ════════════════════════════════════════════════════
-// TOAST WIDGET — slides in from top right
+// TOAST WIDGET
 // ════════════════════════════════════════════════════
 
 class _ToastWidget
@@ -89,7 +89,6 @@ class _ToastWidgetState
       parent: _ctrl,
       curve: Curves.easeOut,
     );
-    // slides in from the right
     _slide =
         Tween<
               Offset
@@ -284,7 +283,7 @@ class _ClotureVoyagePageState
   }
 
   // ════════════════════════════════════════════════════
-  // TOAST — top right, slides in from right
+  // TOAST
   // ════════════════════════════════════════════════════
 
   void _showToast(
@@ -400,7 +399,7 @@ class _ClotureVoyagePageState
       final response = await http
           .put(
             Uri.parse(
-              'http://10.19.204.100:8000/billetterie/vente/$id/cloturer',
+              'http://192.168.1.16:8000/billetterie/vente/$id/cloturer',
             ),
             headers: {
               'Content-Type': 'application/json',
@@ -423,9 +422,6 @@ class _ClotureVoyagePageState
             id,
             'cloture',
             serverStatut: 'cloture',
-          );
-          await _markAllSegmentsClotureLocally(
-            id,
           );
           _onClotureDone();
         } else {
@@ -466,12 +462,6 @@ class _ClotureVoyagePageState
       'cloture_pending',
       serverStatut: lastKnownServerStatut,
     );
-    await _markAllSegmentsClotureLocally(
-      id,
-    );
-    await _queuePendingSegmentClotures(
-      id,
-    );
     await LocalDatabase.saveCloturePending(
       id,
     );
@@ -482,104 +472,6 @@ class _ClotureVoyagePageState
       );
     }
     _onClotureDone();
-  }
-
-  Future<
-    void
-  >
-  _markAllSegmentsClotureLocally(
-    int idVente,
-  ) async {
-    final cached = await LocalDatabase.getSegments(
-      idVente,
-    );
-    if (cached ==
-        null)
-      return;
-
-    final now = DateTime.now().toString().substring(
-      0,
-      19,
-    );
-    final segments =
-        (cached['segments']
-                    as List<
-                      dynamic
-                    >? ??
-                [])
-            .map(
-              (
-                s,
-              ) {
-                final seg =
-                    Map<
-                      String,
-                      dynamic
-                    >.from(
-                      s
-                          as Map,
-                    );
-                if (seg['statut'] !=
-                    'cloture') {
-                  seg['statut'] = 'cloture';
-                  seg['date_cloture'] ??= now;
-                }
-                return seg;
-              },
-            )
-            .toList();
-
-    await LocalDatabase.saveSegments(
-      idVente: idVente,
-      actifSegment: null,
-      prochainSegment: null,
-      tousSecteurs: segments,
-      tousClotures: true,
-    );
-  }
-
-  Future<
-    void
-  >
-  _queuePendingSegmentClotures(
-    int idVente,
-  ) async {
-    final cached = await LocalDatabase.getSegments(
-      idVente,
-    );
-    if (cached ==
-        null)
-      return;
-
-    final segments =
-        cached['segments']
-            as List<
-              dynamic
-            >? ??
-        [];
-    for (final s in segments) {
-      final seg =
-          s
-              as Map<
-                String,
-                dynamic
-              >;
-      final statut =
-          seg['statut']
-              as String? ??
-          '';
-      if (statut ==
-          'cloture')
-        continue;
-      final idSeg =
-          seg['id_segment']
-              as int;
-      await LocalDatabase.saveSegmentCloturePending(
-        idVente: idVente,
-        idSegment: idSeg,
-        openNext: false,
-      );
-    }
   }
 
   void _onClotureDone() {
@@ -912,16 +804,6 @@ class _ClotureVoyagePageState
           height: 8,
         ),
         Text(
-          'Tous les secteurs ont été clôturés.',
-          style: TextStyle(
-            color: Colors.grey.shade500,
-            fontSize: 13,
-          ),
-        ),
-        const SizedBox(
-          height: 4,
-        ),
-        Text(
           'Retour en cours...',
           style: TextStyle(
             color: Colors.grey.shade400,
@@ -1110,9 +992,6 @@ class _ClotureVoyagePageState
               ),
               _warningItem(
                 'Cette action est irréversible',
-              ),
-              _warningItem(
-                'Tous les secteurs seront automatiquement clôturés',
               ),
               _warningItem(
                 'Aucune vente ne sera possible après clôture',
