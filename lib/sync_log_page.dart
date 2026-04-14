@@ -3,10 +3,10 @@ import 'local_database.dart';
 import 'sync_service.dart';
 
 // ── Palette ──
-const Color _dark0  = Color(0xFF0B1120);
-const Color _dark1  = Color(0xFF111827);
-const Color _dark2  = Color(0xFF1C2A3A);
-const Color _dark3  = Color(0xFF243347);
+const Color _dark0   = Color(0xFF0B1120);
+const Color _dark1   = Color(0xFF111827);
+const Color _dark2   = Color(0xFF1C2A3A);
+const Color _dark3   = Color(0xFF243347);
 const Color _surface = Color(0xFFF2F5FB);
 
 // ── Status colours ──
@@ -16,7 +16,9 @@ const Color _clrPending = Color(0xFFD97706);
 const Color _clrInfo    = Color(0xFF60A5FA);
 
 class SyncLogPage extends StatefulWidget {
-  const SyncLogPage({super.key});
+  final Map<String, dynamic> agent; // ← ADDED
+  const SyncLogPage({super.key, required this.agent}); // ← ADDED
+
   @override
   State<SyncLogPage> createState() => _SyncLogPageState();
 }
@@ -28,6 +30,10 @@ class _SyncLogPageState extends State<SyncLogPage>
   List<Map<String, dynamic>> _logs    = [];
   bool    _loading     = false;
   String? _syncMessage;
+
+  // ── Agent matricule ──
+  int get _matricule =>
+      widget.agent['matricule_agent'] ?? widget.agent['matricule'];
 
   @override
   void initState() {
@@ -44,8 +50,21 @@ class _SyncLogPageState extends State<SyncLogPage>
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    _tickets = await LocalDatabase.getAllTickets();
-    _logs    = await LocalDatabase.getLogs();
+
+    final allTickets = await LocalDatabase.getAllTickets();
+    final allLogs    = await LocalDatabase.getLogs();
+
+    // ── Filter by agent + limit to last 50 ──
+    _tickets = allTickets
+        .where((t) => t['matricule_agent'] == _matricule)
+        .take(50)
+        .toList();
+
+    _logs = allLogs
+        .where((l) => l['matricule_agent'] == _matricule)
+        .take(50)
+        .toList();
+
     setState(() => _loading = false);
   }
 
@@ -481,9 +500,9 @@ class _SyncLogPageState extends State<SyncLogPage>
           '${date.minute.toString().padLeft(2, '0')}:'
           '${date.second.toString().padLeft(2, '0')}'
         : '—';
-    final dateStr   = date != null ? _fmtDate(l['date_tentative']) : '—';
-    final message   = l['message'] as String? ?? '';
-    final httpCode  = status == 'synced' ? '200' : status == 'failed' ? '503' : '—';
+    final dateStr  = date != null ? _fmtDate(l['date_tentative']) : '—';
+    final message  = l['message'] as String? ?? '';
+    final httpCode = status == 'synced' ? '200' : status == 'failed' ? '503' : '—';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 9),
@@ -540,7 +559,7 @@ class _SyncLogPageState extends State<SyncLogPage>
           ]),
         ),
 
-        // ── Meta row (FIXED: Wrap instead of Row to prevent overflow) ──
+        // ── Meta row ──
         Container(
           width: double.infinity,
           decoration: BoxDecoration(
@@ -762,8 +781,7 @@ class _SyncLogPageState extends State<SyncLogPage>
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 10),
                   decoration: const BoxDecoration(
-                    border:
-                        Border(bottom: BorderSide(color: _dark3)),
+                    border: Border(bottom: BorderSide(color: _dark3)),
                   ),
                   child: Row(children: [
                     const Icon(Icons.storage_rounded,
@@ -806,8 +824,7 @@ class _SyncLogPageState extends State<SyncLogPage>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
       decoration: const BoxDecoration(
-        border:
-            Border(bottom: BorderSide(color: _dark3, width: 0.5)),
+        border: Border(bottom: BorderSide(color: _dark3, width: 0.5)),
       ),
       child: Row(children: [
         Icon(_statusIcon(status), color: color, size: 14),

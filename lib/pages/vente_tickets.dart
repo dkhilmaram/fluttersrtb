@@ -630,7 +630,7 @@ class _VenteTicketsPageState
                   builder:
                       (
                         _,
-                      ) => const SyncLogPage(),
+                      ) =>SyncLogPage(agent: widget.voyage),
                 ),
               ).then(
                 (
@@ -924,12 +924,13 @@ class _VenteTicketsPageState
                   builder:
                       (
                         _,
-                      ) => const SyncLogPage(),
+                      ) => SyncLogPage(agent: widget.voyage),
                 ),
               ).then(
                 (
                   _,
                 ) => _loadPendingCount(),
+
               ),
         ),
         if (hasId) ...[
@@ -1039,7 +1040,7 @@ class _VenteTicketsPageState
                         builder:
                             (
                               _,
-                            ) => const SyncLogPage(),
+                            ) => SyncLogPage(agent: widget.voyage),
                       ),
                     ).then(
                       (

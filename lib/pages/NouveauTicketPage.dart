@@ -69,17 +69,9 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
   }
 
   // ── Public method called by TicketingPage after a gratuit passage is saved ──
-  //
-  // Mirrors exactly what _saveTicket does on success:
-  //   • keeps pointDepart (and advances _minDepartureIndex to that stop)
-  //   • clears pointArrivee
-  //   • resets quantite to 1
-  //
   void resetAfterGratuit() {
     if (!mounted) return;
     setState(() {
-      // Advance the minimum departure index to the current departure stop
-      // so the logic stays consistent with a normal ticket sale.
       if (pointDepart != null) {
         final usedIndex = arrets.indexOf(pointDepart!);
         if (usedIndex >= 0) _minDepartureIndex = usedIndex;
@@ -865,7 +857,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                           ),
                         ],
 
-                        // Tarif grid
+                        // Tarif grid (now includes Passage Gratuit chip)
                         _label('Type de tarif'),
                         const SizedBox(height: 10),
                         _buildTarifGrid(),
@@ -969,31 +961,6 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                           colors:    [navyDark, navyLight],
                           onTap:     _vendreTicket,
                         ),
-                        const SizedBox(height: 10),
-
-                        // Passage Gratuit button
-                        _actionBtn(
-                          label:     'Passage Gratuit / Spécial',
-                          icon:      Icons.card_membership_rounded,
-                          isLoading: false,
-                          enabled:   _canGratuit,
-                          colors:    const [Color(0xFF065F46), Color(0xFF059669)],
-                          onTap:     _openGratuit,
-                        ),
-
-                        if (!_canGratuit) ...[
-                          const SizedBox(height: 6),
-                          Center(
-                            child: Text(
-                              'Sélectionnez montée & descente '
-                              'pour accéder aux passages gratuits',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey.shade400),
-                            ),
-                          ),
-                        ],
                       ],
                     ),
         ),
@@ -1005,16 +972,20 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     return Scaffold(backgroundColor: surface, body: body);
   }
 
-  // ── Tarif grid ─────────────────────────────────────────────
+  // ── Tarif grid (with Passage Gratuit chip appended) ────────
 
   Widget _buildTarifGrid() {
     final filtered = tarifTypes
         .where((t) => (t['pourcentage'] as int) != 0)
         .toList();
+
+    // Total items = tarif chips + 1 Passage Gratuit chip
+    final itemCount = filtered.length + 1;
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      itemCount: filtered.length,
+      itemCount: itemCount,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount:  2,
         crossAxisSpacing: 8,
@@ -1022,6 +993,11 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
         childAspectRatio: 3.8,
       ),
       itemBuilder: (_, i) {
+        // Last item → Passage Gratuit chip
+        if (i == filtered.length) {
+          return _buildGratuitChip();
+        }
+
         final t        = filtered[i];
         final type     = t['type_tarif'] as String;
         final pct      = t['pourcentage'] as int;
@@ -1081,6 +1057,72 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
           ),
         );
       },
+    );
+  }
+
+  // ── Passage Gratuit chip (lives inside the tarif grid) ─────
+
+  Widget _buildGratuitChip() {
+    const Color accentGreen = Color(0xFF059669);
+    final bool enabled = _canGratuit;
+
+    return GestureDetector(
+      onTap: enabled ? _openGratuit : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        decoration: BoxDecoration(
+          gradient: enabled
+              ? const LinearGradient(
+                  colors: [Color(0xFF065F46), Color(0xFF059669)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          color: enabled ? null : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: enabled
+                ? accentGreen
+                : Colors.grey.shade300,
+            width: 1.5,
+          ),
+          boxShadow: enabled
+              ? [BoxShadow(
+                  color: accentGreen.withOpacity(0.30),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3))]
+              : [],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Row(children: [
+            Icon(
+              enabled
+                  ? Icons.card_membership_rounded
+                  : Icons.lock_rounded,
+              color: enabled ? Colors.white : Colors.grey.shade400,
+              size: 16,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Passage Gratuit',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: enabled
+                        ? Colors.white
+                        : Colors.grey.shade400),
+              ),
+            ),
+            if (!enabled)
+              Icon(Icons.chevron_right,
+                  size: 14, color: Colors.grey.shade300),
+          ]),
+        ),
+      ),
     );
   }
 

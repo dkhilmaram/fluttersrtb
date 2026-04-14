@@ -42,8 +42,8 @@ class _TicketingPageState extends State<TicketingPage>
     _tabCtrl = TabController(length: 3, vsync: this);
     _tabCtrl.addListener(() {
       if (_tabCtrl.indexIsChanging) return;
-      // Block direct swipe/tap to the gratuit tab if not unlocked
-      if (_tabCtrl.index == 1 && !_gratuitUnlocked) {
+      // Block direct swipe/tap to the gratuit tab (now index 2) if not unlocked
+      if (_tabCtrl.index == 2 && !_gratuitUnlocked) {
         _tabCtrl.animateTo(_activeTab);
         return;
       }
@@ -61,9 +61,9 @@ class _TicketingPageState extends State<TicketingPage>
   void _switchToGratuitTab() {
     setState(() {
       _gratuitUnlocked = true;
-      _activeTab       = 1;
+      _activeTab       = 2;
     });
-    _tabCtrl.animateTo(1);
+    _tabCtrl.animateTo(2);
   }
 
   // Called by NouveauTicketPage after a normal ticket is sold
@@ -120,15 +120,18 @@ class _TicketingPageState extends State<TicketingPage>
             ),
             dividerColor: Colors.transparent,
             tabs: [
+              // Tab 0 — Nouveau Ticket
               _buildTab(Icons.confirmation_number_rounded,
                   'Nouveau Ticket', 0),
+              // Tab 1 — NFC / Scan
+              _buildTab(Icons.qr_code_scanner_rounded, 'NFC / Scan', 1),
+              // Tab 2 — Passage Gratuit (last)
               _buildTab(
                   _gratuitUnlocked
                       ? Icons.card_membership_rounded
                       : Icons.lock_rounded,
-                  'Passage Gratuit', 1,
+                  'Passage Gratuit', 2,
                   locked: !_gratuitUnlocked),
-              _buildTab(Icons.qr_code_scanner_rounded, 'NFC / Scan', 2),
             ],
           ),
         ),
@@ -140,7 +143,6 @@ class _TicketingPageState extends State<TicketingPage>
             physics: const NeverScrollableScrollPhysics(),
             children: [
               // Tab 0 — Nouveau Ticket
-              // GlobalKey wires us to resetAfterGratuit()
               NouveauTicketPage(
                 key:           _nouveauKey,
                 voyage: {
@@ -154,22 +156,22 @@ class _TicketingPageState extends State<TicketingPage>
                 onTicketSold:  _onTicketSold,
               ),
 
-              // Tab 1 — Passage Gratuit / Spécial
+              // Tab 1 — NFC / Scan
+              ScanTabPage(
+                voyage:  widget.voyage,
+                segment: widget.segment,
+              ),
+
+              // Tab 2 — Passage Gratuit / Spécial (last)
               _gratuitUnlocked
                   ? PassageSpecialPage(
                       key:            ValueKey(_gratuitKey),
                       voyage:         widget.voyage,
                       segment:        widget.segment,
                       embeddedMode:   true,
-                      onPassageSaved: _onPassageSaved, // ← new callback
+                      onPassageSaved: _onPassageSaved,
                     )
                   : const _LockedTabPlaceholder(),
-
-              // Tab 2 — NFC / Scan
-              ScanTabPage(
-                voyage:  widget.voyage,
-                segment: widget.segment,
-              ),
             ],
           ),
         ),
