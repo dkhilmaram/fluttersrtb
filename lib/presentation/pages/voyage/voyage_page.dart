@@ -704,559 +704,1008 @@ Future<void> _reopenVoyage(Map<String, dynamic> voyage) async {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Build Excel
-  // ─────────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+//  PATCH — drop these methods into _VoyageProgrammePageState
+//  to replace _buildExcel, _buildPdf, _buildPdfTarifTable,
+//  _buildPdfTicketsTable  (everything else stays the same)
+// ═══════════════════════════════════════════════════════════════
 
-  Future<File> _buildExcel({
-    required List<Map<String, dynamic>> allTickets,
-    required List<dynamic> voyages,
-    required String agentName,
-    required String dateStr,
-    required String label,
-    required int totalRecette,
-    required int totalTickets,
-    required int totalGratuits,
-    required Directory dir,
-  }) async {
-    final excel = xl.Excel.createExcel();
-    excel.delete('Sheet1');
+// ─────────────────────────────────────────────────────────────
+// Build Excel  (6 sheets)
+//   1. Résumé          — KPIs
+//   2. Tickets         — full ticket list
+//   3. Par tarif       — revenue breakdown by tarif type
+//   4. Gratuits/catég. — gratuit count & % per category   ← NEW
+//   5. Par segment     — tickets grouped by segment        ← NEW
+//   6. Par voyage      — per-voyage ticket breakdown       ← NEW (was sheet 4)
+// ─────────────────────────────────────────────────────────────
+Future<File> _buildExcel({
+  required List<Map<String, dynamic>> allTickets,
+  required List<dynamic> voyages,
+  required String agentName,
+  required String dateStr,
+  required String label,
+  required int totalRecette,
+  required int totalTickets,
+  required int totalGratuits,
+  required Directory dir,
+}) async {
+  final excel = xl.Excel.createExcel();
+  excel.delete('Sheet1');
 
-    // ── Résumé sheet ──────────────────────────────────────────
-    final resume = excel['Résumé'];
-    _xlsCell(resume, 0, 0, 'RAPPORT JOURNÉE — $_todayLabel',
-        bold: true, fgHex: '#0D1B3E');
-    _xlsCell(resume, 1, 0, 'Agent : $agentName', fgHex: '#374151');
-    _xlsCell(resume, 2, 0, 'Généré le $dateStr',  fgHex: '#6B7280');
+ 
+ // ── helpers ─────────────────────────────────────────────────
+void header(xl.Sheet s, int row, int col, String text) {
+  final c = s.cell(
+    xl.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row),
+  );
+  c.value = xl.TextCellValue(text);
+  c.cellStyle = xl.CellStyle(
+    bold: true,
+    backgroundColorHex: xl.ExcelColor.fromHexString('#1A3260'),
+    fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
+  );
+}
 
-    _xlsHeader(resume, 4, 0, 'Indicateur');
-    _xlsHeader(resume, 4, 1, 'Valeur');
+void cell(xl.Sheet s, int row, int col, dynamic value,
+    {bool bold = false, String? bgHex, String? fgHex}) {
+  final c = s.cell(
+    xl.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row),
+  );
+  if (value is int) {
+    c.value = xl.IntCellValue(value);
+  } else if (value is double) {
+    c.value = xl.DoubleCellValue(value);
+  } else {
+    c.value = xl.TextCellValue(value?.toString() ?? '');
+  }
+  c.cellStyle = xl.CellStyle(
+    bold: bold,
+    backgroundColorHex: xl.ExcelColor.fromHexString(bgHex ?? '#FFFFFF'),
+    fontColorHex: xl.ExcelColor.fromHexString(fgHex ?? '#000000'),
+  );
+}
 
-    final payants   = totalTickets - totalGratuits;
-    final prixMoyen = payants > 0
-        ? (allTickets
-                .where(
-                    (t) => (t['montant_total'] as num? ?? 0).toInt() > 0)
-                .fold(
-                    0,
-                    (s, t) =>
-                        s + ((t['montant_total'] as num? ?? 0).toInt())) /
-            payants)
-            .round()
-        : 0;
+// ── 1. Résumé ───────────────────────────────────────────────
 
-    final kpis = [
-      ['Recette totale (ms)', totalRecette],
-      [
-        'Recette totale (DT)',
-        '${(totalRecette / 1000).toStringAsFixed(3)} DT'
-      ],
-      ['Total tickets vendus',   totalTickets],
-      ['Tickets payants',        payants],
-      ['Tickets gratuits',       totalGratuits],
-      ['Prix moyen/ticket (ms)', prixMoyen],
-      [
-        'Taux de gratuité',
-        totalTickets > 0
-            ? '${((totalGratuits / totalTickets) * 100).toStringAsFixed(1)}%'
-            : '0%',
-      ],
-      ['Voyages programmés',     voyagesProgrammes.length],
-      ['Voyages non programmés', voyagesNonProgrammes.length],
-      ['Total voyages',          voyages.length],
-    ];
+  // ── 1. Résumé ───────────────────────────────────────────────
+  final resume = excel['Résumé'];
+  cell(resume, 0, 0, 'RAPPORT JOURNÉE — $_todayLabel',
+      bold: true, fgHex: '#0D1B3E');
+  cell(resume, 1, 0, 'Agent : $agentName', fgHex: '#374151');
+  cell(resume, 2, 0, 'Généré le $dateStr', fgHex: '#6B7280');
 
-    for (int i = 0; i < kpis.length; i++) {
-      final bg = i.isEven ? '#F2F5FB' : '#FFFFFF';
-      _xlsCell(resume, 5 + i, 0, kpis[i][0], bgHex: bg, bold: true);
-      _xlsCell(resume, 5 + i, 1, kpis[i][1],
-          bgHex: bg,
-          fgHex: kpis[i][0].toString().contains('Recette')
-              ? '#0D1B3E'
-              : kpis[i][0].toString().contains('gratuit')
-                  ? '#16A34A'
-                  : '#111827');
-    }
+  header(resume, 4, 0, 'Indicateur');
+  header(resume, 4, 1, 'Valeur');
 
-    resume.setColumnWidth(0, 32);
-    resume.setColumnWidth(1, 22);
+  final payants = totalTickets - totalGratuits;
+  final prixMoyen = payants > 0
+      ? (allTickets
+                  .where((t) =>
+                      (t['montant_total'] as num? ?? 0).toInt() > 0)
+                  .fold(
+                      0,
+                      (s, t) =>
+                          s + ((t['montant_total'] as num? ?? 0).toInt())) /
+              payants)
+          .round()
+      : 0;
 
-    // ── Tickets sheet ─────────────────────────────────────────
-    final ticketsSheet = excel['Tickets'];
-    final headers = [
-      '#', 'Date', 'Heure', 'Départ', 'Arrivée',
-      'Segment', 'Tarif', 'Qté', 'Prix unit. (ms)', 'Total (ms)', 'Sync',
-    ];
-    for (int c = 0; c < headers.length; c++) {
-      _xlsHeader(ticketsSheet, 0, c, headers[c]);
-    }
+  final kpis = [
+    ['Recette totale (ms)', totalRecette],
+    [
+      'Recette totale (DT)',
+      '${(totalRecette / 1000).toStringAsFixed(3)} DT'
+    ],
+    ['Total tickets vendus', totalTickets],
+    ['Tickets payants', payants],
+    ['Tickets gratuits', totalGratuits],
+    ['Prix moyen/ticket (ms)', prixMoyen],
+    [
+      'Taux de gratuité',
+      totalTickets > 0
+          ? '${((totalGratuits / totalTickets) * 100).toStringAsFixed(1)}%'
+          : '0%',
+    ],
+    ['Voyages programmés', voyagesProgrammes.length],
+    ['Voyages non programmés', voyagesNonProgrammes.length],
+    ['Total voyages', voyages.length],
+  ];
 
-    for (int i = 0; i < allTickets.length; i++) {
-      final t      = allTickets[i];
-      final isFree = ((t['montant_total'] as num? ?? 0).toInt()) == 0;
-      final dt     = DateTime.tryParse(t['date_heure'] ?? '');
-      final bg     = i.isEven ? '#F9FAFB' : '#FFFFFF';
+  for (int i = 0; i < kpis.length; i++) {
+    final bg = i.isEven ? '#F2F5FB' : '#FFFFFF';
+    cell(resume, 5 + i, 0, kpis[i][0], bgHex: bg, bold: true);
+    cell(resume, 5 + i, 1, kpis[i][1],
+        bgHex: bg,
+        fgHex: kpis[i][0].toString().contains('Recette')
+            ? '#0D1B3E'
+            : kpis[i][0].toString().contains('gratuit')
+                ? '#16A34A'
+                : '#111827');
+  }
+  resume.setColumnWidth(0, 32);
+  resume.setColumnWidth(1, 22);
 
-      _xlsCell(ticketsSheet, i + 1, 0, i + 1, bgHex: bg);
-      _xlsCell(ticketsSheet, i + 1, 1,
-          dt != null
-              ? '${dt.day.toString().padLeft(2, '0')}/'
-                '${dt.month.toString().padLeft(2, '0')}/'
-                '${dt.year}'
-              : '',
-          bgHex: bg);
-      _xlsCell(ticketsSheet, i + 1, 2,
-          dt != null
-              ? '${dt.hour.toString().padLeft(2, '0')}:'
-                '${dt.minute.toString().padLeft(2, '0')}'
-              : '',
-          bgHex: bg);
-      _xlsCell(ticketsSheet, i + 1, 3, t['point_depart']  ?? '', bgHex: bg);
-      _xlsCell(ticketsSheet, i + 1, 4, t['point_arrivee'] ?? '', bgHex: bg);
-      _xlsCell(ticketsSheet, i + 1, 5,
-          t['id_segment'] != null ? 'Seg. ${t['id_segment']}' : '—',
-          bgHex: bg);
-      _xlsCell(ticketsSheet, i + 1, 6, t['type_tarif'] ?? '', bgHex: bg);
-      _xlsCell(ticketsSheet, i + 1, 7,
-          (t['quantite']     as num? ?? 1).toInt(), bgHex: bg);
-      _xlsCell(ticketsSheet, i + 1, 8,
-          (t['prix_unitaire'] as num? ?? 0).toInt(), bgHex: bg);
-      _xlsCell(ticketsSheet, i + 1, 9,
-          (t['montant_total'] as num? ?? 0).toInt(),
-          bgHex: bg,
-          bold:  isFree,
-          fgHex: isFree ? '#16A34A' : '#0D1B3E');
-      _xlsCell(ticketsSheet, i + 1, 10, t['statut_sync'] ?? 'synced',
-          bgHex: bg,
-          fgHex: t['statut_sync'] == 'pending'
-              ? '#D97706'
-              : t['statut_sync'] == 'failed'
-                  ? '#DC2626'
-                  : '#16A34A');
-    }
-
-    final totalRow = allTickets.length + 2;
-    _xlsCell(ticketsSheet, totalRow, 6, 'TOTAL',
-        bold: true, bgHex: '#1A3260', fgHex: '#FFFFFF');
-    _xlsCell(ticketsSheet, totalRow, 7, totalTickets,
-        bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
-    _xlsCell(ticketsSheet, totalRow, 9, totalRecette,
-        bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
-
-    final widths = [
-      5.0, 14.0, 10.0, 22.0, 22.0, 10.0, 28.0, 8.0, 16.0, 14.0, 12.0,
-    ];
-    for (int c = 0; c < widths.length; c++) {
-      ticketsSheet.setColumnWidth(c, widths[c]);
-    }
-
-    // ── Par tarif sheet ───────────────────────────────────────
-    final tarifSheet   = excel['Par tarif'];
-    final tarifHeaders = [
-      'Type de tarif', 'Quantité', 'Prix unitaire (ms)', 'Total (ms)',
-      '% du total',
-    ];
-    for (int c = 0; c < tarifHeaders.length; c++) {
-      _xlsHeader(tarifSheet, 0, c, tarifHeaders[c]);
-    }
-
-    final tarifMap = <String, Map<String, int>>{};
-    for (final t in allTickets) {
-      final type =
-          ((t['type_tarif'] ?? '') as String).trim().isEmpty
-              ? 'Inconnu'
-              : (t['type_tarif'] as String).trim();
-      final qty   = (t['quantite']     as num? ?? 1).toInt();
-      final total = (t['montant_total'] as num? ?? 0).toInt();
-      final unit  = (t['prix_unitaire'] as num? ?? 0).toInt();
-      tarifMap[type]               ??= {'count': 0, 'total': 0, 'unitaire': 0};
-      tarifMap[type]!['count']      = tarifMap[type]!['count']! + qty;
-      tarifMap[type]!['total']      = tarifMap[type]!['total']! + total;
-      if (unit > 0) tarifMap[type]!['unitaire'] = unit;
-    }
-    final tarifEntries = tarifMap.entries.toList()
-      ..sort((a, b) => b.value['total']!.compareTo(a.value['total']!));
-
-    int tRow = 1;
-    for (final e in tarifEntries) {
-      final isFree = e.value['total']! == 0;
-      final pct = totalTickets > 0
-          ? '${((e.value['count']! / totalTickets) * 100).toStringAsFixed(1)}%'
-          : '0%';
-      final bg = tRow.isOdd ? '#F9FAFB' : '#FFFFFF';
-      _xlsCell(tarifSheet, tRow, 0, e.key, bgHex: bg, bold: true);
-      _xlsCell(tarifSheet, tRow, 1, e.value['count']!, bgHex: bg);
-      _xlsCell(tarifSheet, tRow, 2,
-          isFree ? '—' : '${e.value['unitaire']}', bgHex: bg);
-      _xlsCell(tarifSheet, tRow, 3, e.value['total']!,
-          bgHex: bg,
-          bold:  true,
-          fgHex: isFree ? '#16A34A' : '#0D1B3E');
-      _xlsCell(tarifSheet, tRow, 4, pct, bgHex: bg);
-      tRow++;
-    }
-
-    _xlsCell(tarifSheet, tRow + 1, 0, 'TOTAL',
-        bold: true, bgHex: '#1A3260', fgHex: '#FFFFFF');
-    _xlsCell(tarifSheet, tRow + 1, 1, totalTickets,
-        bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
-    _xlsCell(tarifSheet, tRow + 1, 3, totalRecette,
-        bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
-    _xlsCell(tarifSheet, tRow + 1, 4, '100%',
-        bold: true, bgHex: '#1A3260', fgHex: '#FFFFFF');
-
-    tarifSheet.setColumnWidth(0, 30);
-    tarifSheet.setColumnWidth(1, 12);
-    tarifSheet.setColumnWidth(2, 20);
-    tarifSheet.setColumnWidth(3, 16);
-    tarifSheet.setColumnWidth(4, 14);
-
-    // ── Par voyage sheet ──────────────────────────────────────
-    final voyageSheet = excel['Par voyage'];
-    final vHeaders    = [
-      'Voyage', 'Type', 'Trajet', 'Tickets', 'Gratuits', 'Payants',
-      'Recette (ms)',
-    ];
-    for (int c = 0; c < vHeaders.length; c++) {
-      _xlsHeader(voyageSheet, 0, c, vHeaders[c]);
-    }
-
-    int vRow = 1;
-    for (final v in voyages) {
-      final id      = (v['id_vente'] ?? v['id']) as int?;
-      final depart  = v['depart']  ?? '?';
-      final arrivee = v['arrivee'] ?? '?';
-      final typeStr = (v['type'] as String?) ?? 'programmé';
-      final vTickets = id == null
-          ? <Map<String, dynamic>>[]
-          : allTickets
-              .where((t) => t['id_vente'] == id)
-              .toList();
-      final vTotal = vTickets.fold(
-          0,
-          (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt()));
-      final vCount = vTickets.fold(
-          0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
-      final vGratis = vTickets
-          .where((t) => ((t['montant_total'] as num? ?? 0).toInt()) == 0)
-          .fold(0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
-      final bg = vRow.isOdd ? '#F9FAFB' : '#FFFFFF';
-
-      _xlsCell(voyageSheet, vRow, 0, '#${id ?? '?'}',
-          bgHex: bg, bold: true);
-      _xlsCell(voyageSheet, vRow, 1, typeStr,              bgHex: bg);
-      _xlsCell(voyageSheet, vRow, 2, '$depart → $arrivee', bgHex: bg);
-      _xlsCell(voyageSheet, vRow, 3, vCount,               bgHex: bg);
-      _xlsCell(voyageSheet, vRow, 4, vGratis,
-          bgHex: bg,
-          fgHex: vGratis > 0 ? '#16A34A' : '#111827');
-      _xlsCell(voyageSheet, vRow, 5, vCount - vGratis, bgHex: bg);
-      _xlsCell(voyageSheet, vRow, 6, vTotal,
-          bgHex: bg, bold: true, fgHex: '#0D1B3E');
-      vRow++;
-    }
-
-    voyageSheet.setColumnWidth(0, 10);
-    voyageSheet.setColumnWidth(1, 16);
-    voyageSheet.setColumnWidth(2, 32);
-    voyageSheet.setColumnWidth(3, 12);
-    voyageSheet.setColumnWidth(4, 12);
-    voyageSheet.setColumnWidth(5, 12);
-    voyageSheet.setColumnWidth(6, 16);
-
-    final bytes    = excel.encode()!;
-    final fileName =
-        'rapport_${label}_${_matricule}_$dateStr.xlsx';
-    final file = File('${dir.path}/$fileName');
-    await file.writeAsBytes(bytes);
-    return file;
+  // ── 2. Tickets ──────────────────────────────────────────────
+  final ticketsSheet = excel['Tickets'];
+  final tHeaders = [
+    '#', 'Date', 'Heure', 'Voyage', 'Départ', 'Arrivée',
+    'Segment', 'Tarif', 'Qté', 'Prix unit. (ms)', 'Total (ms)', 'Sync',
+  ];
+  for (int c = 0; c < tHeaders.length; c++) {
+    header(ticketsSheet, 0, c, tHeaders[c]);
   }
 
-  void _xlsHeader(xl.Sheet s, int row, int col, String text) {
-    final cell = s.cell(
-        xl.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row));
-    cell.value     = xl.TextCellValue(text);
-    cell.cellStyle = xl.CellStyle(
-      bold:               true,
-      fontColorHex:       xl.ExcelColor.fromHexString('#FFFFFF'),
-      backgroundColorHex: xl.ExcelColor.fromHexString('#1A3260'),
-      horizontalAlign:    xl.HorizontalAlign.Center,
-      verticalAlign:      xl.VerticalAlign.Center,
-    );
+  for (int i = 0; i < allTickets.length; i++) {
+    final t = allTickets[i];
+    final isFree = ((t['montant_total'] as num? ?? 0).toInt()) == 0;
+    final dt = DateTime.tryParse(t['date_heure'] ?? '');
+    final bg = i.isEven ? '#F9FAFB' : '#FFFFFF';
+    final voyageId = t['id_vente'];
+
+    cell(ticketsSheet, i + 1, 0, i + 1, bgHex: bg);
+    cell(ticketsSheet, i + 1, 1,
+        dt != null
+            ? '${dt.day.toString().padLeft(2, '0')}/'
+                '${dt.month.toString().padLeft(2, '0')}/${dt.year}'
+            : '',
+        bgHex: bg);
+    cell(ticketsSheet, i + 1, 2,
+        dt != null
+            ? '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
+            : '',
+        bgHex: bg);
+    // voyage id
+    cell(ticketsSheet, i + 1, 3,
+        voyageId != null ? '#$voyageId' : '—', bgHex: bg);
+    cell(ticketsSheet, i + 1, 4, t['point_depart'] ?? '', bgHex: bg);
+    cell(ticketsSheet, i + 1, 5, t['point_arrivee'] ?? '', bgHex: bg);
+    cell(ticketsSheet, i + 1, 6,
+        t['id_segment'] != null ? 'Seg. ${t['id_segment']}' : '—',
+        bgHex: bg);
+    cell(ticketsSheet, i + 1, 7, t['type_tarif'] ?? '', bgHex: bg);
+    cell(ticketsSheet, i + 1, 8,
+        (t['quantite'] as num? ?? 1).toInt(), bgHex: bg);
+    cell(ticketsSheet, i + 1, 9,
+        (t['prix_unitaire'] as num? ?? 0).toInt(), bgHex: bg);
+    cell(ticketsSheet, i + 1, 10,
+        (t['montant_total'] as num? ?? 0).toInt(),
+        bgHex: bg,
+        bold: isFree,
+        fgHex: isFree ? '#16A34A' : '#0D1B3E');
+    cell(ticketsSheet, i + 1, 11, t['statut_sync'] ?? 'synced',
+        bgHex: bg,
+        fgHex: t['statut_sync'] == 'pending'
+            ? '#D97706'
+            : t['statut_sync'] == 'failed'
+                ? '#DC2626'
+                : '#16A34A');
   }
 
-  void _xlsCell(xl.Sheet s, int row, int col, dynamic value,
-      {bool bold = false, String? bgHex, String? fgHex}) {
-    final cell = s.cell(
-        xl.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row));
-    if (value is int || value is double) {
-      cell.value = xl.IntCellValue(
-          value is int ? value : (value as double).toInt());
+  final tTotalRow = allTickets.length + 2;
+  cell(ticketsSheet, tTotalRow, 7, 'TOTAL',
+      bold: true, bgHex: '#1A3260', fgHex: '#FFFFFF');
+  cell(ticketsSheet, tTotalRow, 8, totalTickets,
+      bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
+  cell(ticketsSheet, tTotalRow, 10, totalRecette,
+      bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
+
+  for (int c = 0; c < [5.0, 13.0, 10.0, 10.0, 22.0, 22.0, 10.0, 28.0, 8.0, 16.0, 14.0, 12.0].length; c++) {
+    ticketsSheet.setColumnWidth(c, [5.0, 13.0, 10.0, 10.0, 22.0, 22.0, 10.0, 28.0, 8.0, 16.0, 14.0, 12.0][c]);
+  }
+
+  // ── 3. Par tarif ────────────────────────────────────────────
+  final tarifSheet = excel['Par tarif'];
+  final tarifHeaders = [
+    'Type de tarif', 'Quantité', 'Prix unitaire (ms)', 'Total (ms)',
+    '% du total',
+  ];
+  for (int c = 0; c < tarifHeaders.length; c++) {
+    header(tarifSheet, 0, c, tarifHeaders[c]);
+  }
+
+  final tarifMap = <String, Map<String, int>>{};
+  for (final t in allTickets) {
+    final type = ((t['type_tarif'] ?? '') as String).trim().isEmpty
+        ? 'Inconnu'
+        : (t['type_tarif'] as String).trim();
+    final qty = (t['quantite'] as num? ?? 1).toInt();
+    final total = (t['montant_total'] as num? ?? 0).toInt();
+    final unit = (t['prix_unitaire'] as num? ?? 0).toInt();
+    tarifMap[type] ??= {'count': 0, 'total': 0, 'unitaire': 0};
+    tarifMap[type]!['count'] = tarifMap[type]!['count']! + qty;
+    tarifMap[type]!['total'] = tarifMap[type]!['total']! + total;
+    if (unit > 0) tarifMap[type]!['unitaire'] = unit;
+  }
+  final tarifEntries = tarifMap.entries.toList()
+    ..sort((a, b) => b.value['total']!.compareTo(a.value['total']!));
+
+  int tRow = 1;
+  for (final e in tarifEntries) {
+    final isFree = e.value['total']! == 0;
+    final pct = totalTickets > 0
+        ? '${((e.value['count']! / totalTickets) * 100).toStringAsFixed(1)}%'
+        : '0%';
+    final bg = tRow.isOdd ? '#F9FAFB' : '#FFFFFF';
+    cell(tarifSheet, tRow, 0, e.key, bgHex: bg, bold: true);
+    cell(tarifSheet, tRow, 1, e.value['count']!, bgHex: bg);
+    cell(tarifSheet, tRow, 2,
+        isFree ? '—' : '${e.value['unitaire']}', bgHex: bg);
+    cell(tarifSheet, tRow, 3, e.value['total']!,
+        bgHex: bg,
+        bold: true,
+        fgHex: isFree ? '#16A34A' : '#0D1B3E');
+    cell(tarifSheet, tRow, 4, pct, bgHex: bg);
+    tRow++;
+  }
+
+  cell(tarifSheet, tRow + 1, 0, 'TOTAL',
+      bold: true, bgHex: '#1A3260', fgHex: '#FFFFFF');
+  cell(tarifSheet, tRow + 1, 1, totalTickets,
+      bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
+  cell(tarifSheet, tRow + 1, 3, totalRecette,
+      bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
+  cell(tarifSheet, tRow + 1, 4, '100%',
+      bold: true, bgHex: '#1A3260', fgHex: '#FFFFFF');
+
+  tarifSheet.setColumnWidth(0, 30);
+  tarifSheet.setColumnWidth(1, 12);
+  tarifSheet.setColumnWidth(2, 20);
+  tarifSheet.setColumnWidth(3, 16);
+  tarifSheet.setColumnWidth(4, 14);
+
+  // ── 4. Gratuits par catégorie  ← NEW ────────────────────────
+  final gratuitSheet = excel['Gratuits / catégorie'];
+  final gratuitHeaders = [
+    'Type de tarif', 'Total tickets', 'Dont gratuits', '% gratuits',
+    'Tickets payants', 'Recette payants (ms)',
+  ];
+  for (int c = 0; c < gratuitHeaders.length; c++) {
+    header(gratuitSheet, 0, c, gratuitHeaders[c]);
+  }
+
+  // build per-category gratuit stats
+  final catMap = <String, Map<String, int>>{};
+  for (final t in allTickets) {
+    final type = ((t['type_tarif'] ?? '') as String).trim().isEmpty
+        ? 'Inconnu'
+        : (t['type_tarif'] as String).trim();
+    final qty = (t['quantite'] as num? ?? 1).toInt();
+    final total = (t['montant_total'] as num? ?? 0).toInt();
+    final isFree = total == 0;
+    catMap[type] ??= {
+      'total': 0, 'gratuits': 0, 'payants': 0, 'recettePayants': 0
+    };
+    catMap[type]!['total'] = catMap[type]!['total']! + qty;
+    if (isFree) {
+      catMap[type]!['gratuits'] = catMap[type]!['gratuits']! + qty;
     } else {
-      cell.value = xl.TextCellValue(value?.toString() ?? '');
+      catMap[type]!['payants'] = catMap[type]!['payants']! + qty;
+      catMap[type]!['recettePayants'] =
+          catMap[type]!['recettePayants']! + total;
     }
-    cell.cellStyle = xl.CellStyle(
-      bold: bold,
-      fontColorHex: fgHex != null
-          ? xl.ExcelColor.fromHexString(fgHex)
-          : xl.ExcelColor.fromHexString('#111827'),
-      backgroundColorHex: bgHex != null
-          ? xl.ExcelColor.fromHexString(bgHex)
-          : xl.ExcelColor.fromHexString('#FFFFFF'),
-      verticalAlign: xl.VerticalAlign.Center,
-    );
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Build PDF
-  // ─────────────────────────────────────────────────────────────
+  // sort: most gratuits first
+  final catEntries = catMap.entries.toList()
+    ..sort((a, b) => b.value['gratuits']!.compareTo(a.value['gratuits']!));
 
-  Future<File> _buildPdf({
-    required List<Map<String, dynamic>> allTickets,
-    required List<dynamic> voyages,
-    required String agentName,
-    required String dateStr,
-    required int totalRecette,
-    required int totalTickets,
-    required int totalGratuits,
-    required Directory dir,
-  }) async {
-    final pdf     = pw.Document();
-    final payants = totalTickets - totalGratuits;
-    final prixMoyen = payants > 0
-        ? (allTickets
-                .where(
-                    (t) => (t['montant_total'] as num? ?? 0).toInt() > 0)
-                .fold(
-                    0,
-                    (s, t) =>
-                        s + ((t['montant_total'] as num? ?? 0).toInt())) /
-            payants)
-            .round()
-        : 0;
+  int gRow = 1;
+  int gTotalTickets = 0, gTotalGratuits = 0, gTotalPayants = 0,
+      gTotalRecette = 0;
 
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(32),
-        build: (ctx) => [
-          // Header
-          pw.Container(
-            padding: const pw.EdgeInsets.all(16),
-            decoration: pw.BoxDecoration(
-              color: PdfColor.fromHex('0D1B3E'),
-              borderRadius:
-                  const pw.BorderRadius.all(pw.Radius.circular(8)),
-            ),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(
-                  'RAPPORT DE JOURNÉE — $_todayLabel',
-                  style: pw.TextStyle(
-                    color:      PdfColors.white,
-                    fontSize:   18,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-                pw.SizedBox(height: 4),
-                pw.Text(
-                  'Agent : $agentName   |   Généré le $dateStr',
-                  style: const pw.TextStyle(
-                    color:    PdfColor.fromInt(0xB3FFFFFF),
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          pw.SizedBox(height: 20),
+  for (final e in catEntries) {
+    final bgG = gRow.isOdd ? '#F0FDF4' : '#FFFFFF'; // light green tint
+    final gratuits = e.value['gratuits']!;
+    final totalCat = e.value['total']!;
+    final pctG = totalCat > 0
+        ? '${((gratuits / totalCat) * 100).toStringAsFixed(1)}%'
+        : '0%';
 
-          // KPIs
-          pw.Text('INDICATEURS CLÉS',
-              style: pw.TextStyle(
-                  fontSize:   11,
-                  fontWeight: pw.FontWeight.bold,
-                  color:      PdfColor.fromHex('6B7280'))),
-          pw.SizedBox(height: 8),
-          pw.Table(
-            border: pw.TableBorder.all(
-                color: PdfColor.fromHex('E5E7EB'), width: 0.5),
-            children: [
-              _pdfTableRow(
-                  ['Recette totale',
-                   '$totalRecette ms',
-                   '≈ ${(totalRecette / 1000).toStringAsFixed(3)} DT'],
-                  highlight: true),
-              _pdfTableRow([
-                'Total tickets',
-                '$totalTickets',
-                '$payants payants + $totalGratuits gratuits',
-              ]),
-              _pdfTableRow(
-                  ['Prix moyen (payants)', '$prixMoyen ms', ''],
-                  highlight: true),
-              _pdfTableRow([
-                'Taux de gratuité',
-                totalTickets > 0
-                    ? '${((totalGratuits / totalTickets) * 100).toStringAsFixed(1)}%'
-                    : '0%',
-                '',
-              ]),
-              _pdfTableRow(
-                  ['Voyages programmés', '${voyagesProgrammes.length}',
-                   ''],
-                  highlight: true),
-              _pdfTableRow(['Voyages non programmés',
-                   '${voyagesNonProgrammes.length}', '']),
-              _pdfTableRow(
-                  ['Total voyages', '${voyages.length}', ''],
-                  highlight: true),
-            ],
-          ),
-          pw.SizedBox(height: 24),
+    cell(gratuitSheet, gRow, 0, e.key, bgHex: bgG, bold: true);
+    cell(gratuitSheet, gRow, 1, totalCat, bgHex: bgG);
+    cell(gratuitSheet, gRow, 2, gratuits,
+        bgHex: bgG,
+        bold: gratuits > 0,
+        fgHex: gratuits > 0 ? '#16A34A' : '#6B7280');
+    cell(gratuitSheet, gRow, 3, pctG,
+        bgHex: bgG,
+        fgHex: gratuits > 0 ? '#16A34A' : '#6B7280');
+    cell(gratuitSheet, gRow, 4, e.value['payants']!, bgHex: bgG);
+    cell(gratuitSheet, gRow, 5, e.value['recettePayants']!,
+        bgHex: bgG, fgHex: '#0D1B3E');
 
-          // Tarif breakdown
-          pw.Text('RÉPARTITION PAR TARIF',
-              style: pw.TextStyle(
-                  fontSize:   11,
-                  fontWeight: pw.FontWeight.bold,
-                  color:      PdfColor.fromHex('6B7280'))),
-          pw.SizedBox(height: 8),
-          _buildPdfTarifTable(allTickets, totalTickets),
-          pw.SizedBox(height: 24),
-
-          // Ticket detail
-          pw.Text('DÉTAIL DES TICKETS',
-              style: pw.TextStyle(
-                  fontSize:   11,
-                  fontWeight: pw.FontWeight.bold,
-                  color:      PdfColor.fromHex('6B7280'))),
-          pw.SizedBox(height: 8),
-          _buildPdfTicketsTable(allTickets),
-        ],
-      ),
-    );
-
-    final fileName = 'rapport_journee_${_matricule}_$dateStr.pdf';
-    final file     = File('${dir.path}/$fileName');
-    await file.writeAsBytes(await pdf.save());
-    return file;
+    gTotalTickets += totalCat;
+    gTotalGratuits += gratuits;
+    gTotalPayants += e.value['payants']!;
+    gTotalRecette += e.value['recettePayants']!;
+    gRow++;
   }
 
-  pw.TableRow _pdfTableRow(List<String> cells,
-      {bool isHeader = false, bool highlight = false}) {
-    return pw.TableRow(
-      decoration: pw.BoxDecoration(
-        color: isHeader
-            ? PdfColor.fromHex('1A3260')
-            : highlight
-                ? PdfColor.fromHex('F2F5FB')
-                : PdfColors.white,
-      ),
-      children: cells
-          .map((c) => pw.Padding(
-                padding: const pw.EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 6),
-                child: pw.Text(
-                  c,
-                  style: pw.TextStyle(
-                    fontSize:   10,
-                    fontWeight: isHeader ? pw.FontWeight.bold : null,
-                    color: isHeader
-                        ? PdfColors.white
-                        : PdfColor.fromHex('111827'),
-                  ),
-                ),
-              ))
-          .toList(),
-    );
+  // totals row
+  final gTotalRow = gRow + 1;
+  cell(gratuitSheet, gTotalRow, 0, 'TOTAL',
+      bold: true, bgHex: '#1A3260', fgHex: '#FFFFFF');
+  cell(gratuitSheet, gTotalRow, 1, gTotalTickets,
+      bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
+  cell(gratuitSheet, gTotalRow, 2, gTotalGratuits,
+      bold: true, bgHex: '#1A3260', fgHex: '#4ADE80');
+  cell(gratuitSheet, gTotalRow, 3,
+      gTotalTickets > 0
+          ? '${((gTotalGratuits / gTotalTickets) * 100).toStringAsFixed(1)}%'
+          : '0%',
+      bold: true, bgHex: '#1A3260', fgHex: '#4ADE80');
+  cell(gratuitSheet, gTotalRow, 4, gTotalPayants,
+      bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
+  cell(gratuitSheet, gTotalRow, 5, gTotalRecette,
+      bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
+
+  gratuitSheet.setColumnWidth(0, 30);
+  gratuitSheet.setColumnWidth(1, 16);
+  gratuitSheet.setColumnWidth(2, 16);
+  gratuitSheet.setColumnWidth(3, 14);
+  gratuitSheet.setColumnWidth(4, 16);
+  gratuitSheet.setColumnWidth(5, 22);
+
+  // ── 5. Par segment  ← NEW ───────────────────────────────────
+  final segSheet = excel['Par segment'];
+  final segHeaders = [
+    'Segment', 'Départ', 'Arrivée', 'Total tickets',
+    'Gratuits', 'Payants', 'Recette (ms)',
+  ];
+  for (int c = 0; c < segHeaders.length; c++) {
+    header(segSheet, 0, c, segHeaders[c]);
   }
 
-  pw.Widget _buildPdfTarifTable(
-      List<Map<String, dynamic>> tickets, int totalTickets) {
-    final tarifMap = <String, Map<String, int>>{};
-    for (final t in tickets) {
-      final type =
-          ((t['type_tarif'] ?? '') as String).trim().isEmpty
-              ? 'Inconnu'
-              : (t['type_tarif'] as String).trim();
-      final qty   = (t['quantite']     as num? ?? 1).toInt();
+  // group tickets by segment
+  final segMap = <String, List<Map<String, dynamic>>>{};
+  for (final t in allTickets) {
+    final raw = t['id_segment'];
+    final seg = (raw == null || raw.toString().trim().isEmpty ||
+            raw.toString() == '0' || raw.toString() == 'null')
+        ? '—'
+        : raw.toString().trim();
+    segMap[seg] ??= [];
+    segMap[seg]!.add(t);
+  }
+
+  // sort segments numerically then alpha; '—' last
+  final segEntries = segMap.entries.toList()
+    ..sort((a, b) {
+      if (a.key == '—') return 1;
+      if (b.key == '—') return -1;
+      final an = int.tryParse(a.key);
+      final bn = int.tryParse(b.key);
+      if (an != null && bn != null) return an.compareTo(bn);
+      return a.key.compareTo(b.key);
+    });
+
+  int sRow = 1;
+  int sTotalTickets = 0, sTotalGratuits = 0, sTotalRecette = 0;
+
+  for (final e in segEntries) {
+    final tickets = e.value;
+    final segRecette = tickets.fold(
+        0, (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt()));
+    final segCount = tickets.fold(
+        0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
+    final segGratuits = tickets
+        .where((t) => ((t['montant_total'] as num? ?? 0).toInt()) == 0)
+        .fold(0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
+    final segPayants = segCount - segGratuits;
+    final dep = tickets.isNotEmpty ? tickets.first['point_depart'] ?? '' : '';
+    final arr = tickets.isNotEmpty ? tickets.first['point_arrivee'] ?? '' : '';
+    final bg = sRow.isOdd ? '#F9FAFB' : '#FFFFFF';
+
+    cell(segSheet, sRow, 0,
+        e.key == '—' ? 'Non classé' : 'Segment ${e.key}',
+        bgHex: bg, bold: true,
+        fgHex: e.key == '—' ? '#9CA3AF' : '#0D1B3E');
+    cell(segSheet, sRow, 1, dep, bgHex: bg);
+    cell(segSheet, sRow, 2, arr, bgHex: bg);
+    cell(segSheet, sRow, 3, segCount, bgHex: bg);
+    cell(segSheet, sRow, 4, segGratuits,
+        bgHex: bg,
+        bold: segGratuits > 0,
+        fgHex: segGratuits > 0 ? '#16A34A' : '#9CA3AF');
+    cell(segSheet, sRow, 5, segPayants, bgHex: bg);
+    cell(segSheet, sRow, 6, segRecette,
+        bgHex: bg, bold: true, fgHex: '#0D1B3E');
+
+    sTotalTickets += segCount;
+    sTotalGratuits += segGratuits;
+    sTotalRecette += segRecette;
+    sRow++;
+  }
+
+  // per-segment ticket list (sub-rows indented)
+  sRow += 1; // blank row before detail
+  cell(segSheet, sRow, 0, '— DÉTAIL PAR SEGMENT ET TARIF —',
+      bold: true, fgHex: '#6B7280');
+  sRow += 2;
+
+  for (final e in segEntries) {
+    // segment header
+    cell(segSheet, sRow, 0,
+        e.key == '—' ? 'Non classé' : 'Segment ${e.key}',
+        bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
+    for (int c = 1; c < 7; c++) {
+      cell(segSheet, sRow, c, '', bgHex: '#1A3260');
+    }
+    sRow++;
+
+    // group by tarif within segment
+    final tarifInSeg = <String, Map<String, int>>{};
+    for (final t in e.value) {
+      final type = ((t['type_tarif'] ?? '') as String).trim().isEmpty
+          ? 'Inconnu'
+          : (t['type_tarif'] as String).trim();
+      final qty = (t['quantite'] as num? ?? 1).toInt();
       final total = (t['montant_total'] as num? ?? 0).toInt();
-      tarifMap[type]             ??= {'count': 0, 'total': 0};
-      tarifMap[type]!['count']    = tarifMap[type]!['count']! + qty;
-      tarifMap[type]!['total']    = tarifMap[type]!['total']! + total;
+      tarifInSeg[type] ??= {'count': 0, 'gratuits': 0, 'recette': 0};
+      tarifInSeg[type]!['count'] = tarifInSeg[type]!['count']! + qty;
+      if (total == 0) {
+        tarifInSeg[type]!['gratuits'] = tarifInSeg[type]!['gratuits']! + qty;
+      }
+      tarifInSeg[type]!['recette'] = tarifInSeg[type]!['recette']! + total;
     }
-    final entries = tarifMap.entries.toList()
-      ..sort((a, b) => b.value['total']!.compareTo(a.value['total']!));
 
-    return pw.Table(
-      border: pw.TableBorder.all(
-          color: PdfColor.fromHex('E5E7EB'), width: 0.5),
-      children: [
-        _pdfTableRow(
-            ['Type de tarif', 'Qté', 'Total (ms)', '% voyageurs'],
-            isHeader: true),
-        ...entries.map((e) {
-          final pct = totalTickets > 0
-              ? '${((e.value['count']! / totalTickets) * 100).toStringAsFixed(1)}%'
-              : '0%';
-          return _pdfTableRow(
-            [
-              e.key,
-              '${e.value['count']}',
-              '${e.value['total']}',
-              pct,
+    for (final te in tarifInSeg.entries) {
+      final isFree = te.value['recette']! == 0;
+      final bg = sRow.isOdd ? '#F9FAFB' : '#FFFFFF';
+      cell(segSheet, sRow, 0, '   └ ${te.key}', bgHex: bg);
+      cell(segSheet, sRow, 3, te.value['count']!, bgHex: bg);
+      cell(segSheet, sRow, 4, te.value['gratuits']!,
+          bgHex: bg,
+          fgHex: te.value['gratuits']! > 0 ? '#16A34A' : '#9CA3AF');
+      cell(segSheet, sRow, 5, te.value['count']! - te.value['gratuits']!,
+          bgHex: bg);
+      cell(segSheet, sRow, 6, te.value['recette']!,
+          bgHex: bg, fgHex: isFree ? '#16A34A' : '#0D1B3E');
+      sRow++;
+    }
+    sRow++; // blank row between segments
+  }
+
+  // totals
+  cell(segSheet, sRow, 0, 'TOTAL',
+      bold: true, bgHex: '#1A3260', fgHex: '#FFFFFF');
+  cell(segSheet, sRow, 3, sTotalTickets,
+      bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
+  cell(segSheet, sRow, 4, sTotalGratuits,
+      bold: true, bgHex: '#1A3260', fgHex: '#4ADE80');
+  cell(segSheet, sRow, 5, sTotalTickets - sTotalGratuits,
+      bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
+  cell(segSheet, sRow, 6, sTotalRecette,
+      bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
+
+  segSheet.setColumnWidth(0, 28);
+  segSheet.setColumnWidth(1, 22);
+  segSheet.setColumnWidth(2, 22);
+  segSheet.setColumnWidth(3, 14);
+  segSheet.setColumnWidth(4, 14);
+  segSheet.setColumnWidth(5, 14);
+  segSheet.setColumnWidth(6, 18);
+
+  // ── 6. Par voyage  (enhanced, was sheet 4) ──────────────────
+  final voyageSheet = excel['Par voyage'];
+  final vHeaders = [
+    'Voyage', 'Type', 'Trajet', 'Tickets', 'Gratuits',
+    'Payants', 'Recette (ms)',
+  ];
+  for (int c = 0; c < vHeaders.length; c++) {
+    header(voyageSheet, 0, c, vHeaders[c]);
+  }
+
+  int vRow = 1;
+  for (final v in voyages) {
+    final id = (v['id_vente'] ?? v['id']) as int?;
+    final depart = v['depart'] ?? '?';
+    final arrivee = v['arrivee'] ?? '?';
+    final typeStr = (v['type'] as String?) ?? 'programmé';
+    final vTickets = id == null
+        ? <Map<String, dynamic>>[]
+        : allTickets.where((t) => t['id_vente'] == id).toList();
+    final vTotal = vTickets.fold(
+        0, (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt()));
+    final vCount = vTickets.fold(
+        0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
+    final vGratis = vTickets
+        .where((t) => ((t['montant_total'] as num? ?? 0).toInt()) == 0)
+        .fold(0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
+    final bg = vRow.isOdd ? '#F9FAFB' : '#FFFFFF';
+
+    // voyage header row
+    cell(voyageSheet, vRow, 0, '#${id ?? '?'}',
+        bgHex: bg, bold: true);
+    cell(voyageSheet, vRow, 1, typeStr, bgHex: bg);
+    cell(voyageSheet, vRow, 2, '$depart → $arrivee', bgHex: bg);
+    cell(voyageSheet, vRow, 3, vCount, bgHex: bg);
+    cell(voyageSheet, vRow, 4, vGratis,
+        bgHex: bg,
+        fgHex: vGratis > 0 ? '#16A34A' : '#111827');
+    cell(voyageSheet, vRow, 5, vCount - vGratis, bgHex: bg);
+    cell(voyageSheet, vRow, 6, vTotal,
+        bgHex: bg, bold: true, fgHex: '#0D1B3E');
+    vRow++;
+
+    // sub-rows: ticket list for this voyage
+    if (vTickets.isNotEmpty) {
+      // sub-header
+      for (final col in [
+        [0, '   Départ'],
+        [1, 'Arrivée'],
+        [2, 'Segment'],
+        [3, 'Tarif'],
+        [4, 'Qté'],
+        [5, 'Gratuits'],
+        [6, 'Total (ms)'],
+      ]) {
+        cell(voyageSheet, vRow, col[0] as int, col[1],
+            bold: true, bgHex: '#E8EDF5', fgHex: '#374151');
+      }
+      vRow++;
+
+      for (final t in vTickets) {
+        final isFree = ((t['montant_total'] as num? ?? 0).toInt()) == 0;
+        final tQty = (t['quantite'] as num? ?? 1).toInt();
+        final tGrat = isFree ? tQty : 0;
+        final tbg = vRow.isOdd ? '#F9FAFB' : '#FFFFFF';
+        cell(voyageSheet, vRow, 0, '   ${t['point_depart'] ?? ''}',
+            bgHex: tbg);
+        cell(voyageSheet, vRow, 1, t['point_arrivee'] ?? '', bgHex: tbg);
+        cell(voyageSheet, vRow, 2,
+            t['id_segment'] != null ? 'Seg. ${t['id_segment']}' : '—',
+            bgHex: tbg);
+        cell(voyageSheet, vRow, 3, t['type_tarif'] ?? '', bgHex: tbg);
+        cell(voyageSheet, vRow, 4, tQty, bgHex: tbg);
+        cell(voyageSheet, vRow, 5, tGrat,
+            bgHex: tbg,
+            fgHex: tGrat > 0 ? '#16A34A' : '#9CA3AF');
+        cell(voyageSheet, vRow, 6,
+            (t['montant_total'] as num? ?? 0).toInt(),
+            bgHex: tbg,
+            bold: isFree,
+            fgHex: isFree ? '#16A34A' : '#0D1B3E');
+        vRow++;
+      }
+      vRow++; // blank line between voyages
+    }
+  }
+
+  voyageSheet.setColumnWidth(0, 12);
+  voyageSheet.setColumnWidth(1, 16);
+  voyageSheet.setColumnWidth(2, 32);
+  voyageSheet.setColumnWidth(3, 28);
+  voyageSheet.setColumnWidth(4, 12);
+  voyageSheet.setColumnWidth(5, 12);
+  voyageSheet.setColumnWidth(6, 16);
+
+  // ── write file ──────────────────────────────────────────────
+  final bytes = excel.encode()!;
+  final fileName = 'rapport_${label}_${_matricule}_$dateStr.xlsx';
+  final file = File('${dir.path}/$fileName');
+  await file.writeAsBytes(bytes);
+  return file;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Build PDF  (enhanced)
+// ─────────────────────────────────────────────────────────────
+Future<File> _buildPdf({
+  required List<Map<String, dynamic>> allTickets,
+  required List<dynamic> voyages,
+  required String agentName,
+  required String dateStr,
+  required int totalRecette,
+  required int totalTickets,
+  required int totalGratuits,
+  required Directory dir,
+}) async {
+  final pdf = pw.Document();
+  final payants = totalTickets - totalGratuits;
+  final prixMoyen = payants > 0
+      ? (allTickets
+                  .where(
+                      (t) => (t['montant_total'] as num? ?? 0).toInt() > 0)
+                  .fold(0,
+                      (s, t) =>
+                          s + ((t['montant_total'] as num? ?? 0).toInt())) /
+              payants)
+          .round()
+      : 0;
+
+  // ── gratuits per category ──────────────────────────────────
+  final catMap = <String, Map<String, int>>{};
+  for (final t in allTickets) {
+    final type = ((t['type_tarif'] ?? '') as String).trim().isEmpty
+        ? 'Inconnu'
+        : (t['type_tarif'] as String).trim();
+    final qty = (t['quantite'] as num? ?? 1).toInt();
+    final total = (t['montant_total'] as num? ?? 0).toInt();
+    catMap[type] ??= {'total': 0, 'gratuits': 0};
+    catMap[type]!['total'] = catMap[type]!['total']! + qty;
+    if (total == 0) {
+      catMap[type]!['gratuits'] = catMap[type]!['gratuits']! + qty;
+    }
+  }
+  final catEntries = catMap.entries.toList()
+    ..sort((a, b) => b.value['gratuits']!.compareTo(a.value['gratuits']!));
+
+  // ── segment summary ────────────────────────────────────────
+  final segMap = <String, List<Map<String, dynamic>>>{};
+  for (final t in allTickets) {
+    final raw = t['id_segment'];
+    final seg = (raw == null ||
+            raw.toString().trim().isEmpty ||
+            raw.toString() == '0' ||
+            raw.toString() == 'null')
+        ? '—'
+        : raw.toString().trim();
+    segMap[seg] ??= [];
+    segMap[seg]!.add(t);
+  }
+  final segEntries = segMap.entries.toList()
+    ..sort((a, b) {
+      if (a.key == '—') return 1;
+      if (b.key == '—') return -1;
+      final an = int.tryParse(a.key);
+      final bn = int.tryParse(b.key);
+      if (an != null && bn != null) return an.compareTo(bn);
+      return a.key.compareTo(b.key);
+    });
+
+  pdf.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(28),
+      build: (ctx) => [
+        // ── Header ──────────────────────────────────────────
+        pw.Container(
+          padding: const pw.EdgeInsets.all(16),
+          decoration: pw.BoxDecoration(
+            color: PdfColor.fromHex('0D1B3E'),
+            borderRadius:
+                const pw.BorderRadius.all(pw.Radius.circular(8)),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                'RAPPORT DE JOURNÉE — $_todayLabel',
+                style: pw.TextStyle(
+                    color: PdfColors.white,
+                    fontSize: 18,
+                    fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                'Agent : $agentName   |   Généré le $dateStr',
+                style: const pw.TextStyle(
+                    color: PdfColor.fromInt(0xB3FFFFFF), fontSize: 11),
+              ),
             ],
-            highlight: entries.indexOf(e).isEven,
-          );
-        }),
-        _pdfTableRow(
-          [
-            'TOTAL',
-            '$totalTickets',
-            '${tickets.fold(0, (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt()))}',
-            '100%',
-          ],
-          isHeader: true,
+          ),
         ),
+        pw.SizedBox(height: 20),
+
+        // ── KPIs ────────────────────────────────────────────
+        pw.Text('INDICATEURS CLÉS',
+            style: pw.TextStyle(
+                fontSize: 11,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColor.fromHex('6B7280'))),
+        pw.SizedBox(height: 8),
+        pw.Table(
+          border: pw.TableBorder.all(
+              color: PdfColor.fromHex('E5E7EB'), width: 0.5),
+          children: [
+            _pdfTableRow([
+              'Recette totale',
+              '$totalRecette ms',
+              '≈ ${(totalRecette / 1000).toStringAsFixed(3)} DT'
+            ], highlight: true),
+            _pdfTableRow([
+              'Total tickets',
+              '$totalTickets',
+              '$payants payants + $totalGratuits gratuits'
+            ]),
+            _pdfTableRow(
+                ['Prix moyen (payants)', '$prixMoyen ms', ''],
+                highlight: true),
+            _pdfTableRow([
+              'Taux de gratuité',
+              totalTickets > 0
+                  ? '${((totalGratuits / totalTickets) * 100).toStringAsFixed(1)}%'
+                  : '0%',
+              '',
+            ]),
+            _pdfTableRow(
+                ['Voyages programmés', '${voyagesProgrammes.length}', ''],
+                highlight: true),
+            _pdfTableRow([
+              'Voyages non programmés',
+              '${voyagesNonProgrammes.length}',
+              ''
+            ]),
+            _pdfTableRow(
+                ['Total voyages', '${voyages.length}', ''],
+                highlight: true),
+          ],
+        ),
+        pw.SizedBox(height: 24),
+
+        // ── Tarif breakdown ──────────────────────────────────
+        pw.Text('RÉPARTITION PAR TARIF',
+            style: pw.TextStyle(
+                fontSize: 11,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColor.fromHex('6B7280'))),
+        pw.SizedBox(height: 8),
+        _buildPdfTarifTable(allTickets, totalTickets),
+        pw.SizedBox(height: 24),
+
+        // ── Gratuits per category  ← NEW ────────────────────
+        pw.Text('GRATUITS PAR CATÉGORIE',
+            style: pw.TextStyle(
+                fontSize: 11,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColor.fromHex('6B7280'))),
+        pw.SizedBox(height: 8),
+        _buildPdfGratuitsTable(catEntries, totalGratuits),
+        pw.SizedBox(height: 24),
+
+        // ── Per-segment summary  ← NEW ──────────────────────
+        pw.Text('TICKETS PAR SEGMENT',
+            style: pw.TextStyle(
+                fontSize: 11,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColor.fromHex('6B7280'))),
+        pw.SizedBox(height: 8),
+        _buildPdfSegmentTable(segEntries, totalTickets),
+        pw.SizedBox(height: 24),
+
+        // ── Per-voyage breakdown  ← NEW ─────────────────────
+        pw.Text('VENTES PAR VOYAGE',
+            style: pw.TextStyle(
+                fontSize: 11,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColor.fromHex('6B7280'))),
+        pw.SizedBox(height: 8),
+        _buildPdfVoyagesTable(allTickets, voyages),
+        pw.SizedBox(height: 24),
+
+        // ── Ticket detail ────────────────────────────────────
+        pw.Text('DÉTAIL DES TICKETS',
+            style: pw.TextStyle(
+                fontSize: 11,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColor.fromHex('6B7280'))),
+        pw.SizedBox(height: 8),
+        _buildPdfTicketsTable(allTickets),
       ],
-    );
+    ),
+  );
+
+  final fileName = 'rapport_journee_${_matricule}_$dateStr.pdf';
+  final file = File('${dir.path}/$fileName');
+  await file.writeAsBytes(await pdf.save());
+  return file;
+}
+
+// ── PDF helper: table row ──────────────────────────────────────
+pw.TableRow _pdfTableRow(List<String> cells,
+    {bool isHeader = false, bool highlight = false}) {
+  return pw.TableRow(
+    decoration: pw.BoxDecoration(
+      color: isHeader
+          ? PdfColor.fromHex('1A3260')
+          : highlight
+              ? PdfColor.fromHex('F2F5FB')
+              : PdfColors.white,
+    ),
+    children: cells
+        .map((c) => pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(
+                  horizontal: 8, vertical: 6),
+              child: pw.Text(c,
+                  style: pw.TextStyle(
+                      fontSize: 10,
+                      fontWeight: isHeader ? pw.FontWeight.bold : null,
+                      color: isHeader
+                          ? PdfColors.white
+                          : PdfColor.fromHex('111827'))),
+            ))
+        .toList(),
+  );
+}
+
+// ── PDF: tarif table (unchanged) ───────────────────────────────
+pw.Widget _buildPdfTarifTable(
+    List<Map<String, dynamic>> tickets, int totalTickets) {
+  final tarifMap = <String, Map<String, int>>{};
+  for (final t in tickets) {
+    final type =
+        ((t['type_tarif'] ?? '') as String).trim().isEmpty
+            ? 'Inconnu'
+            : (t['type_tarif'] as String).trim();
+    final qty = (t['quantite'] as num? ?? 1).toInt();
+    final total = (t['montant_total'] as num? ?? 0).toInt();
+    tarifMap[type] ??= {'count': 0, 'total': 0};
+    tarifMap[type]!['count'] = tarifMap[type]!['count']! + qty;
+    tarifMap[type]!['total'] = tarifMap[type]!['total']! + total;
+  }
+  final entries = tarifMap.entries.toList()
+    ..sort((a, b) => b.value['total']!.compareTo(a.value['total']!));
+
+  return pw.Table(
+    border: pw.TableBorder.all(
+        color: PdfColor.fromHex('E5E7EB'), width: 0.5),
+    children: [
+      _pdfTableRow(
+          ['Type de tarif', 'Qté', 'Total (ms)', '% voyageurs'],
+          isHeader: true),
+      ...entries.map((e) {
+        final pct = totalTickets > 0
+            ? '${((e.value['count']! / totalTickets) * 100).toStringAsFixed(1)}%'
+            : '0%';
+        return _pdfTableRow(
+            [e.key, '${e.value['count']}', '${e.value['total']}', pct],
+            highlight: entries.indexOf(e).isEven);
+      }),
+      _pdfTableRow([
+        'TOTAL',
+        '$totalTickets',
+        '${tickets.fold(0, (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt()))}',
+        '100%',
+      ], isHeader: true),
+    ],
+  );
+}
+
+// ── PDF: gratuits per category  ← NEW ─────────────────────────
+pw.Widget _buildPdfGratuitsTable(
+    List<MapEntry<String, Map<String, int>>> catEntries,
+    int totalGratuits) {
+  return pw.Table(
+    border: pw.TableBorder.all(
+        color: PdfColor.fromHex('E5E7EB'), width: 0.5),
+    children: [
+      _pdfTableRow(
+          ['Catégorie', 'Total tickets', 'Gratuits', '% gratuits'],
+          isHeader: true),
+      ...catEntries.map((e) {
+        final gratuits = e.value['gratuits']!;
+        final total = e.value['total']!;
+        final pct = total > 0
+            ? '${((gratuits / total) * 100).toStringAsFixed(1)}%'
+            : '0%';
+        return _pdfTableRow(
+            [e.key, '$total', '$gratuits', pct],
+            highlight: catEntries.indexOf(e).isEven);
+      }),
+      _pdfTableRow([
+        'TOTAL',
+        '${catEntries.fold(0, (s, e) => s + e.value['total']!)}',
+        '$totalGratuits',
+        catEntries.fold(0, (s, e) => s + e.value['total']!) > 0
+            ? '${((totalGratuits / catEntries.fold(0, (s, e) => s + e.value['total']!)) * 100).toStringAsFixed(1)}%'
+            : '0%',
+      ], isHeader: true),
+    ],
+  );
+}
+
+// ── PDF: segment table  ← NEW ─────────────────────────────────
+pw.Widget _buildPdfSegmentTable(
+    List<MapEntry<String, List<Map<String, dynamic>>>> segEntries,
+    int totalTickets) {
+  return pw.Table(
+    border: pw.TableBorder.all(
+        color: PdfColor.fromHex('E5E7EB'), width: 0.5),
+    children: [
+      _pdfTableRow(
+          ['Segment', 'Tickets', 'Gratuits', 'Payants', 'Recette (ms)'],
+          isHeader: true),
+      ...segEntries.map((e) {
+        final count = e.value.fold(
+            0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
+        final gratuits = e.value
+            .where((t) =>
+                ((t['montant_total'] as num? ?? 0).toInt()) == 0)
+            .fold(0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
+        final recette = e.value.fold(
+            0,
+            (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt()));
+        final label = e.key == '—' ? 'Non classé' : 'Seg. ${e.key}';
+        return _pdfTableRow([
+          label,
+          '$count',
+          '$gratuits',
+          '${count - gratuits}',
+          '$recette',
+        ], highlight: segEntries.indexOf(e).isEven);
+      }),
+    ],
+  );
+}
+
+// ── PDF: per-voyage table  ← NEW ──────────────────────────────
+pw.Widget _buildPdfVoyagesTable(
+    List<Map<String, dynamic>> allTickets, List<dynamic> voyages) {
+  final rows = <pw.TableRow>[
+    _pdfTableRow(
+        ['Voyage', 'Trajet', 'Tickets', 'Gratuits', 'Recette (ms)'],
+        isHeader: true),
+  ];
+
+  for (int i = 0; i < voyages.length; i++) {
+    final v = voyages[i];
+    final id = (v['id_vente'] ?? v['id']) as int?;
+    final depart = v['depart'] ?? '?';
+    final arrivee = v['arrivee'] ?? '?';
+    final vTickets = id == null
+        ? <Map<String, dynamic>>[]
+        : allTickets.where((t) => t['id_vente'] == id).toList();
+    final vCount = vTickets.fold(
+        0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
+    final vGratis = vTickets
+        .where((t) => ((t['montant_total'] as num? ?? 0).toInt()) == 0)
+        .fold(0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
+    final vRecette = vTickets.fold(
+        0, (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt()));
+
+    rows.add(_pdfTableRow([
+      '#${id ?? '?'}',
+      '$depart → $arrivee',
+      '$vCount',
+      '$vGratis',
+      '$vRecette',
+    ], highlight: i.isEven));
   }
 
-  pw.Widget _buildPdfTicketsTable(
-      List<Map<String, dynamic>> tickets) {
-    return pw.Table(
-      border: pw.TableBorder.all(
-          color: PdfColor.fromHex('E5E7EB'), width: 0.5),
-      columnWidths: const {
-        0: pw.FixedColumnWidth(25),
-        1: pw.FlexColumnWidth(2),
-        2: pw.FlexColumnWidth(2),
-        3: pw.FlexColumnWidth(1.5),
-        4: pw.FixedColumnWidth(55),
-        5: pw.FixedColumnWidth(55),
-      },
-      children: [
-        _pdfTableRow(
-            ['#', 'Départ', 'Arrivée', 'Tarif', 'Qté', 'Total (ms)'],
-            isHeader: true),
-        ...tickets.asMap().entries.map((entry) {
-          final i = entry.key;
-          final t = entry.value;
-          return _pdfTableRow([
-            '${i + 1}',
-            t['point_depart']  ?? '',
-            t['point_arrivee'] ?? '',
-            t['type_tarif']    ?? '',
-            '${(t['quantite']     as num? ?? 1).toInt()}',
-            '${(t['montant_total'] as num? ?? 0).toInt()}',
-          ], highlight: i.isEven);
-        }),
-      ],
-    );
-  }
+  return pw.Table(
+    border:
+        pw.TableBorder.all(color: PdfColor.fromHex('E5E7EB'), width: 0.5),
+    children: rows,
+  );
+}
 
+// ── PDF: tickets detail table (unchanged) ─────────────────────
+pw.Widget _buildPdfTicketsTable(List<Map<String, dynamic>> tickets) {
+  return pw.Table(
+    border: pw.TableBorder.all(
+        color: PdfColor.fromHex('E5E7EB'), width: 0.5),
+    columnWidths: const {
+      0: pw.FixedColumnWidth(22),
+      1: pw.FlexColumnWidth(2),
+      2: pw.FlexColumnWidth(2),
+      3: pw.FixedColumnWidth(20),
+      4: pw.FlexColumnWidth(1.5),
+      5: pw.FixedColumnWidth(50),
+      6: pw.FixedColumnWidth(50),
+    },
+    children: [
+      _pdfTableRow(
+          ['#', 'Départ', 'Arrivée', 'Seg.', 'Tarif', 'Qté', 'Total (ms)'],
+          isHeader: true),
+      ...tickets.asMap().entries.map((entry) {
+        final i = entry.key;
+        final t = entry.value;
+        final seg = t['id_segment'];
+        return _pdfTableRow([
+          '${i + 1}',
+          t['point_depart'] ?? '',
+          t['point_arrivee'] ?? '',
+          seg != null ? 'S$seg' : '—',
+          t['type_tarif'] ?? '',
+          '${(t['quantite'] as num? ?? 1).toInt()}',
+          '${(t['montant_total'] as num? ?? 0).toInt()}',
+        ], highlight: i.isEven);
+      }),
+    ],
+  );
+}
   // ─────────────────────────────────────────────────────────────
   // Send email
   // ─────────────────────────────────────────────────────────────

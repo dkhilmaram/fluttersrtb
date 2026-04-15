@@ -11,13 +11,13 @@ import '../../../data/database/daos/ticket_dao.dart';
 const Color navyDark  = Color(0xFF0D1B3E);
 const Color navyMid   = Color(0xFF1A3260);
 const Color navyLight = Color(0xFF1E4080);
-const Color _bg       = Color(0xFF091429);   // deeper than navyDark
-const Color _card     = Color(0xFF112045);   // card surface
-const Color _card2    = Color(0xFF162850);   // elevated card
-const Color _border   = Color(0xFF1E3566);   // subtle borders
+const Color _bg       = Color(0xFF091429);
+const Color _card     = Color(0xFF112045);
+const Color _card2    = Color(0xFF162850);
+const Color _border   = Color(0xFF1E3566);
 const _goldLight      = AppTheme.goldLight;
-const _surface        = AppTheme.offWhite;   // kept for compat
-const _cardWhite      = Colors.white;        // kept for compat
+const _surface        = AppTheme.offWhite;
+const _cardWhite      = Colors.white;
 const Color _clrOk    = Color(0xFF22C55E);
 const Color _clrErr   = Color(0xFFEF4444);
 
@@ -436,123 +436,173 @@ class _HistoriquePageState extends State<HistoriquePage>
   }
 
   // ── Header ────────────────────────────────────────────────
+  // FIX: the old trailing section (date badge + ID text + refresh btn)
+  // was not bounded and overflowed by 43 px on narrow screens.
+  // Solution: wrap all trailing controls in a single intrinsically-sized
+  // Row with mainAxisSize.min so they never push past the screen edge,
+  // and the centre Expanded column absorbs the remaining space correctly.
   Widget _buildHeader(String depart, String arrivee) {
+    final now = DateTime.now();
+    final dateLabel =
+        '${now.day.toString().padLeft(2, '0')}/'
+        '${now.month.toString().padLeft(2, '0')}/${now.year}';
+
     return Container(
       width: double.infinity,
       color: navyDark,
-      padding: const EdgeInsets.fromLTRB(20, 52, 20, 0),
+      padding: const EdgeInsets.fromLTRB(16, 52, 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.07),
-                  borderRadius: BorderRadius.circular(10),
+          // ── Top bar ──────────────────────────────────────
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Back button
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.07),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.arrow_back_ios_new,
+                      color: Colors.white, size: 17),
                 ),
-                child: const Icon(Icons.arrow_back_ios_new,
-                    color: Colors.white, size: 17),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Historique du voyage',
+              const SizedBox(width: 10),
+
+              // Title + route — takes all remaining space
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Historique du voyage',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 17,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                         letterSpacing: -0.2,
-                      )),
-                  const SizedBox(height: 3),
-                  Row(children: [
-                    Container(
-                        width: 6, height: 6,
-                        decoration: const BoxDecoration(
-                            color: _goldLight, shape: BoxShape.circle)),
-                    const SizedBox(width: 5),
-                    Flexible(
-                        child: Text(depart,
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                            style: TextStyle(
-                                color: Colors.white.withOpacity(0.5),
-                                fontSize: 11))),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 5),
-                      child: Icon(Icons.arrow_forward,
-                          size: 10, color: Colors.white.withOpacity(0.25)),
+                      ),
                     ),
-                    Container(
-                        width: 6, height: 6,
-                        decoration: BoxDecoration(
-                          color: Colors.transparent,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: _goldLight, width: 1.5),
-                        )),
-                    const SizedBox(width: 5),
-                    Flexible(
-                        child: Text(arrivee,
+                    const SizedBox(height: 3),
+                    // Route row — uses Flexible so long names truncate
+                    Row(
+                      children: [
+                        Container(
+                          width: 6, height: 6,
+                          decoration: const BoxDecoration(
+                              color: _goldLight, shape: BoxShape.circle),
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            depart,
                             overflow: TextOverflow.ellipsis,
                             maxLines: 1,
                             style: TextStyle(
                                 color: Colors.white.withOpacity(0.5),
-                                fontSize: 11))),
-                  ]),
+                                fontSize: 11),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Icon(Icons.arrow_forward,
+                              size: 10,
+                              color: Colors.white.withOpacity(0.25)),
+                        ),
+                        Container(
+                          width: 6, height: 6,
+                          decoration: BoxDecoration(
+                            color: Colors.transparent,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: _goldLight, width: 1.5),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            arrivee,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: TextStyle(
+                                color: Colors.white.withOpacity(0.5),
+                                fontSize: 11),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 8),
+
+              // ── Trailing controls (intrinsic width — no overflow) ──
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Date badge
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _goldLight.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border:
+                          Border.all(color: _goldLight.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.today_rounded,
+                            color: _goldLight, size: 11),
+                        const SizedBox(width: 3),
+                        Text(
+                          dateLabel,
+                          style: const TextStyle(
+                            color: _goldLight,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Voyage ID (optional)
+                  if (widget.voyage['id'] != null) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      '#${widget.voyage['id']}',
+                      style: TextStyle(
+                          color: Colors.white.withOpacity(0.2),
+                          fontSize: 10),
+                    ),
+                  ],
+                  const SizedBox(width: 6),
+                  // Refresh button
+                  GestureDetector(
+                    onTap: _fetchAll,
+                    child: Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.07),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.refresh,
+                          color: Colors.white70, size: 17),
+                    ),
+                  ),
                 ],
               ),
-            ),
-            const SizedBox(width: 8),
-            // Date badge
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: _goldLight.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: _goldLight.withOpacity(0.3)),
-              ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.today_rounded, color: _goldLight, size: 11),
-                const SizedBox(width: 4),
-                Text(
-                  () {
-                    final now = DateTime.now();
-                    return '${now.day.toString().padLeft(2, '0')}/'
-                        '${now.month.toString().padLeft(2, '0')}/${now.year}';
-                  }(),
-                  style: const TextStyle(
-                      color: _goldLight,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold),
-                ),
-              ]),
-            ),
-            if (widget.voyage['id'] != null) ...[
-              const SizedBox(width: 8),
-              Text('#${widget.voyage['id']}',
-                  style: TextStyle(
-                      color: Colors.white.withOpacity(0.2), fontSize: 10)),
             ],
-            const SizedBox(width: 8),
-            GestureDetector(
-              onTap: _fetchAll,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.07),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.refresh,
-                    color: Colors.white70, size: 18),
-              ),
-            ),
-          ]),
+          ),
+
           const SizedBox(height: 16),
+
+          // ── Tab bar ──────────────────────────────────────
           TabBar(
             controller: _tabs,
             indicatorColor: _goldLight,
@@ -563,10 +613,14 @@ class _HistoriquePageState extends State<HistoriquePage>
                 const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
             unselectedLabelStyle: const TextStyle(fontSize: 13),
             tabs: const [
-              Tab(icon: Icon(Icons.confirmation_number_outlined, size: 16),
-                  text: 'Tickets'),
-              Tab(icon: Icon(Icons.bar_chart_rounded, size: 16),
-                  text: 'Finance'),
+              Tab(
+                icon: Icon(Icons.confirmation_number_outlined, size: 16),
+                text: 'Tickets',
+              ),
+              Tab(
+                icon: Icon(Icons.bar_chart_rounded, size: 16),
+                text: 'Finance',
+              ),
             ],
           ),
         ],
@@ -672,8 +726,7 @@ class _HistoriquePageState extends State<HistoriquePage>
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                   color: _clrErr.withOpacity(0.1), shape: BoxShape.circle),
-              child: Icon(Icons.wifi_off_rounded,
-                  color: _clrErr, size: 44),
+              child: Icon(Icons.wifi_off_rounded, color: _clrErr, size: 44),
             ),
             const SizedBox(height: 16),
             Text(errorMessage!,
@@ -1041,7 +1094,6 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
       child: ListView(
         padding: const EdgeInsets.fromLTRB(14, 20, 14, 32),
         children: [
-          // Summary bar
           Container(
             margin: const EdgeInsets.only(bottom: 16),
             padding:
@@ -1383,7 +1435,8 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
             return Row(mainAxisSize: MainAxisSize.min, children: [
               Container(
                   width: 8, height: 8,
-                  decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
+                  decoration:
+                      BoxDecoration(color: c, shape: BoxShape.circle)),
               const SizedBox(width: 5),
               Text('${e.key} · ${e.value['total']} ms',
                   style: TextStyle(
@@ -1578,7 +1631,6 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
       child: ListView(
         padding: const EdgeInsets.fromLTRB(14, 20, 14, 32),
         children: [
-          // Hero recette
           Container(
             padding: const EdgeInsets.all(22),
             decoration: BoxDecoration(
@@ -1621,31 +1673,36 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
               border: Border.all(color: _border),
             ),
             child: Column(children: [
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Text('Manque à gagner estimé',
-                    style: TextStyle(
-                        fontSize: 13, color: Colors.white.withOpacity(0.7))),
-                Text('$manqueAGagner ms',
-                    style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: _clrErr)),
-              ]),
+              Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Manque à gagner estimé',
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.white.withOpacity(0.7))),
+                    Text('$manqueAGagner ms',
+                        style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: _clrErr)),
+                  ]),
               const SizedBox(height: 6),
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Text('Taux de gratuité',
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white.withOpacity(0.35))),
-                Text(
-                    p._totalTickets > 0
-                        ? '${((p._totalGratuits / p._totalTickets) * 100).toStringAsFixed(1)}%'
-                        : '0%',
-                    style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white70)),
-              ]),
+              Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Taux de gratuité',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white.withOpacity(0.35))),
+                    Text(
+                        p._totalTickets > 0
+                            ? '${((p._totalGratuits / p._totalTickets) * 100).toStringAsFixed(1)}%'
+                            : '0%',
+                        style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white70)),
+                  ]),
               const SizedBox(height: 10),
               ClipRRect(
                 borderRadius: BorderRadius.circular(4),
@@ -1723,31 +1780,31 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
     );
   }
 
- Widget _bilanRow(String label, String value, Color valueColor) =>
-    Padding(
-      padding: const EdgeInsets.symmetric(vertical: 7),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Text(label,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontSize: 13, color: Colors.white.withOpacity(0.5))),
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(value,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.right,
-                style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: valueColor)),
-          ),
-        ],
-      ),
-    );
+  Widget _bilanRow(String label, String value, Color valueColor) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.white.withOpacity(0.5))),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(value,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: valueColor)),
+            ),
+          ],
+        ),
+      );
 }
 
 // ─────────────────────────────────────────────────────────────
