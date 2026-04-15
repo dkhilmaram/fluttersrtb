@@ -8,10 +8,6 @@ _svc = SegmentService()
 def get_arrets(id_vente: int):
     return _svc.get_arrets(id_vente)
 
-@router.get("/{id_vente}/segment/actif")
-def get_segment_actif(id_vente: int):
-    return _svc.get_segment_actif(id_vente)
-
 @router.get("/{id_vente}/segments")
 def get_segments(id_vente: int):
     return _svc.get_all_segments(id_vente)

@@ -48,6 +48,11 @@ class VoyageDao {
 
   // ═══════════════════════════════════════════════════════════
   // ── VOYAGE STATUT CACHE ──────────────────────────────────────
+  // Table schema (version 2+):
+  //   id_vente      INTEGER PRIMARY KEY
+  //   statut        TEXT
+  //   server_statut TEXT    ← added in v2
+  //   cached_at     TEXT
   // ═══════════════════════════════════════════════════════════
 
   static Future<void> saveVoyageStatut(
@@ -61,7 +66,7 @@ class VoyageDao {
         {
           'id_vente':      idVente,
           'statut':        statut,
-          'server_statut': serverStatut,
+          'server_statut': serverStatut,   // nullable — null when saving offline
           'cached_at':     DateTime.now().toIso8601String(),
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
@@ -71,6 +76,14 @@ class VoyageDao {
     }
   }
 
+  /// Returns the locally-cached statut for [idVente], or null if none.
+  ///
+  /// Pass [currentServerStatut] (the value just received from the server) to
+  /// enable stale-cache detection: if the server has moved on since the cache
+  /// was written, the local row is discarded and null is returned.
+  ///
+  /// Offline clôture paths intentionally omit [currentServerStatut] so that
+  /// pending-cloture rows are never silently wiped.
   static Future<String?> getVoyageStatut(
     int idVente, {
     String? currentServerStatut,
@@ -87,11 +100,15 @@ class VoyageDao {
       final cached      = row['statut']        as String?;
       final serverSaved = row['server_statut'] as String?;
 
+      // Stale-cache check: only fires when BOTH saved and current values are
+      // known AND they differ — meaning the server changed state since we last
+      // wrote the cache.
       if (currentServerStatut != null &&
-          serverSaved != null &&
-          currentServerStatut != serverSaved) {
+          serverSaved           != null &&
+          currentServerStatut   != serverSaved) {
         print(
-          '🔄 VoyageDao: server statut changed ($serverSaved → $currentServerStatut) '
+          '🔄 VoyageDao: server statut changed '
+          '($serverSaved → $currentServerStatut) '
           'for vente $idVente — discarding local cache',
         );
         await clearVoyageStatut(idVente);
@@ -161,6 +178,9 @@ class VoyageDao {
     }
   }
 
+  /// Cross-checks every voyage in [serverVoyages] against the local cache.
+  /// Any row whose saved server_statut no longer matches the live value is
+  /// automatically evicted (via [getVoyageStatut] with stale-check enabled).
   static Future<void> clearStaleVoyageStatuts(
       List<dynamic> serverVoyages) async {
     try {

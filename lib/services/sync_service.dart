@@ -34,21 +34,21 @@ class SyncService {
         try {
           final response = await http
               .post(
-                Uri.parse('${ApiConstants.baseUrl}/tickets/vendre'),
+                Uri.parse(ApiConstants.vendreTicket),
                 headers: {'Content-Type': 'application/json'},
                 body: jsonEncode({
-                  'id_vente':         ticket['id_vente'],
-                  'id_segment':       ticket['id_segment'],
-                  'point_depart':     ticket['point_depart'],
-                  'point_arrivee':    ticket['point_arrivee'],
-                  'type_tarif':       ticket['type_tarif'],
-                  'quantite':         (ticket['quantite']      as num).toInt(),
-                  'prix_unitaire':    (ticket['prix_unitaire']  as num).toInt(),
-                  'montant_total':    (ticket['montant_total']  as num).toInt(),
-                  'matricule_agent':  ticket['matricule_agent'],
+                  'id_vente':        ticket['id_vente'],
+                  'id_segment':      ticket['id_segment'],
+                  'point_depart':    ticket['point_depart'],
+                  'point_arrivee':   ticket['point_arrivee'],
+                  'type_tarif':      ticket['type_tarif'],
+                  'quantite':        (ticket['quantite']     as num).toInt(),
+                  'prix_unitaire':   (ticket['prix_unitaire'] as num).toInt(),
+                  'montant_total':   (ticket['montant_total'] as num).toInt(),
+                  'matricule_agent': ticket['matricule_agent'],
                 }),
               )
-              .timeout(const Duration(seconds: 10));
+              .timeout(ApiConstants.defaultTimeout);
 
           if (response.statusCode == 200) {
             final data = jsonDecode(response.body);
@@ -79,19 +79,19 @@ class SyncService {
         }
       }
 
-      // ── 2. Sync pending segment clotures ─────────────────────
+      // ── 2. Sync pending segment clôtures ─────────────────────
       final pendingSegments = await VoyageDao.getPendingSegmentClotures();
       print('🔄 Syncing ${pendingSegments.length} pending segment clotures...');
 
       for (final row in pendingSegments) {
-        final idVente  = row['id_vente']  as int;
+        final idVente   = row['id_vente']   as int;
         final idSegment = row['id_segment'] as int;
         final openNext  = (row['open_next'] as int?) == 1;
 
         try {
           final checkResp = await http
-              .get(Uri.parse('${ApiConstants.baseUrl}/voyages/$idVente/segments'))
-              .timeout(const Duration(seconds: 10));
+              .get(Uri.parse(ApiConstants.voyageSegments(idVente)))
+              .timeout(ApiConstants.defaultTimeout);
 
           if (checkResp.statusCode == 200) {
             final checkData = jsonDecode(checkResp.body);
@@ -104,19 +104,19 @@ class SyncService {
             if (match != null && match['statut'] == 'en_attente') {
               await http
                   .put(
-                    Uri.parse('${ApiConstants.baseUrl}/voyages/$idVente/segment/ouvrir'),
+                    Uri.parse(ApiConstants.ouvrirSegment(idVente)),
                     headers: {'Content-Type': 'application/json'},
                   )
-                  .timeout(const Duration(seconds: 10));
+                  .timeout(ApiConstants.defaultTimeout);
             }
           }
 
           final clotureResp = await http
               .put(
-                Uri.parse('${ApiConstants.baseUrl}/voyages/$idVente/segments/$idSegment/cloturer'),
+                Uri.parse(ApiConstants.cloturerSegment(idVente, idSegment)),
                 headers: {'Content-Type': 'application/json'},
               )
-              .timeout(const Duration(seconds: 10));
+              .timeout(ApiConstants.defaultTimeout);
 
           final clotureData = jsonDecode(clotureResp.body);
 
@@ -128,10 +128,10 @@ class SyncService {
               try {
                 final ouvrirResp = await http
                     .put(
-                      Uri.parse('${ApiConstants.baseUrl}/voyages/$idVente/segment/ouvrir'),
+                      Uri.parse(ApiConstants.ouvrirSegment(idVente)),
                       headers: {'Content-Type': 'application/json'},
                     )
-                    .timeout(const Duration(seconds: 10));
+                    .timeout(ApiConstants.defaultTimeout);
 
                 final ouvrirData = jsonDecode(ouvrirResp.body);
                 if (ouvrirData['success'] == true) {
@@ -153,36 +153,40 @@ class SyncService {
         }
       }
 
-      // ── 3. Sync pending voyage clotures ──────────────────────
-      final pendingClotures = await VoyageDao.getPendingClotures();
-      print('🔄 Syncing ${pendingClotures.length} pending voyage clôtures...');
+      // ── 3. Sync pending voyage clôtures ──────────────────────
+      if (failed > 0) {
+        print('⚠️ Skipping voyage clôtures — $failed ticket(s) still unsynced');
+      } else {
+        final pendingClotures = await VoyageDao.getPendingClotures();
+        print('🔄 Syncing ${pendingClotures.length} pending voyage clôtures...');
 
-      for (final cloture in pendingClotures) {
-        final idVente = cloture['id_vente'] as int;
-        try {
-          await _ensureAllSegmentsCloturedOnServer(idVente);
+        for (final cloture in pendingClotures) {
+          final idVente = cloture['id_vente'] as int;
+          try {
+            await _ensureAllSegmentsCloturedOnServer(idVente);
 
-          final response = await http
-              .put(
-                Uri.parse('${ApiConstants.baseUrl}/vente/$idVente/cloturer'),
-                headers: {'Content-Type': 'application/json'},
-              )
-              .timeout(const Duration(seconds: 10));
+            final response = await http
+                .put(
+                  Uri.parse(ApiConstants.cloturerVoyage(idVente)),
+                  headers: {'Content-Type': 'application/json'},
+                )
+                .timeout(ApiConstants.defaultTimeout);
 
-          if (response.statusCode == 200) {
-            final data = jsonDecode(response.body);
-            if (data['success'] == true) {
-              await VoyageDao.markClotureSynced(idVente);
-              await VoyageDao.saveVoyageStatut(idVente, 'cloture');
-              print('✅ Voyage clôture synced for vente $idVente');
+            if (response.statusCode == 200) {
+              final data = jsonDecode(response.body);
+              if (data['success'] == true) {
+                await VoyageDao.markClotureSynced(idVente);
+                await VoyageDao.saveVoyageStatut(idVente, 'cloture');
+                print('✅ Voyage clôture synced for vente $idVente');
+              } else {
+                print('⚠️ Voyage clôture rejected by server for vente $idVente: ${data['message']}');
+              }
             } else {
-              print('⚠️ Voyage clôture rejected by server for vente $idVente: ${data['message']}');
+              print('⚠️ Voyage clôture HTTP error for vente $idVente: ${response.statusCode}');
             }
-          } else {
-            print('⚠️ Voyage clôture HTTP error for vente $idVente: ${response.statusCode}');
+          } catch (e) {
+            print('❌ Voyage clôture sync failed for vente $idVente: $e');
           }
-        } catch (e) {
-          print('❌ Voyage clôture sync failed for vente $idVente: $e');
         }
       }
 
@@ -197,12 +201,13 @@ class SyncService {
   static Future<void> _ensureAllSegmentsCloturedOnServer(int idVente) async {
     try {
       final segResp = await http
-          .get(Uri.parse('${ApiConstants.baseUrl}/voyages/$idVente/segments'))
-          .timeout(const Duration(seconds: 10));
+          .get(Uri.parse(ApiConstants.voyageSegments(idVente)))
+          .timeout(ApiConstants.defaultTimeout);
 
       if (segResp.statusCode != 200) return;
 
-      final segments = (jsonDecode(segResp.body)['segments'] as List<dynamic>?) ?? [];
+      final segments =
+          (jsonDecode(segResp.body)['segments'] as List<dynamic>?) ?? [];
 
       for (final s in segments) {
         final seg    = s as Map<String, dynamic>;
@@ -214,18 +219,18 @@ class SyncService {
         if (statut == 'en_attente') {
           await http
               .put(
-                Uri.parse('${ApiConstants.baseUrl}/voyages/$idVente/segment/ouvrir'),
+                Uri.parse(ApiConstants.ouvrirSegment(idVente)),
                 headers: {'Content-Type': 'application/json'},
               )
-              .timeout(const Duration(seconds: 10));
+              .timeout(ApiConstants.defaultTimeout);
         }
 
         await http
             .put(
-              Uri.parse('${ApiConstants.baseUrl}/voyages/$idVente/segments/$idSeg/cloturer'),
+              Uri.parse(ApiConstants.cloturerSegment(idVente, idSeg)),
               headers: {'Content-Type': 'application/json'},
             )
-            .timeout(const Duration(seconds: 10));
+            .timeout(ApiConstants.defaultTimeout);
 
         print('✅ Cascade: segment $idSeg clôturé on server for vente $idVente');
       }

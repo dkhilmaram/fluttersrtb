@@ -3,41 +3,33 @@ from core.database import get_db
 class SegmentRepository:
 
     def get_arrets(self, id_vente: int) -> list[dict]:
+        """Reconstruct ordered stop list from segment_voyage rows."""
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         try:
             cursor.execute("""
-                SELECT point_depart, point_arrivee, ordre
+                SELECT point_depart AS nom_arret, ordre
                 FROM billetterie.segment_voyage
-                WHERE id_vente = %s ORDER BY ordre ASC
+                WHERE id_vente = %s
+                ORDER BY ordre ASC
             """, (id_vente,))
-            return cursor.fetchall()
-        finally:
-            conn.close()
+            rows = cursor.fetchall()
+            if not rows:
+                return []
 
-    def get_actif(self, id_vente: int) -> dict | None:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        try:
+            arrets = [{"nom_arret": r["nom_arret"], "ordre": r["ordre"]} for r in rows]
+
             cursor.execute("""
-                SELECT * FROM billetterie.segment_voyage
-                WHERE id_vente = %s AND statut = 'actif'
-                ORDER BY ordre LIMIT 1
+                SELECT point_arrivee AS nom_arret, ordre + 1 AS ordre
+                FROM billetterie.segment_voyage
+                WHERE id_vente = %s
+                ORDER BY ordre DESC LIMIT 1
             """, (id_vente,))
-            return cursor.fetchone()
-        finally:
-            conn.close()
+            last = cursor.fetchone()
+            if last:
+                arrets.append(last)
 
-    def get_prochain_en_attente(self, id_vente: int, after_ordre: int = -1) -> dict | None:
-        conn = get_db()
-        cursor = conn.cursor(dictionary=True)
-        try:
-            cursor.execute("""
-                SELECT * FROM billetterie.segment_voyage
-                WHERE id_vente = %s AND statut = 'en_attente' AND ordre > %s
-                ORDER BY ordre LIMIT 1
-            """, (id_vente, after_ordre))
-            return cursor.fetchone()
+            return arrets
         finally:
             conn.close()
 
@@ -46,8 +38,24 @@ class SegmentRepository:
         cursor = conn.cursor(dictionary=True)
         try:
             cursor.execute("""
-                SELECT * FROM billetterie.segment_voyage
+                SELECT id_segment, point_depart, point_arrivee, ordre
+                FROM billetterie.segment_voyage
                 WHERE id_vente = %s ORDER BY ordre DESC LIMIT 1
+            """, (id_vente,))
+            return cursor.fetchone()
+        finally:
+            conn.close()
+
+    def get_actif(self, id_vente: int) -> dict | None:
+        """Return the current active segment for a vente (last by ordre)."""
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("""
+                SELECT id_segment, point_depart, point_arrivee, ordre
+                FROM billetterie.segment_voyage
+                WHERE id_vente = %s
+                ORDER BY ordre DESC LIMIT 1
             """, (id_vente,))
             return cursor.fetchone()
         finally:
@@ -58,16 +66,15 @@ class SegmentRepository:
         cursor = conn.cursor(dictionary=True)
         try:
             cursor.execute("""
-                SELECT sv.id_segment, sv.point_depart, sv.point_arrivee,
-                       sv.ordre, sv.statut,
-                       sv.date_ouverture, sv.date_cloture,
+                SELECT sv.id_segment, sv.point_depart, sv.point_arrivee, sv.ordre,
                        v.id_ligne, v.matricule_agent,
                        l.nom_ligne, a.nom, a.prenom
                 FROM billetterie.segment_voyage sv
-                JOIN  billetterie.vente   v ON sv.id_vente       = v.id_vente
-                JOIN  base_global.ligne   l ON v.id_ligne        = l.id_ligne
-                LEFT JOIN base_global.agent a ON v.matricule_agent = a.matricule_agent
-                WHERE sv.id_vente = %s ORDER BY sv.ordre
+                JOIN  billetterie.vente     v  ON sv.id_vente        = v.id_vente
+                JOIN  base_global.ligne     l  ON v.id_ligne         = l.id_ligne
+                LEFT JOIN base_global.agent a  ON v.matricule_agent  = a.matricule_agent
+                WHERE sv.id_vente = %s
+                ORDER BY sv.ordre
             """, (id_vente,))
             return cursor.fetchall()
         finally:

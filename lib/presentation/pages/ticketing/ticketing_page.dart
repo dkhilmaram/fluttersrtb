@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
-import '../../pages/ticketing/NouveauTicketPage.dart';
+import '../../../core/theme/app_theme.dart';
+import 'Nouveauticketpage.dart';
 import 'passage_special_page.dart';
 import '../scan/scan_tab_page.dart';
 
-const Color navyDark  = Color(0xFF0D1B3E);
-const Color navyMid   = Color(0xFF1A3260);
-const Color navyLight = Color(0xFF1E4080);
-const Color goldLight = Color(0xFFF5C842);
-const Color surface   = Color(0xFFF2F5FB);
-const Color cardWhite = Color(0xFFFFFFFF);
+// ── Local palette aliases ─────────────────────────────────────
+const _navyDark  = AppTheme.navyDark;
+const _navyMid   = AppTheme.navyMid;
+const _navyLight = AppTheme.navyLight;
+const _goldLight = AppTheme.goldLight;
+const _surface   = AppTheme.offWhite;
 
 class TicketingPage extends StatefulWidget {
   final Map<String, dynamic> voyage;
@@ -42,7 +43,7 @@ class _TicketingPageState extends State<TicketingPage>
     _tabCtrl = TabController(length: 3, vsync: this);
     _tabCtrl.addListener(() {
       if (_tabCtrl.indexIsChanging) return;
-      // Block direct swipe/tap to the gratuit tab (now index 2) if not unlocked
+      // Block direct swipe/tap to the gratuit tab (index 2) if not unlocked
       if (_tabCtrl.index == 2 && !_gratuitUnlocked) {
         _tabCtrl.animateTo(_activeTab);
         return;
@@ -76,14 +77,9 @@ class _TicketingPageState extends State<TicketingPage>
     _tabCtrl.animateTo(0);
   }
 
-  // Called by PassageSpecialPage after a gratuit passage is saved:
-  //   1. Tell NouveauTicketPage to keep pointDepart but reset pointArrivee + quantite
-  //   2. Switch back to tab 0
-  //   3. Reset gratuit lock so the flow is clean for the next stop
+  // Called by PassageSpecialPage after a gratuit passage is saved
   void _onPassageSaved() {
-    // Reset NouveauTicketPage state via GlobalKey — mirrors _saveTicket behaviour
     _nouveauKey.currentState?.resetAfterGratuit();
-
     setState(() {
       _gratuitUnlocked = false;
       _gratuitKey++;
@@ -100,14 +96,13 @@ class _TicketingPageState extends State<TicketingPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: surface,
+      backgroundColor: _surface,
       body: Column(children: [
-        // Fixed header
         _buildHeader(),
 
         // Pinned tab bar
         Container(
-          color: cardWhite,
+          color: Colors.white,
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           child: TabBar(
             controller: _tabCtrl,
@@ -115,23 +110,21 @@ class _TicketingPageState extends State<TicketingPage>
             indicatorSize: TabBarIndicatorSize.tab,
             indicator: BoxDecoration(
               gradient: const LinearGradient(
-                  colors: [navyDark, navyLight]),
+                  colors: [_navyDark, _navyLight]),
               borderRadius: BorderRadius.circular(10),
             ),
             dividerColor: Colors.transparent,
             tabs: [
-              // Tab 0 — Nouveau Ticket
               _buildTab(Icons.confirmation_number_rounded,
                   'Nouveau Ticket', 0),
-              // Tab 1 — NFC / Scan
               _buildTab(Icons.qr_code_scanner_rounded, 'NFC / Scan', 1),
-              // Tab 2 — Passage Gratuit (last)
               _buildTab(
-                  _gratuitUnlocked
-                      ? Icons.card_membership_rounded
-                      : Icons.lock_rounded,
-                  'Passage Gratuit', 2,
-                  locked: !_gratuitUnlocked),
+                _gratuitUnlocked
+                    ? Icons.card_membership_rounded
+                    : Icons.lock_rounded,
+                'Passage Gratuit', 2,
+                locked: !_gratuitUnlocked,
+              ),
             ],
           ),
         ),
@@ -144,7 +137,7 @@ class _TicketingPageState extends State<TicketingPage>
             children: [
               // Tab 0 — Nouveau Ticket
               NouveauTicketPage(
-                key:           _nouveauKey,
+                key:    _nouveauKey,
                 voyage: {
                   ...widget.voyage,
                   'depart':     _dep,
@@ -162,7 +155,7 @@ class _TicketingPageState extends State<TicketingPage>
                 segment: widget.segment,
               ),
 
-              // Tab 2 — Passage Gratuit / Spécial (last)
+              // Tab 2 — Passage Gratuit / Spécial
               _gratuitUnlocked
                   ? PassageSpecialPage(
                       key:            ValueKey(_gratuitKey),
@@ -179,7 +172,7 @@ class _TicketingPageState extends State<TicketingPage>
     );
   }
 
-  // ── Tab chip ───────────────────────────────────────────────
+  // ── Tab chip ──────────────────────────────────────────────
 
   Widget _buildTab(IconData icon, String label, int idx,
       {bool locked = false}) {
@@ -218,14 +211,14 @@ class _TicketingPageState extends State<TicketingPage>
     );
   }
 
-  // ── Header ─────────────────────────────────────────────────
+  // ── Header ────────────────────────────────────────────────
 
   Widget _buildHeader() {
     return Container(
       width: double.infinity,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [navyDark, navyMid, navyLight],
+          colors: [_navyDark, _navyMid, _navyLight],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -258,11 +251,12 @@ class _TicketingPageState extends State<TicketingPage>
                 offset: const Offset(0, 5))],
           ),
           padding: const EdgeInsets.all(8),
-          child: Image.asset('assets/images/logo_srtb.png',
-              fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.directions_bus,
-                      size: 36, color: navyMid)),
+          child: Image.asset(
+            'assets/images/logo_srtb.png',
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => const Icon(
+                Icons.directions_bus, size: 36, color: _navyMid),
+          ),
         ),
         const SizedBox(height: 10),
         const Text('S R T B',
@@ -279,19 +273,16 @@ class _TicketingPageState extends State<TicketingPage>
                 letterSpacing: 1.5)),
         const SizedBox(height: 14),
         Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.12),
             borderRadius: BorderRadius.circular(30),
-            border: Border.all(
-                color: Colors.white.withOpacity(0.25)),
+            border: Border.all(color: Colors.white.withOpacity(0.25)),
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Container(
-                width: 7, height: 7,
+            Container(width: 7, height: 7,
                 decoration: const BoxDecoration(
-                    color: goldLight, shape: BoxShape.circle)),
+                    color: _goldLight, shape: BoxShape.circle)),
             const SizedBox(width: 8),
             Flexible(
               child: Text(_dep,
@@ -306,12 +297,11 @@ class _TicketingPageState extends State<TicketingPage>
               child: Icon(Icons.arrow_forward,
                   color: Colors.white.withOpacity(0.45), size: 13),
             ),
-            Container(
-                width: 7, height: 7,
+            Container(width: 7, height: 7,
                 decoration: BoxDecoration(
                     color: Colors.transparent,
                     shape: BoxShape.circle,
-                    border: Border.all(color: goldLight, width: 2))),
+                    border: Border.all(color: _goldLight, width: 2))),
             const SizedBox(width: 8),
             Flexible(
               child: Text(_arr,
@@ -325,8 +315,7 @@ class _TicketingPageState extends State<TicketingPage>
         ),
         const SizedBox(height: 10),
         Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: 12, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
           decoration: BoxDecoration(
             color: const Color(0xFF16A34A).withOpacity(0.25),
             borderRadius: BorderRadius.circular(20),
@@ -334,11 +323,9 @@ class _TicketingPageState extends State<TicketingPage>
                 color: const Color(0xFF86EFAC).withOpacity(0.5)),
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Container(
-                width: 6, height: 6,
+            Container(width: 6, height: 6,
                 decoration: const BoxDecoration(
-                    color: Color(0xFF4ADE80),
-                    shape: BoxShape.circle)),
+                    color: Color(0xFF4ADE80), shape: BoxShape.circle)),
             const SizedBox(width: 6),
             const Text('SECTEUR ACTIF',
                 style: TextStyle(
@@ -353,7 +340,7 @@ class _TicketingPageState extends State<TicketingPage>
   }
 }
 
-// ── Locked placeholder ─────────────────────────────────────────
+// ── Locked placeholder ────────────────────────────────────────
 
 class _LockedTabPlaceholder extends StatelessWidget {
   const _LockedTabPlaceholder();

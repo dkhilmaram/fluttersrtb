@@ -217,33 +217,32 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
     }
   }
 
-  Future<void> _cloturerOnline() async {
-    final id = widget.voyage['id'] as int;
-    try {
-      final response = await http
-          .put(
-            Uri.parse('${ApiConstants.baseUrl}/vente/$id/cloturer'),
-            headers: {'Content-Type': 'application/json'},
-          )
-          .timeout(const Duration(seconds: 10));
+ Future<void> _cloturerOnline() async {
+  final id = widget.voyage['id'] as int;
+  try {
+    final response = await http
+        .put(
+          Uri.parse(ApiConstants.cloturerVoyage(id)), // ← fix: was ApiConstants.baseUrl + '/vente/$id/cloturer'
+          headers: {'Content-Type': 'application/json'},
+        )
+        .timeout(ApiConstants.defaultTimeout); // ← also use the constant
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          await VoyageDao.saveVoyageStatut(id, 'cloture', serverStatut: 'cloture');
-          _onClotureDone();
-        } else {
-          setState(() => isCloturing = false);
-          if (mounted) _showToast(data['message'] ?? 'Erreur', isError: true);
-        }
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['success'] == true) {
+        await VoyageDao.saveVoyageStatut(id, 'cloture', serverStatut: 'cloture');
+        _onClotureDone();
       } else {
-        await _cloturerOffline();
+        setState(() => isCloturing = false);
+        if (mounted) _showToast(data['message'] ?? 'Erreur', isError: true);
       }
-    } catch (e) {
+    } else {
       await _cloturerOffline();
     }
+  } catch (e) {
+    await _cloturerOffline();
   }
-
+}
   Future<void> _cloturerOffline() async {
     final id = widget.voyage['id'] as int;
     final lastKnownServerStatut =

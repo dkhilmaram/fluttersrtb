@@ -6,16 +6,6 @@
 // pubspec.yaml dependencies required:
 //   mobile_scanner: ^5.2.3
 //   nfc_manager: ^3.3.0
-//
-// Android AndroidManifest.xml:
-//   <uses-permission android:name="android.permission.CAMERA"/>
-//   <uses-permission android:name="android.permission.NFC"/>
-//   <uses-feature android:name="android.hardware.nfc" android:required="false"/>
-// iOS Info.plist:
-//   NSCameraUsageDescription — "Scan transport tickets"
-//   NFCReaderUsageDescription — "Read transport NFC cards"
-// iOS Runner.entitlements:
-//   com.apple.developer.nfc.readersession.formats → TAG
 
 import 'dart:async';
 import 'dart:convert';
@@ -23,15 +13,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:nfc_manager/nfc_manager.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../data/repositories/ticket_repository.dart';
 
-// ── Palette ───────────────────────────────────────────────────
-const Color navyDark  = Color(0xFF0D1B3E);
-const Color navyMid   = Color(0xFF1A3260);
-const Color navyLight = Color(0xFF1E4080);
-const Color goldLight = Color(0xFFF5C842);
-const Color surface   = Color(0xFFF2F5FB);
-const Color cardWhite = Color(0xFFFFFFFF);
+// ── Local palette aliases ─────────────────────────────────────
+const _navyDark  = AppTheme.navyDark;
+const _navyMid   = AppTheme.navyMid;
+const _navyLight = AppTheme.navyLight;
+const _goldLight = AppTheme.goldLight;
 
 enum _ScanState { idle, success, error }
 
@@ -71,7 +60,8 @@ class _ScanTabPageState extends State<ScanTabPage> {
     super.dispose();
   }
 
-  void _showToast(String msg, {bool isError = false, bool isWarning = false}) {
+  void _showToast(String msg,
+      {bool isError = false, bool isWarning = false}) {
     _toastTimer?.cancel();
     _toastEntry?.remove();
     _toastEntry = null;
@@ -189,7 +179,8 @@ class _ScanTabPageState extends State<ScanTabPage> {
           }
         }
         try {
-          final text = utf8.decode(record.payload, allowMalformed: false).trim();
+          final text =
+              utf8.decode(record.payload, allowMalformed: false).trim();
           if (text.isNotEmpty) return text;
         } catch (_) {}
       }
@@ -242,7 +233,8 @@ class _ScanTabPageState extends State<ScanTabPage> {
     if (id.isEmpty || type.isEmpty || expire.isEmpty) {
       setState(() {
         scanState = _ScanState.error;
-        errorMsg  = 'Données du titre incomplètes (id, type ou expire manquant)';
+        errorMsg  =
+            'Données du titre incomplètes (id, type ou expire manquant)';
       });
       return;
     }
@@ -275,9 +267,12 @@ class _ScanTabPageState extends State<ScanTabPage> {
     final result = await TicketRepository.saveTicket({
       'id_vente':        widget.voyage['id'] as int? ?? 0,
       'id_segment':      widget.segment['id_segment'] as int? ?? 0,
-      'point_depart':    widget.segment['point_depart']  ?? widget.voyage['depart']  ?? '',
-      'point_arrivee':   widget.segment['point_arrivee'] ?? widget.voyage['arrivee'] ?? '',
-      'type_tarif':      'Scan ${scannedData!['mode']} — ${scannedData!['type']}',
+      'point_depart':    widget.segment['point_depart']
+                             ?? widget.voyage['depart']  ?? '',
+      'point_arrivee':   widget.segment['point_arrivee']
+                             ?? widget.voyage['arrivee'] ?? '',
+      'type_tarif':
+          'Scan ${scannedData!['mode']} — ${scannedData!['type']}',
       'quantite':        1,
       'prix_unitaire':   0,
       'montant_total':   0,
@@ -319,19 +314,21 @@ class _ScanTabPageState extends State<ScanTabPage> {
 
           Row(children: [
             Expanded(child: _ScanModeBtn(
-              icon: Icons.nfc_rounded,
-              label: 'NFC',
+              icon:     Icons.nfc_rounded,
+              label:    'NFC',
               sublabel: 'Approcher la carte',
-              color: const Color(0xFF1E40AF),
-              onTap: scanState == _ScanState.idle ? _startNfcScan : null,
+              color:    const Color(0xFF1E40AF),
+              onTap:    scanState == _ScanState.idle ? _startNfcScan : null,
             )),
             const SizedBox(width: 10),
             Expanded(child: _ScanModeBtn(
-              icon: Icons.qr_code_2_rounded,
-              label: 'Code-barres',
+              icon:     Icons.qr_code_2_rounded,
+              label:    'Code-barres',
               sublabel: 'Scanner le QR / code',
-              color: const Color(0xFF6B21A8),
-              onTap: scanState == _ScanState.idle ? _openBarcodeScanner : null,
+              color:    const Color(0xFF6B21A8),
+              onTap:    scanState == _ScanState.idle
+                            ? _openBarcodeScanner
+                            : null,
             )),
           ]),
 
@@ -342,19 +339,20 @@ class _ScanTabPageState extends State<ScanTabPage> {
             child: switch (scanState) {
               _ScanState.idle    => const _IdleWidget(key: ValueKey('idle')),
               _ScanState.success => _ScanResultWidget(
-                key: const ValueKey('success'),
-                data: scannedData!,
-                isSaving: isSaving,
-                onCancel: () => setState(() {
+                key:         const ValueKey('success'),
+                data:        scannedData!,
+                isSaving:    isSaving,
+                onCancel:    () => setState(() {
                   scanState   = _ScanState.idle;
                   scannedData = null;
                 }),
                 onValidate: _validerEtVendre,
               ),
-              _ScanState.error   => _ScanErrorWidget(
-                key: const ValueKey('error'),
-                msg: errorMsg ?? 'Titre invalide',
-                onRetry: () => setState(() => scanState = _ScanState.idle),
+              _ScanState.error => _ScanErrorWidget(
+                key:     const ValueKey('error'),
+                msg:     errorMsg ?? 'Titre invalide',
+                onRetry: () =>
+                    setState(() => scanState = _ScanState.idle),
               ),
             },
           ),
@@ -382,7 +380,8 @@ class _NfcListeningSheetState extends State<_NfcListeningSheet>
   void initState() {
     super.initState();
     _pulse = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1200),
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
     )..repeat(reverse: true);
   }
 
@@ -394,16 +393,19 @@ class _NfcListeningSheetState extends State<_NfcListeningSheet>
     margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
     padding: const EdgeInsets.all(28),
     decoration: BoxDecoration(
-      color: cardWhite,
+      color: Colors.white,
       borderRadius: BorderRadius.circular(24),
-      boxShadow: [BoxShadow(color: navyDark.withOpacity(0.12),
-          blurRadius: 24, offset: const Offset(0, -4))],
+      boxShadow: [BoxShadow(
+          color: _navyDark.withOpacity(0.12),
+          blurRadius: 24,
+          offset: const Offset(0, -4))],
     ),
     child: Column(mainAxisSize: MainAxisSize.min, children: [
       Container(
         width: 40, height: 4,
         margin: const EdgeInsets.only(bottom: 24),
-        decoration: BoxDecoration(color: Colors.grey.shade300,
+        decoration: BoxDecoration(
+            color: Colors.grey.shade300,
             borderRadius: BorderRadius.circular(2)),
       ),
       AnimatedBuilder(
@@ -412,31 +414,40 @@ class _NfcListeningSheetState extends State<_NfcListeningSheet>
           width: 90, height: 90,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: const Color(0xFF1E40AF).withOpacity(0.08 + 0.08 * _pulse.value),
+            color: const Color(0xFF1E40AF)
+                .withOpacity(0.08 + 0.08 * _pulse.value),
             boxShadow: [BoxShadow(
-              color: const Color(0xFF1E40AF).withOpacity(0.15 + 0.15 * _pulse.value),
+              color: const Color(0xFF1E40AF)
+                  .withOpacity(0.15 + 0.15 * _pulse.value),
               blurRadius: 24 + 12 * _pulse.value,
               spreadRadius: 4 * _pulse.value,
             )],
           ),
           child: child,
         ),
-        child: const Icon(Icons.nfc_rounded, size: 48, color: Color(0xFF1E40AF)),
+        child: const Icon(Icons.nfc_rounded,
+            size: 48, color: Color(0xFF1E40AF)),
       ),
       const SizedBox(height: 20),
       const Text('Approchez la carte NFC',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold,
-              color: navyDark)),
+          style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: _navyDark)),
       const SizedBox(height: 8),
       Text('Maintenez la carte contre\nle dos de votre téléphone',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 13, color: Colors.grey.shade500, height: 1.5)),
+          style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade500,
+              height: 1.5)),
       const SizedBox(height: 24),
       TextButton.icon(
         onPressed: () => Navigator.pop(context),
         icon: const Icon(Icons.close, size: 16),
         label: const Text('Annuler'),
-        style: TextButton.styleFrom(foregroundColor: Colors.grey.shade500),
+        style: TextButton.styleFrom(
+            foregroundColor: Colors.grey.shade500),
       ),
     ]),
   );
@@ -455,7 +466,7 @@ class _CameraScannerPage extends StatefulWidget {
 class _CameraScannerPageState extends State<_CameraScannerPage> {
   final MobileScannerController _ctrl = MobileScannerController(
     detectionSpeed: DetectionSpeed.noDuplicates,
-    returnImage: false,
+    returnImage:    false,
   );
   bool _detected = false;
   bool _torchOn  = false;
@@ -486,15 +497,21 @@ class _CameraScannerPageState extends State<_CameraScannerPage> {
               onTap: () => Navigator.pop(context),
               child: Container(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: Colors.black54,
+                decoration: BoxDecoration(
+                    color: Colors.black54,
                     borderRadius: BorderRadius.circular(12)),
-                child: const Icon(Icons.close, color: Colors.white, size: 20),
+                child: const Icon(Icons.close,
+                    color: Colors.white, size: 20),
               ),
             ),
             const SizedBox(width: 12),
-            const Expanded(child: Text('Scanner le code-barres / QR',
-                style: TextStyle(color: Colors.white,
-                    fontSize: 14, fontWeight: FontWeight.w600))),
+            const Expanded(
+              child: Text('Scanner le code-barres / QR',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600)),
+            ),
             GestureDetector(
               onTap: () async {
                 await _ctrl.toggleTorch();
@@ -503,11 +520,15 @@ class _CameraScannerPageState extends State<_CameraScannerPage> {
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                    color: _torchOn ? goldLight : Colors.black54,
+                    color: _torchOn ? _goldLight : Colors.black54,
                     borderRadius: BorderRadius.circular(12)),
                 child: Icon(
-                  _torchOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
-                  color: _torchOn ? navyDark : Colors.white, size: 20),
+                  _torchOn
+                      ? Icons.flash_on_rounded
+                      : Icons.flash_off_rounded,
+                  color: _torchOn ? _navyDark : Colors.white,
+                  size: 20,
+                ),
               ),
             ),
           ]),
@@ -515,17 +536,23 @@ class _CameraScannerPageState extends State<_CameraScannerPage> {
       ),
       Positioned(
         left: 0, right: 0, bottom: 60,
-        child: Center(child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          decoration: BoxDecoration(color: Colors.black54,
-              borderRadius: BorderRadius.circular(30)),
-          child: const Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.qr_code_2_rounded, color: Colors.white70, size: 16),
-            SizedBox(width: 8),
-            Flexible(child: Text('Centrez le code dans le cadre',
-                style: TextStyle(color: Colors.white70, fontSize: 12))),
-          ]),
-        )),
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 20, vertical: 10),
+            decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(30)),
+            child: const Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.qr_code_2_rounded,
+                  color: Colors.white70, size: 16),
+              SizedBox(width: 8),
+              Flexible(child: Text('Centrez le code dans le cadre',
+                  style: TextStyle(
+                      color: Colors.white70, fontSize: 12))),
+            ]),
+          ),
+        ),
       ),
     ]),
   );
@@ -534,16 +561,17 @@ class _CameraScannerPageState extends State<_CameraScannerPage> {
 class _ScanOverlay extends StatelessWidget {
   const _ScanOverlay();
   @override
-  Widget build(BuildContext context) => LayoutBuilder(builder: (_, c) {
-    final sz    = c.biggest;
-    final boxSz = sz.width * 0.72;
-    final left  = (sz.width  - boxSz) / 2;
-    final top   = (sz.height - boxSz) / 2 - 40;
-    return CustomPaint(
-      size: sz,
-      painter: _OverlayPainter(
-          cutRect: Rect.fromLTWH(left, top, boxSz, boxSz)));
-  });
+  Widget build(BuildContext context) =>
+      LayoutBuilder(builder: (_, c) {
+        final sz    = c.biggest;
+        final boxSz = sz.width * 0.72;
+        final left  = (sz.width  - boxSz) / 2;
+        final top   = (sz.height - boxSz) / 2 - 40;
+        return CustomPaint(
+          size: sz,
+          painter: _OverlayPainter(
+              cutRect: Rect.fromLTWH(left, top, boxSz, boxSz)));
+      });
 }
 
 class _OverlayPainter extends CustomPainter {
@@ -555,26 +583,36 @@ class _OverlayPainter extends CustomPainter {
     canvas.drawPath(
       Path()
         ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
-        ..addRRect(RRect.fromRectAndRadius(cutRect, const Radius.circular(14)))
+        ..addRRect(RRect.fromRectAndRadius(
+            cutRect, const Radius.circular(14)))
         ..fillType = PathFillType.evenOdd,
       Paint()..color = Colors.black.withOpacity(0.62),
     );
     final b = Paint()
-      ..color = Colors.white ..strokeWidth = 3
-      ..style = PaintingStyle.stroke ..strokeCap = StrokeCap.round;
+      ..color      = Colors.white
+      ..strokeWidth = 3
+      ..style      = PaintingStyle.stroke
+      ..strokeCap  = StrokeCap.round;
     const arm = 24.0;
     final r = cutRect;
     canvas.drawLine(Offset(r.left, r.top + arm), Offset(r.left, r.top), b);
     canvas.drawLine(Offset(r.left, r.top), Offset(r.left + arm, r.top), b);
-    canvas.drawLine(Offset(r.right - arm, r.top), Offset(r.right, r.top), b);
-    canvas.drawLine(Offset(r.right, r.top), Offset(r.right, r.top + arm), b);
-    canvas.drawLine(Offset(r.left, r.bottom - arm), Offset(r.left, r.bottom), b);
-    canvas.drawLine(Offset(r.left, r.bottom), Offset(r.left + arm, r.bottom), b);
-    canvas.drawLine(Offset(r.right - arm, r.bottom), Offset(r.right, r.bottom), b);
-    canvas.drawLine(Offset(r.right, r.bottom - arm), Offset(r.right, r.bottom), b);
+    canvas.drawLine(
+        Offset(r.right - arm, r.top), Offset(r.right, r.top), b);
+    canvas.drawLine(
+        Offset(r.right, r.top), Offset(r.right, r.top + arm), b);
+    canvas.drawLine(
+        Offset(r.left, r.bottom - arm), Offset(r.left, r.bottom), b);
+    canvas.drawLine(
+        Offset(r.left, r.bottom), Offset(r.left + arm, r.bottom), b);
+    canvas.drawLine(
+        Offset(r.right - arm, r.bottom), Offset(r.right, r.bottom), b);
+    canvas.drawLine(
+        Offset(r.right, r.bottom - arm), Offset(r.right, r.bottom), b);
   }
 
-  @override bool shouldRepaint(covariant CustomPainter _) => false;
+  @override
+  bool shouldRepaint(covariant CustomPainter _) => false;
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -615,14 +653,20 @@ class _ScanResultWidget extends StatelessWidget {
 
   ({Color bg, Color fg}) _typeStyle(String type) {
     switch (type.toLowerCase()) {
-      case 'mensuel':    return (bg: const Color(0xFFEEF2FF), fg: const Color(0xFF3730A3));
-      case 'annuel':     return (bg: const Color(0xFFF0FDF4), fg: const Color(0xFF166534));
+      case 'mensuel':
+        return (bg: const Color(0xFFEEF2FF), fg: const Color(0xFF3730A3));
+      case 'annuel':
+        return (bg: const Color(0xFFF0FDF4), fg: const Color(0xFF166534));
       case 'étudiant':
-      case 'etudiant':   return (bg: const Color(0xFFFFF7ED), fg: const Color(0xFF9A3412));
+      case 'etudiant':
+        return (bg: const Color(0xFFFFF7ED), fg: const Color(0xFF9A3412));
       case 'retraité':
-      case 'retraite':   return (bg: const Color(0xFFF5F3FF), fg: const Color(0xFF5B21B6));
-      case 'trimestriel':return (bg: const Color(0xFFEFF6FF), fg: const Color(0xFF1E40AF));
-      default:           return (bg: const Color(0xFFF3F4F6), fg: const Color(0xFF374151));
+      case 'retraite':
+        return (bg: const Color(0xFFF5F3FF), fg: const Color(0xFF5B21B6));
+      case 'trimestriel':
+        return (bg: const Color(0xFFEFF6FF), fg: const Color(0xFF1E40AF));
+      default:
+        return (bg: const Color(0xFFF3F4F6), fg: const Color(0xFF374151));
     }
   }
 
@@ -638,167 +682,239 @@ class _ScanResultWidget extends StatelessWidget {
     final mode      = data['mode']      as String;
     final ts        = _typeStyle(type);
 
-    final accent       = isExpired ? Colors.red.shade600  : const Color(0xFF16A34A);
-    final accentLight  = isExpired ? Colors.red.shade50   : const Color(0xFFDCFCE7);
-    final accentBorder = isExpired ? Colors.red.shade200  : const Color(0xFF86EFAC);
-    final accentText   = isExpired ? Colors.red.shade800  : const Color(0xFF15803D);
-    final accentSub    = isExpired ? Colors.red.shade400  : const Color(0xFF4ADE80);
+    final accent       = isExpired ? Colors.red.shade600 : const Color(0xFF16A34A);
+    final accentLight  = isExpired ? Colors.red.shade50  : const Color(0xFFDCFCE7);
+    final accentBorder = isExpired ? Colors.red.shade200 : const Color(0xFF86EFAC);
+    final accentText   = isExpired ? Colors.red.shade800 : const Color(0xFF15803D);
+    final accentSub    = isExpired ? Colors.red.shade400 : const Color(0xFF4ADE80);
 
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: cardWhite,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: accentBorder, width: 1.5),
-        boxShadow: [BoxShadow(color: accent.withOpacity(0.08),
-            blurRadius: 16, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(
+            color: accent.withOpacity(0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 4))],
       ),
       child: Column(children: [
-        // Header
+        // ── Header ───────────────────────────────────────────
         Container(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-          decoration: BoxDecoration(color: accentLight,
+          decoration: BoxDecoration(
+              color: accentLight,
               borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(14))),
           child: Row(children: [
             Container(
               width: 44, height: 44,
-              decoration: BoxDecoration(shape: BoxShape.circle,
+              decoration: BoxDecoration(
+                  shape: BoxShape.circle,
                   color: accent.withOpacity(0.15)),
               alignment: Alignment.center,
               child: Text(_initials(nom),
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold,
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
                       color: accentText)),
             ),
             const SizedBox(width: 12),
-            Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(nom, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold,
-                      color: accentText)),
-              const SizedBox(height: 2),
-              Text(id, style: TextStyle(fontSize: 11, color: accentSub,
-                  fontWeight: FontWeight.w600)),
-            ])),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(nom,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: accentText)),
+                  const SizedBox(height: 2),
+                  Text(id,
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: accentSub,
+                          fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(color: accent,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                  color: accent,
                   borderRadius: BorderRadius.circular(20)),
               child: Text(mode,
-                  style: const TextStyle(color: Colors.white,
-                      fontSize: 10, fontWeight: FontWeight.bold)),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold)),
             ),
           ]),
         ),
 
-        // Fields
+        // ── Fields ────────────────────────────────────────────
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
           child: Column(children: [
-            _ScanField(label: "Type d'abonnement", child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(color: ts.bg,
-                  borderRadius: BorderRadius.circular(20)),
-              child: Text(type, style: TextStyle(fontSize: 11,
-                  fontWeight: FontWeight.w700, color: ts.fg)),
-            )),
-            _ScanField(label: 'Organisme', child: Text(organisme,
-                style: const TextStyle(fontSize: 13,
-                    fontWeight: FontWeight.w700, color: navyDark))),
-            _ScanField(label: 'Ligne autorisée', child: Container(
-              width: 28, height: 20,
-              decoration: BoxDecoration(color: navyMid,
-                  borderRadius: BorderRadius.circular(6)),
-              alignment: Alignment.center,
-              child: Text(ligne, style: const TextStyle(color: Colors.white,
-                  fontSize: 10, fontWeight: FontWeight.bold)),
-            )),
-            _ScanField(label: 'Expire le', child: Text(_formatDate(expire),
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
-                    color: isExpired ? Colors.red.shade700 : navyDark))),
-            _ScanField(label: 'Statut', child: Row(
-                mainAxisSize: MainAxisSize.min, children: [
-              Container(width: 8, height: 8,
-                  margin: const EdgeInsets.only(right: 6),
-                  decoration: BoxDecoration(shape: BoxShape.circle,
-                      color: isExpired
-                          ? Colors.red.shade500
-                          : const Color(0xFF22C55E))),
-              Text(isExpired ? 'Expiré' : 'Valide',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+            _ScanField(
+              label: "Type d'abonnement",
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                    color: ts.bg,
+                    borderRadius: BorderRadius.circular(20)),
+                child: Text(type,
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: ts.fg)),
+              ),
+            ),
+            _ScanField(
+              label: 'Organisme',
+              child: Text(organisme,
+                  style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: _navyDark)),
+            ),
+            _ScanField(
+              label: 'Ligne autorisée',
+              child: Container(
+                width: 28, height: 20,
+                decoration: BoxDecoration(
+                    color: _navyMid,
+                    borderRadius: BorderRadius.circular(6)),
+                alignment: Alignment.center,
+                child: Text(ligne,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold)),
+              ),
+            ),
+            _ScanField(
+              label: 'Expire le',
+              child: Text(_formatDate(expire),
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
                       color: isExpired
                           ? Colors.red.shade700
-                          : const Color(0xFF16A34A))),
-            ])),
+                          : _navyDark)),
+            ),
+            _ScanField(
+              label: 'Statut',
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Container(
+                    width: 8, height: 8,
+                    margin: const EdgeInsets.only(right: 6),
+                    decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isExpired
+                            ? Colors.red.shade500
+                            : const Color(0xFF22C55E))),
+                Text(
+                  isExpired ? 'Expiré' : 'Valide',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: isExpired
+                          ? Colors.red.shade700
+                          : const Color(0xFF16A34A)),
+                ),
+              ]),
+            ),
           ]),
         ),
 
-        // Expired warning
+        // ── Expired warning ───────────────────────────────────
         if (isExpired)
           Container(
             margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.red.shade50, borderRadius: BorderRadius.circular(10),
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(10),
               border: Border.all(color: Colors.red.shade200),
             ),
             child: Row(children: [
               Icon(Icons.warning_amber_rounded,
                   color: Colors.red.shade400, size: 16),
               const SizedBox(width: 8),
-              Expanded(child: Text('Ce titre est expiré et ne peut pas être validé.',
-                  style: TextStyle(fontSize: 12,
-                      color: Colors.red.shade700, fontWeight: FontWeight.w600))),
+              Expanded(
+                child: Text(
+                    'Ce titre est expiré et ne peut pas être validé.',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.red.shade700,
+                        fontWeight: FontWeight.w600)),
+              ),
             ]),
           ),
 
-        // Buttons
+        // ── Buttons ───────────────────────────────────────────
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
           child: Row(children: [
-            Expanded(child: OutlinedButton(
-              onPressed: onCancel,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.grey.shade500,
-                side: BorderSide(color: Colors.grey.shade300),
-                padding: const EdgeInsets.symmetric(vertical: 13),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: onCancel,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.grey.shade500,
+                  side: BorderSide(color: Colors.grey.shade300),
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Annuler',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
               ),
-              child: const Text('Annuler',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-            )),
+            ),
             const SizedBox(width: 10),
-            Expanded(flex: 2, child: ElevatedButton.icon(
-              onPressed: (isExpired || isSaving) ? null : onValidate,
-              icon: isSaving
-                  ? const SizedBox(width: 16, height: 16,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2))
-                  : Icon(isExpired
-                      ? Icons.block_rounded : Icons.check_rounded, size: 18),
-              label: Text(
-                isSaving
-                    ? 'Enregistrement...'
-                    : isExpired
-                        ? 'Titre expiré'
-                        : 'Valider & Enregistrer',
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 13),
+            Expanded(
+              flex: 2,
+              child: ElevatedButton.icon(
+                onPressed: (isExpired || isSaving) ? null : onValidate,
+                icon: isSaving
+                    ? const SizedBox(
+                        width: 16, height: 16,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2))
+                    : Icon(
+                        isExpired
+                            ? Icons.block_rounded
+                            : Icons.check_rounded,
+                        size: 18),
+                label: Text(
+                  isSaving
+                      ? 'Enregistrement...'
+                      : isExpired
+                          ? 'Titre expiré'
+                          : 'Valider & Enregistrer',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isExpired
+                      ? Colors.red.shade400
+                      : const Color(0xFF16A34A),
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: isExpired
+                      ? Colors.red.shade200
+                      : Colors.grey.shade300,
+                  disabledForegroundColor: Colors.white70,
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
               ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isExpired
-                    ? Colors.red.shade400 : const Color(0xFF16A34A),
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: isExpired
-                    ? Colors.red.shade200 : Colors.grey.shade300,
-                disabledForegroundColor: Colors.white70,
-                padding: const EdgeInsets.symmetric(vertical: 13),
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-            )),
+            ),
           ]),
         ),
       ]),
@@ -820,7 +936,8 @@ class _ScanField extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(label,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
+              style: TextStyle(
+                  fontSize: 12, color: Colors.grey.shade400)),
           const SizedBox(width: 12),
           child,
         ],
@@ -853,8 +970,10 @@ class _SessionBanner extends StatelessWidget {
       Icon(icon, color: const Color(0xFF16A34A), size: 18),
       const SizedBox(width: 10),
       Expanded(child: Text(text,
-          style: const TextStyle(color: Color(0xFF15803D),
-              fontSize: 13, fontWeight: FontWeight.w600))),
+          style: const TextStyle(
+              color: Color(0xFF15803D),
+              fontSize: 13,
+              fontWeight: FontWeight.w600))),
     ]),
   );
 }
@@ -866,11 +985,14 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(children: [
-    Icon(icon, size: 13, color: navyMid.withOpacity(0.6)),
+    Icon(icon, size: 13, color: _navyMid.withOpacity(0.6)),
     const SizedBox(width: 7),
     Flexible(child: Text(text,
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
-            color: navyDark, letterSpacing: 0.4))),
+        style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: _navyDark,
+            letterSpacing: 0.4))),
   ]);
 }
 
@@ -879,44 +1001,67 @@ class _ScanModeBtn extends StatelessWidget {
   final String       label, sublabel;
   final Color        color;
   final VoidCallback? onTap;
-  const _ScanModeBtn({required this.icon, required this.label,
-      required this.sublabel, required this.color, required this.onTap});
+  const _ScanModeBtn({
+    required this.icon,
+    required this.label,
+    required this.sublabel,
+    required this.color,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final enabled = onTap != null;
     return Material(
-      color: Colors.transparent, borderRadius: BorderRadius.circular(14),
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(14),
       child: InkWell(
-        onTap: onTap, borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
         child: Ink(
           decoration: BoxDecoration(
             gradient: enabled
-                ? LinearGradient(colors: [color, color.withOpacity(0.8)],
-                    begin: Alignment.topLeft, end: Alignment.bottomRight)
+                ? LinearGradient(
+                    colors: [color, color.withOpacity(0.8)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight)
                 : null,
-            color: enabled ? null : Colors.grey.shade200,
+            color:        enabled ? null : Colors.grey.shade200,
             borderRadius: BorderRadius.circular(14),
             boxShadow: enabled
-                ? [BoxShadow(color: color.withOpacity(0.3),
-                    blurRadius: 10, offset: const Offset(0, 4))]
+                ? [BoxShadow(
+                    color:  color.withOpacity(0.3),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4))]
                 : [],
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          padding: const EdgeInsets.symmetric(
+              horizontal: 16, vertical: 16),
           child: Row(children: [
             Icon(icon,
-                color: enabled ? Colors.white : Colors.grey.shade400, size: 26),
+                color: enabled ? Colors.white : Colors.grey.shade400,
+                size: 26),
             const SizedBox(width: 12),
-            Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(label, style: TextStyle(fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: enabled ? Colors.white : Colors.grey.shade400)),
-              Text(sublabel, style: TextStyle(fontSize: 10,
-                  color: enabled
-                      ? Colors.white.withOpacity(0.7)
-                      : Colors.grey.shade400)),
-            ])),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: enabled
+                              ? Colors.white
+                              : Colors.grey.shade400)),
+                  Text(sublabel,
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: enabled
+                              ? Colors.white.withOpacity(0.7)
+                              : Colors.grey.shade400)),
+                ],
+              ),
+            ),
           ]),
         ),
       ),
@@ -926,27 +1071,36 @@ class _ScanModeBtn extends StatelessWidget {
 
 class _IdleWidget extends StatelessWidget {
   const _IdleWidget({super.key});
+
   @override
   Widget build(BuildContext context) => Container(
     width: double.infinity,
     padding: const EdgeInsets.all(36),
     decoration: BoxDecoration(
-      color: cardWhite, borderRadius: BorderRadius.circular(16),
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
       border: Border.all(color: Colors.grey.shade100, width: 1.5),
-      boxShadow: [BoxShadow(color: navyMid.withOpacity(0.05),
-          blurRadius: 12, offset: const Offset(0, 3))],
+      boxShadow: [BoxShadow(
+          color: _navyMid.withOpacity(0.05),
+          blurRadius: 12,
+          offset: const Offset(0, 3))],
     ),
     child: Column(children: [
       Icon(Icons.qr_code_scanner_rounded,
           size: 56, color: Colors.grey.shade200),
       const SizedBox(height: 14),
-      Text('Prêt à scanner', style: TextStyle(fontSize: 15,
-          fontWeight: FontWeight.w700, color: Colors.grey.shade400)),
+      Text('Prêt à scanner',
+          style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Colors.grey.shade400)),
       const SizedBox(height: 6),
       Text('Choisissez NFC ou Code-barres\npour lancer la lecture',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 12,
-              color: Colors.grey.shade300, height: 1.5)),
+          style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade300,
+              height: 1.5)),
     ]),
   );
 }
@@ -954,24 +1108,32 @@ class _IdleWidget extends StatelessWidget {
 class _ScanErrorWidget extends StatelessWidget {
   final String       msg;
   final VoidCallback onRetry;
-  const _ScanErrorWidget({super.key, required this.msg, required this.onRetry});
+  const _ScanErrorWidget(
+      {super.key, required this.msg, required this.onRetry});
 
   @override
   Widget build(BuildContext context) => Container(
-    width: double.infinity, padding: const EdgeInsets.all(28),
+    width: double.infinity,
+    padding: const EdgeInsets.all(28),
     decoration: BoxDecoration(
-      color: cardWhite, borderRadius: BorderRadius.circular(16),
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
       border: Border.all(color: Colors.red.shade200, width: 1.5),
     ),
     child: Column(children: [
-      Container(width: 56, height: 56,
-          decoration: BoxDecoration(color: Colors.red.shade50,
-              shape: BoxShape.circle),
-          child: Icon(Icons.cancel_rounded,
-              color: Colors.red.shade400, size: 30)),
+      Container(
+        width: 56, height: 56,
+        decoration: BoxDecoration(
+            color: Colors.red.shade50, shape: BoxShape.circle),
+        child: Icon(Icons.cancel_rounded,
+            color: Colors.red.shade400, size: 30),
+      ),
       const SizedBox(height: 14),
-      Text(msg, textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
+      Text(msg,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
               color: Colors.red.shade700)),
       const SizedBox(height: 6),
       Text('Ce titre de transport ne peut pas être accepté.',
@@ -982,19 +1144,23 @@ class _ScanErrorWidget extends StatelessWidget {
         onPressed: onRetry,
         icon: const Icon(Icons.refresh_rounded, size: 16),
         label: const Text('Réessayer'),
-        style: TextButton.styleFrom(foregroundColor: navyMid),
+        style: TextButton.styleFrom(foregroundColor: _navyMid),
       ),
     ]),
   );
 }
 
-// ── Toast ────────────────────────────────────────────────────
+// ── Toast ─────────────────────────────────────────────────────
+
 class _ToastWidget extends StatefulWidget {
   final String   msg;
   final Color    color;
   final IconData icon;
-  const _ToastWidget({required this.msg, required this.color, required this.icon});
-  @override State<_ToastWidget> createState() => _ToastWidgetState();
+  const _ToastWidget(
+      {required this.msg, required this.color, required this.icon});
+
+  @override
+  State<_ToastWidget> createState() => _ToastWidgetState();
 }
 
 class _ToastWidgetState extends State<_ToastWidget>
@@ -1006,8 +1172,8 @@ class _ToastWidgetState extends State<_ToastWidget>
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this,
-        duration: const Duration(milliseconds: 220));
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 220));
     _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
     _slide   = Tween<Offset>(begin: const Offset(1.0, 0), end: Offset.zero)
         .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
@@ -1021,25 +1187,35 @@ class _ToastWidgetState extends State<_ToastWidget>
 
   @override
   Widget build(BuildContext context) => Positioned(
-    top: MediaQuery.of(context).padding.top + 16, right: 16,
-    child: FadeTransition(opacity: _opacity,
-      child: SlideTransition(position: _slide,
-        child: Material(color: Colors.transparent,
+    top: MediaQuery.of(context).padding.top + 16,
+    right: 16,
+    child: FadeTransition(
+      opacity: _opacity,
+      child: SlideTransition(
+        position: _slide,
+        child: Material(
+          color: Colors.transparent,
           child: Container(
             constraints: const BoxConstraints(maxWidth: 300),
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 18, vertical: 11),
             decoration: BoxDecoration(
               color: widget.color,
               borderRadius: BorderRadius.circular(12),
-              boxShadow: [BoxShadow(color: widget.color.withOpacity(0.35),
-                  blurRadius: 16, offset: const Offset(0, 4))],
+              boxShadow: [BoxShadow(
+                  color: widget.color.withOpacity(0.35),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4))],
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               Icon(widget.icon, color: Colors.white, size: 16),
               const SizedBox(width: 8),
               Flexible(child: Text(widget.msg,
-                  style: const TextStyle(color: Colors.white, fontSize: 13,
-                      fontWeight: FontWeight.w600, height: 1.3))),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      height: 1.3))),
             ]),
           ),
         ),

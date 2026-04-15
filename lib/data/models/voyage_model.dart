@@ -2,27 +2,21 @@ class SegmentModel {
   final int idSegment;
   final String pointDepart;
   final String pointArrivee;
-  final String statut; // en_attente | actif | cloture
-  final String? dateOuverture;
-  final String? dateCloture;
+  final int ordre;
 
   const SegmentModel({
     required this.idSegment,
     required this.pointDepart,
     required this.pointArrivee,
-    required this.statut,
-    this.dateOuverture,
-    this.dateCloture,
+    required this.ordre,
   });
 
   factory SegmentModel.fromMap(Map<String, dynamic> map) {
     return SegmentModel(
-      idSegment:     map['id_segment']    as int,
-      pointDepart:   map['point_depart']  as String? ?? '',
-      pointArrivee:  map['point_arrivee'] as String? ?? '',
-      statut:        map['statut']        as String? ?? 'en_attente',
-      dateOuverture: map['date_ouverture'] as String?,
-      dateCloture:   map['date_cloture']   as String?,
+      idSegment:    map['id_segment']    as int,
+      pointDepart:  map['point_depart']  as String? ?? '',
+      pointArrivee: map['point_arrivee'] as String? ?? '',
+      ordre:        map['ordre']         as int? ?? 0,
     );
   }
 
@@ -30,14 +24,8 @@ class SegmentModel {
     'id_segment':    idSegment,
     'point_depart':  pointDepart,
     'point_arrivee': pointArrivee,
-    'statut':        statut,
-    if (dateOuverture != null) 'date_ouverture': dateOuverture,
-    if (dateCloture   != null) 'date_cloture':   dateCloture,
+    'ordre':         ordre,
   };
-
-  bool get isActif     => statut == 'actif';
-  bool get isCloture   => statut == 'cloture';
-  bool get isEnAttente => statut == 'en_attente';
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -48,7 +36,7 @@ class VoyageModel {
   final String pointDepart;
   final String pointArrivee;
   final String dateDepart;
-  final String statut; // actif | cloture | …
+  final String statut;
   final int matriculeAgent;
   final List<SegmentModel> segments;
 
@@ -92,12 +80,6 @@ class VoyageModel {
 
   bool get isActif   => statut == 'actif';
   bool get isCloture => statut == 'cloture';
-
-  SegmentModel? get activeSegment =>
-      segments.where((s) => s.isActif).firstOrNull;
-
-  SegmentModel? get nextSegment =>
-      segments.where((s) => s.isEnAttente).firstOrNull;
 
   @override
   String toString() =>

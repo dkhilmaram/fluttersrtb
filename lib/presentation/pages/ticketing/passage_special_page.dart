@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../data/repositories/ticket_repository.dart';
 
-const Color navyDark  = Color(0xFF0D1B3E);
-const Color navyMid   = Color(0xFF1A3260);
-const Color navyLight = Color(0xFF1E4080);
-const Color goldLight = Color(0xFFF5C842);
-const Color surface   = Color(0xFFF2F5FB);
-const Color cardWhite = Color(0xFFFFFFFF);
+// ── Local palette aliases ─────────────────────────────────────
+const _navyDark  = AppTheme.navyDark;
+const _navyMid   = AppTheme.navyMid;
+const _navyLight = AppTheme.navyLight;
+const _goldLight = AppTheme.goldLight;
+const _surface   = AppTheme.offWhite;
 
 const List<Map<String, dynamic>> kCategories = [
   {'label': 'Armée nationale',        'icon': Icons.shield_rounded,              'color': Color(0xFF1E40AF)},
@@ -25,18 +26,14 @@ const List<Map<String, dynamic>> kCategories = [
 class PassageSpecialPage extends StatefulWidget {
   final Map<String, dynamic> voyage;
   final Map<String, dynamic> segment;
-  final bool embeddedMode;
-
-  /// Called after a passage is successfully saved (embedded mode only).
-  /// TicketingPage uses this to call resetAfterGratuit() on NouveauTicketPage
-  /// and switch back to tab 0.
+  final bool          embeddedMode;
   final VoidCallback? onPassageSaved;
 
   const PassageSpecialPage({
     super.key,
     required this.voyage,
     required this.segment,
-    this.embeddedMode = false,
+    this.embeddedMode  = false,
     this.onPassageSaved,
   });
 
@@ -60,7 +57,7 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
     super.dispose();
   }
 
-  // ── Toast ──────────────────────────────────────────────────
+  // ── Toast ─────────────────────────────────────────────────
 
   void _showToast(String msg,
       {bool isError = false, bool isWarning = false}) {
@@ -89,7 +86,7 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
     });
   }
 
-  // ── Helpers ────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────
 
   bool get _canSave => selectedCategory != null;
 
@@ -98,7 +95,7 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
     return 'Gratuit — $category';
   }
 
-  // ── Save ───────────────────────────────────────────────────
+  // ── Save ──────────────────────────────────────────────────
 
   Future<void> _enregistrer() async {
     if (!_canSave) return;
@@ -107,8 +104,10 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
     final result = await TicketRepository.saveTicket({
       'id_vente':        widget.voyage['id'] as int? ?? 0,
       'id_segment':      widget.segment['id_segment'] as int? ?? 0,
-      'point_depart':    widget.segment['point_depart']  ?? widget.voyage['depart']  ?? '',
-      'point_arrivee':   widget.segment['point_arrivee'] ?? widget.voyage['arrivee'] ?? '',
+      'point_depart':    widget.segment['point_depart']
+                             ?? widget.voyage['depart']  ?? '',
+      'point_arrivee':   widget.segment['point_arrivee']
+                             ?? widget.voyage['arrivee'] ?? '',
       'type_tarif':      _buildTypeTarif(selectedCategory!),
       'quantite':        quantite,
       'prix_unitaire':   0,
@@ -120,17 +119,11 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
       final saved = quantite;
       setState(() {
         totalEnregistres += saved;
-        // Reset only local form state.
-        // pointDepart is owned by NouveauTicketPage and preserved via resetAfterGratuit().
-        selectedCategory = null;
-        quantite         = 1;
+        selectedCategory  = null;
+        quantite          = 1;
       });
-
       _showToast('$saved passage(s) enregistré(s)');
 
-      // Brief pause so the toast is visible, then hand control back.
-      // TicketingPage will call resetAfterGratuit() on NouveauTicketPage
-      // (keeps pointDepart, clears pointArrivee + quantite) and switch to tab 0.
       if (widget.embeddedMode && widget.onPassageSaved != null) {
         await Future.delayed(const Duration(milliseconds: 600));
         if (mounted) widget.onPassageSaved!.call();
@@ -142,27 +135,26 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
     if (mounted) setState(() => isSaving = false);
   }
 
-  // ── Build ──────────────────────────────────────────────────
+  // ── Build ─────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final dep = widget.segment['point_depart']  ?? widget.voyage['depart']  ?? '?';
-    final arr = widget.segment['point_arrivee'] ?? widget.voyage['arrivee'] ?? '?';
+    final dep = widget.segment['point_depart']
+                    ?? widget.voyage['depart']  ?? '?';
+    final arr = widget.segment['point_arrivee']
+                    ?? widget.voyage['arrivee'] ?? '?';
 
     final content = SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-
-          // Session counter banner
           if (totalEnregistres > 0)
             _SessionBanner(
               icon: Icons.how_to_reg_rounded,
               text: '$totalEnregistres passage(s) enregistré(s) cette session',
             ),
 
-          // Institution grid
           _SectionLabel('Institution / Agence', Icons.domain_rounded),
           const SizedBox(height: 10),
           _CategoryGrid(
@@ -175,47 +167,42 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
           ),
           const SizedBox(height: 24),
 
-          // Special types row
           _SectionLabel('Type spécial', Icons.confirmation_number_rounded),
           const SizedBox(height: 10),
           Row(children: [
-            Expanded(
-              child: _CategoryButton(
-                item: {
-                  'label': 'Abonnement',
-                  'icon':  Icons.confirmation_number_rounded,
-                  'color': const Color(0xFF0369A1),
-                },
-                selected: selectedCategory == 'Abonnement',
-                onTap: () => setState(() => selectedCategory = 'Abonnement'),
-              ),
-            ),
+            Expanded(child: _CategoryButton(
+              item: {
+                'label': 'Abonnement',
+                'icon':  Icons.confirmation_number_rounded,
+                'color': const Color(0xFF0369A1),
+              },
+              selected: selectedCategory == 'Abonnement',
+              onTap: () => setState(() => selectedCategory = 'Abonnement'),
+            )),
             const SizedBox(width: 10),
-            Expanded(
-              child: _CategoryButton(
-                item: {
-                  'label': 'Agent',
-                  'icon':  Icons.badge_rounded,
-                  'color': const Color(0xFF7C3AED),
-                },
-                selected: selectedCategory == 'Agent',
-                onTap: () => setState(() => selectedCategory = 'Agent'),
-              ),
-            ),
+            Expanded(child: _CategoryButton(
+              item: {
+                'label': 'Agent',
+                'icon':  Icons.badge_rounded,
+                'color': const Color(0xFF7C3AED),
+              },
+              selected: selectedCategory == 'Agent',
+              onTap: () => setState(() => selectedCategory = 'Agent'),
+            )),
           ]),
           const SizedBox(height: 24),
 
-          // Quantity picker
           _SectionLabel('Nombre de personnes', Icons.people_rounded),
           const SizedBox(height: 10),
           _QuantiteCard(
             quantite: quantite,
-            onDec: quantite > 1 ? () => setState(() => quantite--) : null,
-            onInc: () => setState(() => quantite++),
+            onDec:    quantite > 1
+                          ? () => setState(() => quantite--)
+                          : null,
+            onInc:    () => setState(() => quantite++),
           ),
           const SizedBox(height: 16),
 
-          // Summary info box
           if (_canSave) ...[
             Container(
               width: double.infinity,
@@ -227,14 +214,15 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
               ),
               child: Row(children: [
                 const Icon(Icons.info_outline_rounded,
-                    color: navyMid, size: 16),
+                    color: _navyMid, size: 16),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    '$quantite personne(s) · ${_buildTypeTarif(selectedCategory!)}',
+                    '$quantite personne(s) · '
+                    '${_buildTypeTarif(selectedCategory!)}',
                     style: const TextStyle(
                         fontSize: 12,
-                        color: navyMid,
+                        color: _navyMid,
                         fontWeight: FontWeight.w600),
                   ),
                 ),
@@ -243,9 +231,10 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
             const SizedBox(height: 16),
           ],
 
-          // Submit button
           _BigBtn(
-            label:     isSaving ? 'Enregistrement...' : 'Enregistrer le passage',
+            label:     isSaving
+                           ? 'Enregistrement...'
+                           : 'Enregistrer le passage',
             icon:      Icons.how_to_reg_rounded,
             isLoading: isSaving,
             enabled:   _canSave && !isSaving,
@@ -259,7 +248,7 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
     if (widget.embeddedMode) return content;
 
     return Scaffold(
-      backgroundColor: surface,
+      backgroundColor: _surface,
       body: Column(children: [
         _buildHeader(dep, arr),
         Expanded(child: content),
@@ -272,7 +261,7 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
       width: double.infinity,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [navyDark, navyMid, navyLight],
+          colors: [_navyDark, _navyMid, _navyLight],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -307,9 +296,8 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
           padding: const EdgeInsets.all(8),
           child: Image.asset('assets/images/logo_srtb.png',
               fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.directions_bus,
-                      size: 36, color: navyMid)),
+              errorBuilder: (_, __, ___) => const Icon(
+                  Icons.directions_bus, size: 36, color: _navyMid)),
         ),
         const SizedBox(height: 10),
         const Text('S R T B',
@@ -335,12 +323,13 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Container(width: 6, height: 6,
                 decoration: const BoxDecoration(
-                    color: goldLight, shape: BoxShape.circle)),
+                    color: _goldLight, shape: BoxShape.circle)),
             const SizedBox(width: 8),
             Flexible(child: Text(dep,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                    color: Colors.white, fontSize: 12,
+                    color: Colors.white,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600))),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -351,12 +340,13 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
                 decoration: BoxDecoration(
                     color: Colors.transparent,
                     shape: BoxShape.circle,
-                    border: Border.all(color: goldLight, width: 2))),
+                    border: Border.all(color: _goldLight, width: 2))),
             const SizedBox(width: 8),
             Flexible(child: Text(arr,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                    color: Colors.white, fontSize: 12,
+                    color: Colors.white,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600))),
           ]),
         ),
@@ -365,7 +355,7 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
   }
 }
 
-// ── Shared small widgets ───────────────────────────────────────
+// ── Shared small widgets ──────────────────────────────────────
 
 class _SessionBanner extends StatelessWidget {
   final IconData icon;
@@ -401,13 +391,13 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(children: [
-    Icon(icon, size: 13, color: navyMid.withOpacity(0.6)),
+    Icon(icon, size: 13, color: _navyMid.withOpacity(0.6)),
     const SizedBox(width: 7),
     Flexible(child: Text(text,
         style: const TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: navyDark,
+            color: _navyDark,
             letterSpacing: 0.4))),
   ]);
 }
@@ -460,29 +450,35 @@ class _CategoryButton extends StatelessWidget {
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? color : cardWhite,
+          color: selected ? color : Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
               color: selected ? color : Colors.grey.shade200,
               width: selected ? 0 : 1.5),
           boxShadow: selected
-              ? [BoxShadow(color: color.withOpacity(0.3),
-                  blurRadius: 8, offset: const Offset(0, 3))]
-              : [BoxShadow(color: navyMid.withOpacity(0.05),
-                  blurRadius: 6, offset: const Offset(0, 2))],
+              ? [BoxShadow(
+                  color: color.withOpacity(0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3))]
+              : [BoxShadow(
+                  color: _navyMid.withOpacity(0.05),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2))],
         ),
         child: Row(children: [
           Icon(item['icon'] as IconData,
               size: 16,
               color: selected ? Colors.white : color),
           const SizedBox(width: 7),
-          Expanded(child: Text(item['label'] as String,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: selected ? Colors.white : navyDark))),
+          Expanded(
+            child: Text(item['label'] as String,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: selected ? Colors.white : _navyDark)),
+          ),
         ]),
       ),
     );
@@ -493,36 +489,52 @@ class _QuantiteCard extends StatelessWidget {
   final int           quantite;
   final VoidCallback? onDec;
   final VoidCallback  onInc;
-  const _QuantiteCard({required this.quantite, this.onDec, required this.onInc});
+  const _QuantiteCard({
+    required this.quantite,
+    this.onDec,
+    required this.onInc,
+  });
 
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
     decoration: BoxDecoration(
-      color: cardWhite,
+      color: Colors.white,
       borderRadius: BorderRadius.circular(14),
       boxShadow: [BoxShadow(
-          color: navyMid.withOpacity(0.06),
+          color: _navyMid.withOpacity(0.06),
           blurRadius: 10,
           offset: const Offset(0, 3))],
     ),
     child: Row(children: [
-      _QtyBtn(icon: Icons.remove, enabled: onDec != null, onTap: onDec ?? () {}),
-      Expanded(child: Column(children: [
-        Text('$quantite',
-            style: const TextStyle(
-                fontSize: 28, fontWeight: FontWeight.bold, color: navyDark)),
-        Text(quantite == 1 ? 'personne' : 'personnes',
-            style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
-      ])),
+      _QtyBtn(
+          icon: Icons.remove, enabled: onDec != null, onTap: onDec ?? () {}),
+      Expanded(
+        child: Column(children: [
+          Text('$quantite',
+              style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: _navyDark)),
+          Text(quantite == 1 ? 'personne' : 'personnes',
+              style: TextStyle(
+                  color: Colors.grey.shade400, fontSize: 11)),
+        ]),
+      ),
       _QtyBtn(icon: Icons.add, enabled: true, onTap: onInc),
     ]),
   );
 }
 
 class _QtyBtn extends StatelessWidget {
-  final IconData icon; final bool enabled; final VoidCallback onTap;
-  const _QtyBtn({required this.icon, required this.enabled, required this.onTap});
+  final IconData     icon;
+  final bool         enabled;
+  final VoidCallback onTap;
+  const _QtyBtn({
+    required this.icon,
+    required this.enabled,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) => GestureDetector(
@@ -531,32 +543,41 @@ class _QtyBtn extends StatelessWidget {
       duration: const Duration(milliseconds: 150),
       width: 40, height: 40,
       decoration: BoxDecoration(
-        color: enabled ? navyMid : Colors.grey.shade100,
+        color: enabled ? _navyMid : Colors.grey.shade100,
         borderRadius: BorderRadius.circular(12),
         boxShadow: enabled
-            ? [BoxShadow(color: navyMid.withOpacity(0.3),
-                blurRadius: 6, offset: const Offset(0, 2))]
+            ? [BoxShadow(
+                color: _navyMid.withOpacity(0.3),
+                blurRadius: 6,
+                offset: const Offset(0, 2))]
             : [],
       ),
       child: Icon(icon,
-          color: enabled ? Colors.white : Colors.grey.shade300, size: 18),
+          color: enabled ? Colors.white : Colors.grey.shade300,
+          size: 18),
     ),
   );
 }
 
 class _BigBtn extends StatelessWidget {
-  final String label; final IconData icon;
-  final bool isLoading, enabled;
-  final List<Color> colors; final VoidCallback onTap;
+  final String        label;
+  final IconData      icon;
+  final bool          isLoading, enabled;
+  final List<Color>   colors;
+  final VoidCallback  onTap;
   const _BigBtn({
-    required this.label, required this.icon,
-    required this.isLoading, required this.enabled,
-    required this.colors, required this.onTap,
+    required this.label,
+    required this.icon,
+    required this.isLoading,
+    required this.enabled,
+    required this.colors,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: double.infinity, height: 54,
+    width: double.infinity,
+    height: 54,
     child: Material(
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(14),
@@ -566,21 +587,26 @@ class _BigBtn extends StatelessWidget {
         child: Ink(
           decoration: BoxDecoration(
             gradient: enabled
-                ? LinearGradient(colors: colors,
-                    begin: Alignment.topLeft, end: Alignment.bottomRight)
+                ? LinearGradient(
+                    colors: colors,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight)
                 : null,
-            color: enabled ? null : Colors.grey.shade200,
+            color:        enabled ? null : Colors.grey.shade200,
             borderRadius: BorderRadius.circular(14),
             boxShadow: enabled
-                ? [BoxShadow(color: colors.first.withOpacity(0.35),
-                    blurRadius: 12, offset: const Offset(0, 4))]
+                ? [BoxShadow(
+                    color: colors.first.withOpacity(0.35),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4))]
                 : [],
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (isLoading)
-                const SizedBox(width: 20, height: 20,
+                const SizedBox(
+                    width: 20, height: 20,
                     child: CircularProgressIndicator(
                         color: Colors.white, strokeWidth: 2))
               else
@@ -588,12 +614,17 @@ class _BigBtn extends StatelessWidget {
                     color: enabled ? Colors.white : Colors.grey.shade400,
                     size: 20),
               const SizedBox(width: 8),
-              Flexible(child: Text(label,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.bold,
-                      letterSpacing: 0.3,
-                      color: enabled ? Colors.white : Colors.grey.shade400))),
+              Flexible(
+                child: Text(label,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.3,
+                        color: enabled
+                            ? Colors.white
+                            : Colors.grey.shade400)),
+              ),
             ],
           ),
         ),
@@ -602,12 +633,15 @@ class _BigBtn extends StatelessWidget {
   );
 }
 
-// ── Toast widget ───────────────────────────────────────────────
+// ── Toast widget ──────────────────────────────────────────────
 
 class _ToastWidget extends StatefulWidget {
-  final String msg; final Color color; final IconData icon;
+  final String   msg;
+  final Color    color;
+  final IconData icon;
   const _ToastWidget(
       {required this.msg, required this.color, required this.icon});
+
   @override
   State<_ToastWidget> createState() => _ToastWidgetState();
 }
@@ -624,7 +658,7 @@ class _ToastWidgetState extends State<_ToastWidget>
     _ctrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 220));
     _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
-    _slide = Tween<Offset>(begin: const Offset(1.0, 0), end: Offset.zero)
+    _slide   = Tween<Offset>(begin: const Offset(1.0, 0), end: Offset.zero)
         .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
     _ctrl.forward();
     Future.delayed(const Duration(milliseconds: 2100),
@@ -646,21 +680,25 @@ class _ToastWidgetState extends State<_ToastWidget>
           color: Colors.transparent,
           child: Container(
             constraints: const BoxConstraints(maxWidth: 300),
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 18, vertical: 11),
             decoration: BoxDecoration(
               color: widget.color,
               borderRadius: BorderRadius.circular(12),
               boxShadow: [BoxShadow(
                   color: widget.color.withOpacity(0.35),
-                  blurRadius: 16, offset: const Offset(0, 4))],
+                  blurRadius: 16,
+                  offset: const Offset(0, 4))],
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               Icon(widget.icon, color: Colors.white, size: 16),
               const SizedBox(width: 8),
               Flexible(child: Text(widget.msg,
                   style: const TextStyle(
-                      color: Colors.white, fontSize: 13,
-                      fontWeight: FontWeight.w600, height: 1.3))),
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      height: 1.3))),
             ]),
           ),
         ),

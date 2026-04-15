@@ -1,10 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
-// ─────────────────────────────────────────────────────────────
-// Result type for shared offline cloture logic
-// ─────────────────────────────────────────────────────────────
-
 class OfflineClotureResult {
   final bool allDone;
   final Map<String, dynamic>? newActif;
@@ -18,11 +14,6 @@ class OfflineClotureResult {
     required this.updatedSegments,
   });
 }
-
-// ─────────────────────────────────────────────────────────────
-// LocalDatabase — singleton init + schema only
-// All data access is handled by the DAOs in daos/
-// ─────────────────────────────────────────────────────────────
 
 class LocalDatabase {
   LocalDatabase._();
@@ -38,22 +29,30 @@ class LocalDatabase {
     final path = join(await getDatabasesPath(), 'srtb_offline.db');
     return openDatabase(
       path,
-      version: 6,
-      onCreate:  (db, version) async {
+      version: 7,
+      onCreate: (db, version) async {
         print('📦 Creating database v$version...');
         await _createAllTables(db);
         print('✓ Database created');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         print('⬆️ Upgrading database v$oldVersion → v$newVersion...');
+        if (oldVersion < 7) {
+          try {
+            await db.execute(
+              'ALTER TABLE voyage_cache ADD COLUMN server_statut TEXT',
+            );
+            print('✓ Added server_statut to voyage_cache');
+          } catch (e) {
+            print('⚠️ server_statut migration skipped: $e');
+          }
+        }
         await _createAllTables(db);
         print('✓ Database upgraded');
       },
       onOpen: (db) async => _createAllTables(db),
     );
   }
-
-  // ── Schema ─────────────────────────────────────────────────
 
   static Future<void> _createAllTables(Database db) async {
     const tables = [
