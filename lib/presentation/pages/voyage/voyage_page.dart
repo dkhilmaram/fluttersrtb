@@ -10,6 +10,7 @@ import 'package:mailer/smtp_server.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../../../core/theme/app_theme.dart';
+import '../../../core/constants/api_constants.dart';
 import '../../../data/database/daos/voyage_dao.dart';
 import '../../../data/database/daos/ticket_dao.dart';
 import '../ticketing/vente_tickets.dart';
@@ -143,18 +144,26 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     final hasProg    = voyagesProgrammes.isNotEmpty;
     final hasNonProg = voyagesNonProgrammes.isNotEmpty;
     if (!hasProg && !hasNonProg) return false;
-    final progDone    = !hasProg    || voyagesProgrammes.every((v)    => v['statut'] == 'cloture');
-    final nonProgDone = !hasNonProg || voyagesNonProgrammes.every((v) => v['statut'] == 'cloture');
+    final progDone =
+        !hasProg || voyagesProgrammes.every((v) => v['statut'] == 'cloture');
+    final nonProgDone =
+        !hasNonProg || voyagesNonProgrammes.every((v) => v['statut'] == 'cloture');
     return progDone && nonProgDone;
   }
 
   // ─────────────────────────────────────────────────────────────
   // Merge local offline statuts into a server-fetched list
+  //
+  // Priority order (highest → lowest):
+  //   1. reopen_pending   → force 'actif'  (reopen queued offline)
+  //   2. cloture_pending  → force 'cloture' (cloture queued offline)
+  //   3. voyage_cache     → use saved local override
+  //   4. server value     → no local state, use as-is
   // ─────────────────────────────────────────────────────────────
 
   Future<List<dynamic>> _mergeLocalStatuts(List<dynamic> voyages) async {
     final pendingClotures = await VoyageDao.getPendingClotures();
-    final pendingIds =
+    final pendingClotureIds =
         pendingClotures.map((r) => r['id_vente'] as int).toSet();
 
     final merged = <dynamic>[];
@@ -163,17 +172,27 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       final idVente = (voyage['id_vente'] ?? voyage['id']) as int?;
 
       if (idVente != null) {
-        if (pendingIds.contains(idVente)) {
-          // Offline clôture is pending sync — show as clôturé immediately.
-          voyage['statut'] = 'cloture';
-        } else {
-          // No outstanding pending row; check the statut cache (no server
-          // statut available here, so stale-check is skipped intentionally).
-          final localStatut = await VoyageDao.getVoyageStatut(idVente);
-          if (localStatut == 'cloture' || localStatut == 'cloture_pending') {
-            voyage['statut'] = 'cloture';
-          }
+        // ── Priority 1: pending reopen wins over everything ──
+        final reopenPending = await VoyageDao.isReopenPending(idVente);
+        if (reopenPending) {
+          voyage['statut'] = 'actif';
+          merged.add(voyage);
+          continue;
         }
+
+        // ── Priority 2: pending cloture ──
+        if (pendingClotureIds.contains(idVente)) {
+          voyage['statut'] = 'cloture';
+          merged.add(voyage);
+          continue;
+        }
+
+        // ── Priority 3: local voyage_cache override ──
+        final localStatut = await VoyageDao.getVoyageStatut(idVente);
+        if (localStatut == 'cloture' || localStatut == 'cloture_pending') {
+          voyage['statut'] = 'cloture';
+        }
+        // else: Priority 4 — keep server value already in voyage['statut']
       }
       merged.add(voyage);
     }
@@ -193,22 +212,18 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     try {
       final response = await http
           .get(
-            Uri.parse(
-                'http://192.168.1.16:8000/billetterie/ventes/programmees/$_matricule'),
+            Uri.parse(ApiConstants.voyagesProgrammes(_matricule)),
             headers: {'Content-Type': 'application/json'},
           )
-          .timeout(const Duration(seconds: 6));
+          .timeout(ApiConstants.defaultTimeout);
 
       if (response.statusCode == 200) {
-        final list = jsonDecode(response.body)['voyages'] as List<dynamic>;
+        final list =
+            jsonDecode(response.body)['voyages'] as List<dynamic>;
 
-        // Evict any local cache rows whose server statut has changed.
         await VoyageDao.clearStaleVoyageStatuts(list);
-
         await VoyageDao.saveVoyages(_matricule, list);
 
-        // Even on a successful fetch, overlay any still-pending offline
-        // clôtures so the UI stays consistent before the next sync.
         final merged = await _mergeLocalStatuts(list);
 
         setState(() {
@@ -253,11 +268,10 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     try {
       final response = await http
           .get(
-            Uri.parse(
-                'http://192.168.1.16:8000/billetterie/ventes/agent/$_matricule'),
+            Uri.parse(ApiConstants.voyagesNonProgrammes(_matricule)),
             headers: {'Content-Type': 'application/json'},
           )
-          .timeout(const Duration(seconds: 6));
+          .timeout(ApiConstants.defaultTimeout);
 
       if (response.statusCode == 200) {
         final all  = jsonDecode(response.body)['voyages'] as List<dynamic>;
@@ -274,9 +288,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
             })
             .toList();
 
-        // Evict stale statut cache rows.
         await VoyageDao.clearStaleVoyageStatuts(list);
-
         await VoyageDao.saveVoyages(_matriculeNonProg, list);
 
         final merged = await _mergeLocalStatuts(list);
@@ -324,210 +336,255 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       _showToast('Mode hors-ligne · données en cache', isOffline: true);
     }
   }
+// ─────────────────────────────────────────────────────────────
+// Clôture Journée — fixed
+// ─────────────────────────────────────────────────────────────
+Future<void> _clotureJourneeAll() async {
+  setState(() {
+    _clotureLoading    = true;
+    _clotureConfirming = false;
+  });
 
-  // ─────────────────────────────────────────────────────────────
-  // Clôture Journée — BOTH tabs together
-  // ─────────────────────────────────────────────────────────────
+  final toCloseProg    = voyagesProgrammes.where((v) => v['statut'] != 'cloture').toList();
+  final toCloseNonProg = voyagesNonProgrammes.where((v) => v['statut'] != 'cloture').toList();
+  final allToClose     = [...toCloseProg, ...toCloseNonProg];
 
-  Future<void> _clotureJourneeAll() async {
-    setState(() {
-      _clotureLoading    = true;
-      _clotureConfirming = false;
-    });
+  if (allToClose.isEmpty) {
+    setState(() => _clotureLoading = false);
+    _showToast('Tous les voyages sont déjà clôturés');
+    return;
+  }
 
-    final toCloseProg    = voyagesProgrammes.where((v)    => v['statut'] != 'cloture').toList();
-    final toCloseNonProg = voyagesNonProgrammes.where((v) => v['statut'] != 'cloture').toList();
-    final allToClose     = [...toCloseProg, ...toCloseNonProg];
+  final ids = allToClose
+      .map((v) => (v['id_vente'] ?? v['id']) as int?)
+      .whereType<int>()
+      .toList();
 
-    if (allToClose.isEmpty) {
-      setState(() => _clotureLoading = false);
-      _showToast('Tous les voyages sont déjà clôturés');
-      return;
-    }
+  bool success  = false;
+  bool offline  = false;
+  int  closedQt = 0;
 
-    final ids = allToClose
-        .map((v) => (v['id_vente'] ?? v['id']) as int?)
-        .whereType<int>()
-        .toList();
+  try {
+    final response = await http
+        .put(
+          Uri.parse(ApiConstants.clotureJournee),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'ids': ids}),
+        )
+        .timeout(ApiConstants.actionTimeout);
 
-    bool success  = false;
-    bool offline  = false;
-    int  closedQt = 0;
-
-    try {
-      final response = await http
-          .put(
-            Uri.parse(
-                'http://192.168.1.16:8000/billetterie/ventes/cloturer-journee'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'ids': ids}),
-          )
-          .timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        success  = data['success'] == true;
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['success'] == true) {
+        success  = true;
         closedQt = (data['closed'] as int?) ?? ids.length;
-      }
-    } catch (_) {
-      offline = true;
-      // Persist each clôture as pending.  server_statut is intentionally
-      // omitted (null) so the stale-check in getVoyageStatut never fires
-      // against these offline-written rows.
-      for (final id in ids) {
-        await VoyageDao.saveCloturePending(id);
-        await VoyageDao.saveVoyageStatut(id, 'cloture');
-      }
-      success  = true;
-      closedQt = ids.length;
-    }
-
-    if (!mounted) return;
-
-    if (success) {
-      setState(() {
-        for (final v in toCloseProg)    v['statut'] = 'cloture';
-        for (final v in toCloseNonProg) v['statut'] = 'cloture';
-        _clotureLoading = false;
-      });
-      _showToast(
-        offline
-            ? 'Journée clôturée (hors-ligne) · $closedQt voyage(s)'
-            : 'Journée clôturée · $closedQt voyage(s)',
-        isWarning: offline,
-      );
-      if (!offline) {
-        await _fetchProgrammes();
-        await _fetchNonProgrammes();
+      } else {
+        // Server returned 200 but reported failure → go offline
+        offline = true;
       }
     } else {
-      setState(() => _clotureLoading = false);
-      _showToast('Échec de la clôture journée', isError: true);
+      // Non-200 status (400, 500, etc.) → go offline instead of failing
+      offline = true;
     }
+  } catch (_) {
+    // Network error / timeout → go offline
+    offline = true;
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Réouvrir Journée — BOTH tabs together
-  // ─────────────────────────────────────────────────────────────
-
-  Future<void> _reopenJourneeAll() async {
-    final allClotures = [
-      ...voyagesProgrammes.where((v)    => v['statut'] == 'cloture'),
-      ...voyagesNonProgrammes.where((v) => v['statut'] == 'cloture'),
-    ];
-
-    if (allClotures.isEmpty) {
-      _showToast('Aucun voyage clôturé à réouvrir');
-      return;
-    }
-
-    final confirmed = await showModalBottomSheet<bool>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => _ReopenJourneeConfirmSheet(
-          count: allClotures.length, todayLabel: _todayLabel),
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _reopenLoading = true);
-    _showToast('Réouverture en cours…');
-
-    final ids = allClotures
-        .map((v) => (v['id_vente'] ?? v['id']) as int?)
-        .whereType<int>()
-        .toList();
-
-    bool success = false;
-    bool offline = false;
-
-    try {
-      final response = await http
-          .put(
-            Uri.parse(
-                'http://192.168.1.16:8000/billetterie/ventes/reopen-journee'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'ids': ids}),
-          )
-          .timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        success = data['success'] == true;
-      }
-    } catch (_) {
-      offline = true;
-      for (final id in ids) await VoyageDao.clearVoyageStatut(id);
-      success = true;
-    }
-
-    if (!mounted) return;
-
-    if (success) {
-      setState(() {
-        for (final v in allClotures) v['statut'] = 'actif';
-        _reopenLoading = false;
-      });
-      _showToast(
-        offline
-            ? 'Journée réouverte (hors-ligne) · ${ids.length} voyage(s)'
-            : 'Journée réouverte · ${ids.length} voyage(s)',
-        isWarning: offline,
+  // ── Offline path ──────────────────────────────────────────
+  if (offline) {
+    for (final id in ids) {
+      await VoyageDao.saveCloturePending(id);
+      await VoyageDao.saveVoyageStatut(
+        id,
+        'cloture',
+        serverStatut: 'actif',
       );
-      if (!offline) {
-        await _fetchProgrammes();
-        await _fetchNonProgrammes();
+    }
+    success  = true;
+    closedQt = ids.length;
+  }
+
+  if (!mounted) return;
+
+  if (success) {
+    setState(() {
+      for (final v in toCloseProg)    v['statut'] = 'cloture';
+      for (final v in toCloseNonProg) v['statut'] = 'cloture';
+      _clotureLoading = false;
+    });
+    _showToast(
+      offline
+          ? 'Journée clôturée (hors-ligne) · $closedQt voyage(s)'
+          : 'Journée clôturée · $closedQt voyage(s)',
+      isWarning: offline,
+    );
+    if (!offline) {
+      await _fetchProgrammes();
+      await _fetchNonProgrammes();
+    }
+  } else {
+    setState(() => _clotureLoading = false);
+    _showToast('Échec de la clôture journée', isError: true);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Réouvrir Journée — fixed
+// ─────────────────────────────────────────────────────────────
+Future<void> _reopenJourneeAll() async {
+  final allClotures = [
+    ...voyagesProgrammes.where((v)    => v['statut'] == 'cloture'),
+    ...voyagesNonProgrammes.where((v) => v['statut'] == 'cloture'),
+  ];
+
+  if (allClotures.isEmpty) {
+    _showToast('Aucun voyage clôturé à réouvrir');
+    return;
+  }
+
+  final confirmed = await showModalBottomSheet<bool>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (_) => _ReopenJourneeConfirmSheet(
+        count: allClotures.length, todayLabel: _todayLabel),
+  );
+
+  if (confirmed != true || !mounted) return;
+
+  setState(() => _reopenLoading = true);
+  _showToast('Réouverture en cours…');
+
+  final ids = allClotures
+      .map((v) => (v['id_vente'] ?? v['id']) as int?)
+      .whereType<int>()
+      .toList();
+
+  bool success = false;
+  bool offline = false;
+
+  try {
+    final response = await http
+        .put(
+          Uri.parse(ApiConstants.reopenJournee),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'ids': ids}),
+        )
+        .timeout(ApiConstants.actionTimeout);
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['success'] == true) {
+        success = true;
+      } else {
+        // Server returned failure body → go offline
+        offline = true;
       }
     } else {
-      setState(() => _reopenLoading = false);
-      _showToast('Échec de la réouverture', isError: true);
+      // Non-200 → go offline
+      offline = true;
     }
+  } catch (_) {
+    offline = true;
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Reopen a single voyage
-  // ─────────────────────────────────────────────────────────────
+  // ── Offline path ──────────────────────────────────────────
+  if (offline) {
+    for (final id in ids) {
+      await VoyageDao.clearVoyageStatut(id);
+      await VoyageDao.saveReopenPending(id, scope: 'journee');
+    }
+    success = true;
+  }
 
-  Future<void> _reopenVoyage(Map<String, dynamic> voyage) async {
-    final idVente = (voyage['id_vente'] ?? voyage['id']) as int?;
-    if (idVente == null) return;
+  if (!mounted) return;
 
-    final confirmed = await showModalBottomSheet<bool>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => _ReopenConfirmSheet(voyage: voyage),
+  if (success) {
+    setState(() {
+      for (final v in allClotures) v['statut'] = 'actif';
+      _reopenLoading = false;
+    });
+    _showToast(
+      offline
+          ? 'Journée réouverte (hors-ligne) · ${ids.length} voyage(s)'
+          : 'Journée réouverte · ${ids.length} voyage(s)',
+      isWarning: offline,
     );
-
-    if (confirmed != true || !mounted) return;
-    _showToast('Réouverture en cours…');
-
-    try {
-      final response = await http
-          .put(
-            Uri.parse(
-                'http://192.168.1.16:8000/billetterie/vente/$idVente/reopen'),
-            headers: {'Content-Type': 'application/json'},
-          )
-          .timeout(const Duration(seconds: 8));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          await VoyageDao.clearVoyageStatut(idVente);
-          setState(() => voyage['statut'] = 'actif');
-          _showToast('Voyage réouvert avec succès');
-          return;
-        }
-        _showToast(data['message'] ?? 'Impossible de réouvrir', isError: true);
-        return;
-      }
-      _showToast('Erreur serveur', isError: true);
-    } catch (_) {
-      _showToast('Hors-ligne — réouverture impossible', isOffline: true);
+    if (!offline) {
+      await _fetchProgrammes();
+      await _fetchNonProgrammes();
     }
+  } else {
+    setState(() => _reopenLoading = false);
+    _showToast('Échec de la réouverture', isError: true);
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Reopen single voyage — fixed
+// ─────────────────────────────────────────────────────────────
+Future<void> _reopenVoyage(Map<String, dynamic> voyage) async {
+  final idVente = (voyage['id_vente'] ?? voyage['id']) as int?;
+  if (idVente == null) return;
+
+  final confirmed = await showModalBottomSheet<bool>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (_) => _ReopenConfirmSheet(voyage: voyage),
+  );
+
+  if (confirmed != true || !mounted) return;
+  _showToast('Réouverture en cours…');
+
+  bool success = false;
+  bool offline = false;
+
+  try {
+    final response = await http
+        .put(
+          Uri.parse(ApiConstants.reopenVoyage(idVente)),
+          headers: {'Content-Type': 'application/json'},
+        )
+        .timeout(ApiConstants.reopenTimeout);
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['success'] == true) {
+        await VoyageDao.clearVoyageStatut(idVente);
+        success = true;
+      } else {
+        // Server-side business logic rejection → go offline
+        offline = true;
+      }
+    } else {
+      // Non-200 (403, 500, etc.) → go offline instead of "Erreur serveur"
+      offline = true;
+    }
+  } catch (_) {
+    offline = true;
+  }
+
+  // ── Offline path ──────────────────────────────────────────
+  if (offline) {
+    await VoyageDao.clearVoyageStatut(idVente);
+    await VoyageDao.saveReopenPending(idVente, scope: 'single');
+    success = true;
+  }
+
+  if (!mounted) return;
+
+  if (success) {
+    setState(() => voyage['statut'] = 'actif');
+    _showToast(
+      offline
+          ? 'Voyage réouvert (hors-ligne) · synchronisation dès reconnexion'
+          : 'Voyage réouvert avec succès',
+      isWarning: offline,
+    );
+  }
+}
 
   // ─────────────────────────────────────────────────────────────
   // Export (uses all voyages from both tabs)
@@ -583,9 +640,10 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       }
 
       final agent     = widget.agent;
-      final agentName = '${agent['prenom'] ?? ''} ${agent['nom'] ?? ''}'.trim();
-      final now       = DateTime.now();
-      final dateStr   =
+      final agentName =
+          '${agent['prenom'] ?? ''} ${agent['nom'] ?? ''}'.trim();
+      final now     = DateTime.now();
+      final dateStr =
           '${now.day.toString().padLeft(2, '0')}-'
           '${now.month.toString().padLeft(2, '0')}-'
           '${now.year}';
@@ -595,7 +653,8 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       final int totalTickets = allTickets.fold(
           0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
       final int totalGratuits = allTickets
-          .where((t) => ((t['montant_total'] as num? ?? 0).toInt()) == 0)
+          .where(
+              (t) => ((t['montant_total'] as num? ?? 0).toInt()) == 0)
           .fold(0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
 
       final dir = await getTemporaryDirectory();
@@ -676,15 +735,22 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     final payants   = totalTickets - totalGratuits;
     final prixMoyen = payants > 0
         ? (allTickets
-                .where((t) => (t['montant_total'] as num? ?? 0).toInt() > 0)
-                .fold(0, (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt())) /
+                .where(
+                    (t) => (t['montant_total'] as num? ?? 0).toInt() > 0)
+                .fold(
+                    0,
+                    (s, t) =>
+                        s + ((t['montant_total'] as num? ?? 0).toInt())) /
             payants)
             .round()
         : 0;
 
     final kpis = [
       ['Recette totale (ms)', totalRecette],
-      ['Recette totale (DT)', '${(totalRecette / 1000).toStringAsFixed(3)} DT'],
+      [
+        'Recette totale (DT)',
+        '${(totalRecette / 1000).toStringAsFixed(3)} DT'
+      ],
       ['Total tickets vendus',   totalTickets],
       ['Tickets payants',        payants],
       ['Tickets gratuits',       totalGratuits],
@@ -777,7 +843,9 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     _xlsCell(ticketsSheet, totalRow, 9, totalRecette,
         bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
 
-    final widths = [5.0, 14.0, 10.0, 22.0, 22.0, 10.0, 28.0, 8.0, 16.0, 14.0, 12.0];
+    final widths = [
+      5.0, 14.0, 10.0, 22.0, 22.0, 10.0, 28.0, 8.0, 16.0, 14.0, 12.0,
+    ];
     for (int c = 0; c < widths.length; c++) {
       ticketsSheet.setColumnWidth(c, widths[c]);
     }
@@ -785,7 +853,8 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     // ── Par tarif sheet ───────────────────────────────────────
     final tarifSheet   = excel['Par tarif'];
     final tarifHeaders = [
-      'Type de tarif', 'Quantité', 'Prix unitaire (ms)', 'Total (ms)', '% du total',
+      'Type de tarif', 'Quantité', 'Prix unitaire (ms)', 'Total (ms)',
+      '% du total',
     ];
     for (int c = 0; c < tarifHeaders.length; c++) {
       _xlsHeader(tarifSheet, 0, c, tarifHeaders[c]);
@@ -793,15 +862,16 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
 
     final tarifMap = <String, Map<String, int>>{};
     for (final t in allTickets) {
-      final type = ((t['type_tarif'] ?? '') as String).trim().isEmpty
-          ? 'Inconnu'
-          : (t['type_tarif'] as String).trim();
+      final type =
+          ((t['type_tarif'] ?? '') as String).trim().isEmpty
+              ? 'Inconnu'
+              : (t['type_tarif'] as String).trim();
       final qty   = (t['quantite']     as num? ?? 1).toInt();
       final total = (t['montant_total'] as num? ?? 0).toInt();
       final unit  = (t['prix_unitaire'] as num? ?? 0).toInt();
-      tarifMap[type]                 ??= {'count': 0, 'total': 0, 'unitaire': 0};
-      tarifMap[type]!['count']        = tarifMap[type]!['count']! + qty;
-      tarifMap[type]!['total']        = tarifMap[type]!['total']! + total;
+      tarifMap[type]               ??= {'count': 0, 'total': 0, 'unitaire': 0};
+      tarifMap[type]!['count']      = tarifMap[type]!['count']! + qty;
+      tarifMap[type]!['total']      = tarifMap[type]!['total']! + total;
       if (unit > 0) tarifMap[type]!['unitaire'] = unit;
     }
     final tarifEntries = tarifMap.entries.toList()
@@ -810,16 +880,18 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     int tRow = 1;
     for (final e in tarifEntries) {
       final isFree = e.value['total']! == 0;
-      final pct    = totalTickets > 0
+      final pct = totalTickets > 0
           ? '${((e.value['count']! / totalTickets) * 100).toStringAsFixed(1)}%'
           : '0%';
       final bg = tRow.isOdd ? '#F9FAFB' : '#FFFFFF';
       _xlsCell(tarifSheet, tRow, 0, e.key, bgHex: bg, bold: true);
       _xlsCell(tarifSheet, tRow, 1, e.value['count']!, bgHex: bg);
-      _xlsCell(tarifSheet, tRow, 2, isFree ? '—' : '${e.value['unitaire']}',
-          bgHex: bg);
+      _xlsCell(tarifSheet, tRow, 2,
+          isFree ? '—' : '${e.value['unitaire']}', bgHex: bg);
       _xlsCell(tarifSheet, tRow, 3, e.value['total']!,
-          bgHex: bg, bold: true, fgHex: isFree ? '#16A34A' : '#0D1B3E');
+          bgHex: bg,
+          bold:  true,
+          fgHex: isFree ? '#16A34A' : '#0D1B3E');
       _xlsCell(tarifSheet, tRow, 4, pct, bgHex: bg);
       tRow++;
     }
@@ -842,7 +914,8 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     // ── Par voyage sheet ──────────────────────────────────────
     final voyageSheet = excel['Par voyage'];
     final vHeaders    = [
-      'Voyage', 'Type', 'Trajet', 'Tickets', 'Gratuits', 'Payants', 'Recette (ms)',
+      'Voyage', 'Type', 'Trajet', 'Tickets', 'Gratuits', 'Payants',
+      'Recette (ms)',
     ];
     for (int c = 0; c < vHeaders.length; c++) {
       _xlsHeader(voyageSheet, 0, c, vHeaders[c]);
@@ -850,28 +923,33 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
 
     int vRow = 1;
     for (final v in voyages) {
-      final id       = (v['id_vente'] ?? v['id']) as int?;
-      final depart   = v['depart']  ?? '?';
-      final arrivee  = v['arrivee'] ?? '?';
-      final typeStr  = (v['type'] as String?) ?? 'programmé';
+      final id      = (v['id_vente'] ?? v['id']) as int?;
+      final depart  = v['depart']  ?? '?';
+      final arrivee = v['arrivee'] ?? '?';
+      final typeStr = (v['type'] as String?) ?? 'programmé';
       final vTickets = id == null
           ? <Map<String, dynamic>>[]
-          : allTickets.where((t) => t['id_vente'] == id).toList();
-      final vTotal  = vTickets.fold(
-          0, (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt()));
-      final vCount  = vTickets.fold(
+          : allTickets
+              .where((t) => t['id_vente'] == id)
+              .toList();
+      final vTotal = vTickets.fold(
+          0,
+          (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt()));
+      final vCount = vTickets.fold(
           0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
       final vGratis = vTickets
           .where((t) => ((t['montant_total'] as num? ?? 0).toInt()) == 0)
           .fold(0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
       final bg = vRow.isOdd ? '#F9FAFB' : '#FFFFFF';
 
-      _xlsCell(voyageSheet, vRow, 0, '#${id ?? '?'}', bgHex: bg, bold: true);
+      _xlsCell(voyageSheet, vRow, 0, '#${id ?? '?'}',
+          bgHex: bg, bold: true);
       _xlsCell(voyageSheet, vRow, 1, typeStr,              bgHex: bg);
       _xlsCell(voyageSheet, vRow, 2, '$depart → $arrivee', bgHex: bg);
       _xlsCell(voyageSheet, vRow, 3, vCount,               bgHex: bg);
       _xlsCell(voyageSheet, vRow, 4, vGratis,
-          bgHex: bg, fgHex: vGratis > 0 ? '#16A34A' : '#111827');
+          bgHex: bg,
+          fgHex: vGratis > 0 ? '#16A34A' : '#111827');
       _xlsCell(voyageSheet, vRow, 5, vCount - vGratis, bgHex: bg);
       _xlsCell(voyageSheet, vRow, 6, vTotal,
           bgHex: bg, bold: true, fgHex: '#0D1B3E');
@@ -887,8 +965,9 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     voyageSheet.setColumnWidth(6, 16);
 
     final bytes    = excel.encode()!;
-    final fileName = 'rapport_${label}_${_matricule}_$dateStr.xlsx';
-    final file     = File('${dir.path}/$fileName');
+    final fileName =
+        'rapport_${label}_${_matricule}_$dateStr.xlsx';
+    final file = File('${dir.path}/$fileName');
     await file.writeAsBytes(bytes);
     return file;
   }
@@ -911,8 +990,8 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     final cell = s.cell(
         xl.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row));
     if (value is int || value is double) {
-      cell.value =
-          xl.IntCellValue(value is int ? value : (value as double).toInt());
+      cell.value = xl.IntCellValue(
+          value is int ? value : (value as double).toInt());
     } else {
       cell.value = xl.TextCellValue(value?.toString() ?? '');
     }
@@ -942,13 +1021,16 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     required int totalGratuits,
     required Directory dir,
   }) async {
-    final pdf      = pw.Document();
-    final payants  = totalTickets - totalGratuits;
+    final pdf     = pw.Document();
+    final payants = totalTickets - totalGratuits;
     final prixMoyen = payants > 0
         ? (allTickets
-                .where((t) => (t['montant_total'] as num? ?? 0).toInt() > 0)
-                .fold(0,
-                    (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt())) /
+                .where(
+                    (t) => (t['montant_total'] as num? ?? 0).toInt() > 0)
+                .fold(
+                    0,
+                    (s, t) =>
+                        s + ((t['montant_total'] as num? ?? 0).toInt())) /
             payants)
             .round()
         : 0;
@@ -963,7 +1045,8 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
             padding: const pw.EdgeInsets.all(16),
             decoration: pw.BoxDecoration(
               color: PdfColor.fromHex('0D1B3E'),
-              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+              borderRadius:
+                  const pw.BorderRadius.all(pw.Radius.circular(8)),
             ),
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -1021,10 +1104,11 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                 '',
               ]),
               _pdfTableRow(
-                  ['Voyages programmés', '${voyagesProgrammes.length}', ''],
+                  ['Voyages programmés', '${voyagesProgrammes.length}',
+                   ''],
                   highlight: true),
-              _pdfTableRow(
-                  ['Voyages non programmés', '${voyagesNonProgrammes.length}', '']),
+              _pdfTableRow(['Voyages non programmés',
+                   '${voyagesNonProgrammes.length}', '']),
               _pdfTableRow(
                   ['Total voyages', '${voyages.length}', ''],
                   highlight: true),
@@ -1079,7 +1163,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
                   style: pw.TextStyle(
                     fontSize:   10,
                     fontWeight: isHeader ? pw.FontWeight.bold : null,
-                    color:      isHeader
+                    color: isHeader
                         ? PdfColors.white
                         : PdfColor.fromHex('111827'),
                   ),
@@ -1093,14 +1177,15 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       List<Map<String, dynamic>> tickets, int totalTickets) {
     final tarifMap = <String, Map<String, int>>{};
     for (final t in tickets) {
-      final type = ((t['type_tarif'] ?? '') as String).trim().isEmpty
-          ? 'Inconnu'
-          : (t['type_tarif'] as String).trim();
+      final type =
+          ((t['type_tarif'] ?? '') as String).trim().isEmpty
+              ? 'Inconnu'
+              : (t['type_tarif'] as String).trim();
       final qty   = (t['quantite']     as num? ?? 1).toInt();
       final total = (t['montant_total'] as num? ?? 0).toInt();
-      tarifMap[type]               ??= {'count': 0, 'total': 0};
-      tarifMap[type]!['count']      = tarifMap[type]!['count']! + qty;
-      tarifMap[type]!['total']      = tarifMap[type]!['total']! + total;
+      tarifMap[type]             ??= {'count': 0, 'total': 0};
+      tarifMap[type]!['count']    = tarifMap[type]!['count']! + qty;
+      tarifMap[type]!['total']    = tarifMap[type]!['total']! + total;
     }
     final entries = tarifMap.entries.toList()
       ..sort((a, b) => b.value['total']!.compareTo(a.value['total']!));
@@ -1117,7 +1202,12 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
               ? '${((e.value['count']! / totalTickets) * 100).toStringAsFixed(1)}%'
               : '0%';
           return _pdfTableRow(
-            [e.key, '${e.value['count']}', '${e.value['total']}', pct],
+            [
+              e.key,
+              '${e.value['count']}',
+              '${e.value['total']}',
+              pct,
+            ],
             highlight: entries.indexOf(e).isEven,
           );
         }),
@@ -1134,7 +1224,8 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     );
   }
 
-  pw.Widget _buildPdfTicketsTable(List<Map<String, dynamic>> tickets) {
+  pw.Widget _buildPdfTicketsTable(
+      List<Map<String, dynamic>> tickets) {
     return pw.Table(
       border: pw.TableBorder.all(
           color: PdfColor.fromHex('E5E7EB'), width: 0.5),
@@ -1225,7 +1316,8 @@ Fichier joint : ${file.path.split('/').last}
   void _openVoyage(Map<String, dynamic> voyage) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => VenteTicketsPage(voyage: voyage)),
+      MaterialPageRoute(
+          builder: (_) => VenteTicketsPage(voyage: voyage)),
     ).then((_) {
       _fetchProgrammes();
       _fetchNonProgrammes();
@@ -1274,7 +1366,8 @@ Fichier joint : ${file.path.split('/').last}
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildSharedActionBar() {
-    final bool loading = isLoadingProgrammes || isLoadingNonProgrammes;
+    final bool loading =
+        isLoadingProgrammes || isLoadingNonProgrammes;
     if (loading) return const SizedBox.shrink();
 
     final bool nothingToShow =
@@ -1310,8 +1403,8 @@ Fichier joint : ${file.path.split('/').last}
       decoration: BoxDecoration(
         color: AppTheme.navyMid.withOpacity(0.5),
         borderRadius: BorderRadius.circular(14),
-        border:
-            Border.all(color: Colors.red.shade300.withOpacity(0.5), width: 1.5),
+        border: Border.all(
+            color: Colors.red.shade300.withOpacity(0.5), width: 1.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1324,8 +1417,8 @@ Fichier joint : ${file.path.split('/').last}
               Text('Clôturer toute la journée ?',
                   style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: Colors.red.shade300)),
+                      fontSize:   13,
+                      color:      Colors.red.shade300)),
             ],
           ),
           const SizedBox(height: 5),
@@ -1343,7 +1436,8 @@ Fichier joint : ${file.path.split('/').last}
                   child: OutlinedButton(
                     onPressed: _clotureLoading
                         ? null
-                        : () => setState(() => _clotureConfirming = false),
+                        : () =>
+                            setState(() => _clotureConfirming = false),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.white70,
                       side: const BorderSide(color: Colors.white24),
@@ -1361,7 +1455,8 @@ Fichier joint : ${file.path.split('/').last}
                 child: SizedBox(
                   height: 40,
                   child: ElevatedButton(
-                    onPressed: _clotureLoading ? null : _clotureJourneeAll,
+                    onPressed:
+                        _clotureLoading ? null : _clotureJourneeAll,
                     style: ElevatedButton.styleFrom(
                       backgroundColor:         Colors.red.shade700,
                       foregroundColor:         Colors.white,
@@ -1372,13 +1467,14 @@ Fichier joint : ${file.path.split('/').last}
                     ),
                     child: _clotureLoading
                         ? const SizedBox(
-                            width: 16,
+                            width:  16,
                             height: 16,
-                            child: CircularProgressIndicator(
+                            child:  CircularProgressIndicator(
                                 color: Colors.white, strokeWidth: 2))
                         : const Text('Confirmer',
                             style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 12)),
+                                fontWeight: FontWeight.bold,
+                                fontSize:   12)),
                   ),
                 ),
               ),
@@ -1422,16 +1518,18 @@ Fichier joint : ${file.path.split('/').last}
               children: [
                 if (_clotureLoading)
                   const SizedBox(
-                      width: 17,
+                      width:  17,
                       height: 17,
-                      child: CircularProgressIndicator(
+                      child:  CircularProgressIndicator(
                           color: Colors.white, strokeWidth: 2))
                 else
                   const Icon(Icons.event_busy_rounded,
                       color: Colors.white, size: 19),
                 const SizedBox(width: 9),
                 Text(
-                  _clotureLoading ? 'Clôture en cours…' : 'Clôture Journée  ',
+                  _clotureLoading
+                      ? 'Clôture en cours…'
+                      : 'Clôture Journée  ',
                   style: const TextStyle(
                       fontSize:      13,
                       fontWeight:    FontWeight.bold,
@@ -1480,9 +1578,9 @@ Fichier joint : ${file.path.split('/').last}
                   children: [
                     if (_exportLoading)
                       const SizedBox(
-                          width: 17,
+                          width:  17,
                           height: 17,
-                          child: CircularProgressIndicator(
+                          child:  CircularProgressIndicator(
                               color: Colors.white, strokeWidth: 2))
                     else
                       const Icon(Icons.send_rounded,
@@ -1527,16 +1625,18 @@ Fichier joint : ${file.path.split('/').last}
                   children: [
                     if (_reopenLoading)
                       const SizedBox(
-                          width: 15,
+                          width:  15,
                           height: 15,
-                          child: CircularProgressIndicator(
+                          child:  CircularProgressIndicator(
                               color: Colors.white, strokeWidth: 2))
                     else
                       const Icon(Icons.lock_open_outlined,
                           color: Colors.white, size: 17),
                     const SizedBox(width: 8),
                     Text(
-                      _reopenLoading ? 'Réouverture…' : 'Réouvrir la Journée',
+                      _reopenLoading
+                          ? 'Réouverture…'
+                          : 'Réouvrir la Journée',
                       style: const TextStyle(
                           fontSize:   12,
                           fontWeight: FontWeight.bold,
@@ -1588,11 +1688,11 @@ Fichier joint : ${file.path.split('/').last}
           const SizedBox(height: 16),
 
           Container(
-            width: 72,
-            height: 72,
+            width:   72,
+            height:  72,
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color:        Colors.white,
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
@@ -1604,8 +1704,9 @@ Fichier joint : ${file.path.split('/').last}
             child: Image.asset(
               'assets/images/logo_srtb.png',
               fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.directions_bus, size: 44, color: AppTheme.navyMid),
+              errorBuilder: (_, __, ___) => const Icon(
+                  Icons.directions_bus,
+                  size: 44, color: AppTheme.navyMid),
             ),
           ),
           const SizedBox(height: 10),
@@ -1634,10 +1735,11 @@ Fichier joint : ${file.path.split('/').last}
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                        width: 7,
+                        width:  7,
                         height: 7,
                         decoration: const BoxDecoration(
-                            color: AppTheme.goldLight, shape: BoxShape.circle)),
+                            color: AppTheme.goldLight,
+                            shape: BoxShape.circle)),
                     const SizedBox(width: 8),
                     Text('${agent['prenom']} ${agent['nom']}',
                         style: const TextStyle(
@@ -1689,7 +1791,7 @@ Fichier joint : ${file.path.split('/').last}
     return Container(
       color: AppTheme.navyDark,
       child: TabBar(
-        controller: _tabController,
+        controller:           _tabController,
         indicatorColor:       AppTheme.goldLight,
         indicatorWeight:      3,
         labelColor:           AppTheme.goldLight,
@@ -1706,10 +1808,11 @@ Fichier joint : ${file.path.split('/').last}
                 const Icon(Icons.schedule_rounded, size: 14),
                 const SizedBox(width: 5),
                 const Flexible(
-                    child:
-                        Text('Programmés', overflow: TextOverflow.ellipsis)),
+                    child: Text('Programmés',
+                        overflow: TextOverflow.ellipsis)),
                 const SizedBox(width: 5),
-                _tabBadge(voyagesProgrammes.length, isLoadingProgrammes),
+                _tabBadge(
+                    voyagesProgrammes.length, isLoadingProgrammes),
               ],
             ),
           ),
@@ -1724,8 +1827,8 @@ Fichier joint : ${file.path.split('/').last}
                     child: Text('Non programmés',
                         overflow: TextOverflow.ellipsis)),
                 const SizedBox(width: 5),
-                _tabBadge(
-                    voyagesNonProgrammes.length, isLoadingNonProgrammes),
+                _tabBadge(voyagesNonProgrammes.length,
+                    isLoadingNonProgrammes),
               ],
             ),
           ),
@@ -1741,7 +1844,8 @@ Fichier joint : ${file.path.split('/').last}
   Widget _buildProgrammesTab() {
     if (isLoadingProgrammes) {
       return const Center(
-          child: CircularProgressIndicator(color: AppTheme.navyMid));
+          child:
+              CircularProgressIndicator(color: AppTheme.navyMid));
     }
     if (errorProgrammes != null) {
       return _buildError(errorProgrammes!, _fetchProgrammes);
@@ -1761,17 +1865,20 @@ Fichier joint : ${file.path.split('/').last}
                 '${voyagesProgrammes.where((v) => v['statut'] == 'cloture').length}',
                 Colors.grey),
             _statTile(Icons.play_circle_outline, 'En cours',
-                activeIdx >= 0 ? '1' : '0', const Color(0xFF16A34A)),
+                activeIdx >= 0 ? '1' : '0',
+                const Color(0xFF16A34A)),
           ]),
 
         Expanded(
           child: voyagesProgrammes.isEmpty
               ? _buildEmpty('Aucun voyage programmé')
               : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 40),
+                  padding:
+                      const EdgeInsets.fromLTRB(16, 14, 16, 40),
                   itemCount: voyagesProgrammes.length,
                   itemBuilder: (_, i) {
-                    final v         = voyagesProgrammes[i] as Map<String, dynamic>;
+                    final v = voyagesProgrammes[i]
+                        as Map<String, dynamic>;
                     final isCloture = v['statut'] == 'cloture';
                     final isActive  = i == activeIdx;
                     final isLocked  = !isCloture && !isActive;
@@ -1799,7 +1906,7 @@ Fichier joint : ${file.path.split('/').last}
                       isActive:    isActive,
                       isCloture:   isCloture,
                       isLocked:    isLocked,
-                      onTap:       isCloture
+                      onTap: isCloture
                           ? () => _reopenVoyage(v)
                           : isLocked
                               ? _showLockedSnack
@@ -1827,7 +1934,8 @@ Fichier joint : ${file.path.split('/').last}
   Widget _buildNonProgrammesTab() {
     if (isLoadingNonProgrammes) {
       return const Center(
-          child: CircularProgressIndicator(color: AppTheme.navyMid));
+          child:
+              CircularProgressIndicator(color: AppTheme.navyMid));
     }
     if (errorNonProgrammes != null) {
       return _buildError(errorNonProgrammes!, _fetchNonProgrammes);
@@ -1855,10 +1963,12 @@ Fichier joint : ${file.path.split('/').last}
           child: voyagesNonProgrammes.isEmpty
               ? _buildEmpty('Aucun voyage non programmé')
               : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 40),
+                  padding:
+                      const EdgeInsets.fromLTRB(16, 14, 16, 40),
                   itemCount: voyagesNonProgrammes.length,
                   itemBuilder: (_, i) {
-                    final v         = voyagesNonProgrammes[i] as Map<String, dynamic>;
+                    final v = voyagesNonProgrammes[i]
+                        as Map<String, dynamic>;
                     final isCloture = v['statut'] == 'cloture';
 
                     final Color accent, bgColor, borderColor;
@@ -1885,10 +1995,12 @@ Fichier joint : ${file.path.split('/').last}
                       isActive:    !isCloture,
                       isCloture:   isCloture,
                       isLocked:    false,
-                      onTap:       isCloture
+                      onTap: isCloture
                           ? () => _reopenVoyage(v)
                           : () => _openVoyage(v),
-                      extraLabel: isCloture ? 'Appuyez pour réouvrir' : typeLabel,
+                      extraLabel: isCloture
+                          ? 'Appuyez pour réouvrir'
+                          : typeLabel,
                       extraLabelColor:
                           isCloture ? Colors.grey.shade400 : accent,
                     );
@@ -1945,25 +2057,27 @@ Fichier joint : ${file.path.split('/').last}
                     decoration: BoxDecoration(
                         color:        accent.withOpacity(0.12),
                         borderRadius: BorderRadius.circular(13)),
-                    child: Icon(Icons.directions_bus, color: accent, size: 24),
+                    child: Icon(Icons.directions_bus,
+                        color: accent, size: 24),
                   ),
                   if (isCloture)
                     Positioned(
-                        right: -4,
+                        right:  -4,
                         bottom: -4,
-                        child: _statusDot(Colors.grey, Icons.history, 10))
+                        child:
+                            _statusDot(Colors.grey, Icons.history, 10))
                   else if (isLocked)
                     Positioned(
-                        right: -4,
+                        right:  -4,
                         bottom: -4,
-                        child: _statusDot(
-                            Colors.orange.shade700, Icons.lock, 10))
+                        child: _statusDot(Colors.orange.shade700,
+                            Icons.lock, 10))
                   else if (isActive)
                     Positioned(
-                        right: -4,
+                        right:  -4,
                         bottom: -4,
-                        child: _statusDot(
-                            const Color(0xFF16A34A), Icons.play_arrow, 11)),
+                        child: _statusDot(const Color(0xFF16A34A),
+                            Icons.play_arrow, 11)),
                 ],
               ),
               const SizedBox(width: 14),
@@ -1977,7 +2091,9 @@ Fichier joint : ${file.path.split('/').last}
                             width:  6,
                             height: 6,
                             decoration: BoxDecoration(
-                                color: (isActive && !isLocked && !isCloture)
+                                color: (isActive &&
+                                        !isLocked &&
+                                        !isCloture)
                                     ? AppTheme.goldLight
                                     : accent.withOpacity(0.6),
                                 shape: BoxShape.circle)),
@@ -1989,7 +2105,7 @@ Fichier joint : ${file.path.split('/').last}
                             style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize:   14,
-                                color:      isCloture
+                                color: isCloture
                                     ? Colors.grey.shade400
                                     : AppTheme.navyDark),
                           ),
@@ -2016,14 +2132,15 @@ Fichier joint : ${file.path.split('/').last}
                         ),
                       ],
                     ),
-                    if (extraLabel != null && extraLabel.isNotEmpty) ...[
+                    if (extraLabel != null &&
+                        extraLabel.isNotEmpty) ...[
                       const SizedBox(height: 5),
                       Text(extraLabel,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                              color:      extraLabelColor ?? accent,
-                              fontSize:   11,
-                              fontStyle:  FontStyle.italic)),
+                              color:     extraLabelColor ?? accent,
+                              fontSize:  11,
+                              fontStyle: FontStyle.italic)),
                     ],
                   ],
                 ),
@@ -2038,7 +2155,8 @@ Fichier joint : ${file.path.split('/').last}
                     decoration: BoxDecoration(
                       color:        accent.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(20),
-                      border:       Border.all(color: accent.withOpacity(0.25)),
+                      border: Border.all(
+                          color: accent.withOpacity(0.25)),
                     ),
                     child: Text(
                       isCloture
@@ -2079,8 +2197,8 @@ Fichier joint : ${file.path.split('/').last}
     for (int i = 0; i < tiles.length; i++) {
       separated.add(tiles[i]);
       if (i < tiles.length - 1) {
-        separated
-            .add(Container(width: 1, height: 36, color: Colors.grey.shade100));
+        separated.add(Container(
+            width: 1, height: 36, color: Colors.grey.shade100));
       }
     }
     return Container(
@@ -2101,7 +2219,8 @@ Fichier joint : ${file.path.split('/').last}
     );
   }
 
-  Widget _statTile(IconData icon, String label, String value, Color color) {
+  Widget _statTile(
+      IconData icon, String label, String value, Color color) {
     return Expanded(
       child: Column(
         children: [
@@ -2129,7 +2248,8 @@ Fichier joint : ${file.path.split('/').last}
       decoration: BoxDecoration(
           color:  color,
           shape:  BoxShape.circle,
-          border: Border.all(color: AppTheme.cardWhite, width: 1.5)),
+          border: Border.all(
+              color: AppTheme.cardWhite, width: 1.5)),
       child: Icon(icon, color: Colors.white, size: iconSize),
     );
   }
@@ -2137,7 +2257,8 @@ Fichier joint : ${file.path.split('/').last}
   Widget _tabBadge(int count, bool loading) {
     if (loading) return const SizedBox.shrink();
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding:
+          const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
           color:        Colors.white.withOpacity(0.15),
           borderRadius: BorderRadius.circular(10)),
@@ -2161,15 +2282,15 @@ Fichier joint : ${file.path.split('/').last}
             const SizedBox(height: 12),
             Text(message,
                 textAlign: TextAlign.center,
-                style:
-                    TextStyle(color: Colors.grey.shade500, height: 1.6)),
+                style: TextStyle(
+                    color: Colors.grey.shade500, height: 1.6)),
             const SizedBox(height: 16),
             TextButton.icon(
               onPressed: retry,
               icon:  const Icon(Icons.refresh, size: 16),
               label: const Text('Réessayer'),
-              style:
-                  TextButton.styleFrom(foregroundColor: AppTheme.navyMid),
+              style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.navyMid),
             ),
           ],
         ),
@@ -2208,7 +2329,8 @@ class _ExportFormatSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(
-          24, 20, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
+          24, 20, 24,
+          24 + MediaQuery.of(context).viewInsets.bottom),
       decoration: const BoxDecoration(
         color:        AppTheme.cardWhite,
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
@@ -2245,7 +2367,9 @@ class _ExportFormatSheet extends StatelessWidget {
             'Le rapport complet du $todayLabel sera envoyé\npar email à ',
             textAlign: TextAlign.center,
             style: TextStyle(
-                fontSize: 13, color: Colors.grey.shade500, height: 1.5),
+                fontSize: 13,
+                color:    Colors.grey.shade500,
+                height:   1.5),
           ),
           const SizedBox(height: 6),
           const Text(
@@ -2264,11 +2388,13 @@ class _ExportFormatSheet extends StatelessWidget {
                   height: 56,
                   child: ElevatedButton.icon(
                     onPressed: () => Navigator.pop(context, 'excel'),
-                    icon:  const Icon(Icons.table_chart_rounded, size: 20),
+                    icon:  const Icon(Icons.table_chart_rounded,
+                        size: 20),
                     label: const Text('Excel\n.xlsx',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 13)),
+                            fontWeight: FontWeight.bold,
+                            fontSize:   13)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.navyMid,
                       foregroundColor: Colors.white,
@@ -2285,11 +2411,13 @@ class _ExportFormatSheet extends StatelessWidget {
                   height: 56,
                   child: ElevatedButton.icon(
                     onPressed: () => Navigator.pop(context, 'pdf'),
-                    icon:  const Icon(Icons.picture_as_pdf_rounded, size: 20),
+                    icon: const Icon(Icons.picture_as_pdf_rounded,
+                        size: 20),
                     label: const Text('PDF\n.pdf',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 13)),
+                            fontWeight: FontWeight.bold,
+                            fontSize:   13)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFDC2626),
                       foregroundColor: Colors.white,
@@ -2328,7 +2456,8 @@ class _ReopenJourneeConfirmSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(
-          24, 20, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
+          24, 20, 24,
+          24 + MediaQuery.of(context).viewInsets.bottom),
       decoration: const BoxDecoration(
         color:        AppTheme.cardWhite,
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
@@ -2363,7 +2492,9 @@ class _ReopenJourneeConfirmSheet extends StatelessWidget {
             '$count voyage(s) du $todayLabel\n seront remis au statut Actif.',
             textAlign: TextAlign.center,
             style: TextStyle(
-                fontSize: 13, color: Colors.grey.shade500, height: 1.5),
+                fontSize: 13,
+                color:    Colors.grey.shade500,
+                height:   1.5),
           ),
           const SizedBox(height: 8),
           Text('Cette action est réversible.',
@@ -2388,7 +2519,8 @@ class _ReopenJourneeConfirmSheet extends StatelessWidget {
                     ),
                     child: const Text('Annuler',
                         style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 14)),
+                            fontWeight: FontWeight.bold,
+                            fontSize:   14)),
                   ),
                 ),
               ),
@@ -2407,7 +2539,8 @@ class _ReopenJourneeConfirmSheet extends StatelessWidget {
                     ),
                     child: const Text('Réouvrir tout',
                         style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 14)),
+                            fontWeight: FontWeight.bold,
+                            fontSize:   14)),
                   ),
                 ),
               ),
@@ -2434,7 +2567,8 @@ class _ReopenConfirmSheet extends StatelessWidget {
 
     return Container(
       padding: EdgeInsets.fromLTRB(
-          24, 20, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
+          24, 20, 24,
+          24 + MediaQuery.of(context).viewInsets.bottom),
       decoration: const BoxDecoration(
         color:        AppTheme.cardWhite,
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
@@ -2466,13 +2600,16 @@ class _ReopenConfirmSheet extends StatelessWidget {
                   color:      AppTheme.navyDark)),
           const SizedBox(height: 6),
           Text('$depart → $arrivee',
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade500)),
+              style: TextStyle(
+                  fontSize: 14, color: Colors.grey.shade500)),
           const SizedBox(height: 8),
           Text(
             'Le voyage sera remis au statut Actif\net pourra être utilisé à nouveau.',
             textAlign: TextAlign.center,
             style: TextStyle(
-                fontSize: 12, color: Colors.grey.shade500, height: 1.5),
+                fontSize: 12,
+                color:    Colors.grey.shade500,
+                height:   1.5),
           ),
           const SizedBox(height: 24),
           Row(
@@ -2490,7 +2627,8 @@ class _ReopenConfirmSheet extends StatelessWidget {
                     ),
                     child: const Text('Annuler',
                         style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 14)),
+                            fontWeight: FontWeight.bold,
+                            fontSize:   14)),
                   ),
                 ),
               ),
@@ -2509,7 +2647,8 @@ class _ReopenConfirmSheet extends StatelessWidget {
                     ),
                     child: const Text('Réouvrir',
                         style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 14)),
+                            fontWeight: FontWeight.bold,
+                            fontSize:   14)),
                   ),
                 ),
               ),
@@ -2546,11 +2685,14 @@ class _ToastWidgetState extends State<_ToastWidget>
   void initState() {
     super.initState();
     _ctrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 220));
-    _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
-    _slide   = Tween<Offset>(
+        vsync: this,
+        duration: const Duration(milliseconds: 220));
+    _opacity =
+        CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+    _slide = Tween<Offset>(
             begin: const Offset(1.0, 0), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
+        .animate(
+            CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
     _ctrl.forward();
     Future.delayed(const Duration(milliseconds: 2400), () {
       if (mounted) _ctrl.reverse();

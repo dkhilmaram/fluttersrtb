@@ -48,17 +48,28 @@ class VoyageDao {
 
   // ═══════════════════════════════════════════════════════════
   // ── VOYAGE STATUT CACHE ──────────────────────────────────────
-  // Table schema (version 2+):
+  // Table schema (v2+):
   //   id_vente      INTEGER PRIMARY KEY
-  //   statut        TEXT
-  //   server_statut TEXT    ← added in v2
+  //   statut        TEXT        ← local override ('cloture' / 'actif')
+  //   server_statut TEXT        ← server value at the time of save
   //   cached_at     TEXT
+  //
+  // RULE: server_statut is ALWAYS stored so that clearStaleVoyageStatuts
+  //       can detect genuine server-side changes without falsely wiping
+  //       offline-pending rows.
   // ═══════════════════════════════════════════════════════════
 
+  /// Save a local statut override for [idVente].
+  ///
+  /// [statut]       — the local value to apply  ('cloture' or 'actif')
+  /// [serverStatut] — what the server currently reports for this voyage.
+  ///                  Pass the server value you received; this anchors the
+  ///                  stale-detection logic so a still-pending offline row
+  ///                  is never wiped on the next fetch.
   static Future<void> saveVoyageStatut(
     int idVente,
     String statut, {
-    String? serverStatut,
+    required String serverStatut,
   }) async {
     try {
       await (await LocalDatabase.db).insert(
@@ -66,24 +77,24 @@ class VoyageDao {
         {
           'id_vente':      idVente,
           'statut':        statut,
-          'server_statut': serverStatut,   // nullable — null when saving offline
+          'server_statut': serverStatut,
           'cached_at':     DateTime.now().toIso8601String(),
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
+      print('✓ VoyageDao.saveVoyageStatut: vente=$idVente '
+            'statut=$statut serverStatut=$serverStatut');
     } catch (e) {
       print('❌ VoyageDao.saveVoyageStatut: $e');
     }
   }
 
-  /// Returns the locally-cached statut for [idVente], or null if none.
+  /// Read the cached local statut for [idVente].
   ///
-  /// Pass [currentServerStatut] (the value just received from the server) to
-  /// enable stale-cache detection: if the server has moved on since the cache
-  /// was written, the local row is discarded and null is returned.
-  ///
-  /// Offline clôture paths intentionally omit [currentServerStatut] so that
-  /// pending-cloture rows are never silently wiped.
+  /// If [currentServerStatut] is supplied AND it differs from the value that
+  /// was stored in server_statut when the row was written, the cache row is
+  /// discarded (the server moved on independently of our pending action).
+  /// Returns null in that case so the caller falls back to the server value.
   static Future<String?> getVoyageStatut(
     int idVente, {
     String? currentServerStatut,
@@ -100,17 +111,14 @@ class VoyageDao {
       final cached      = row['statut']        as String?;
       final serverSaved = row['server_statut'] as String?;
 
-      // Stale-cache check: only fires when BOTH saved and current values are
-      // known AND they differ — meaning the server changed state since we last
-      // wrote the cache.
+      // Only discard when BOTH sides are known — if serverSaved is null the
+      // row was written by an older code path; keep it rather than wiping.
       if (currentServerStatut != null &&
-          serverSaved           != null &&
-          currentServerStatut   != serverSaved) {
-        print(
-          '🔄 VoyageDao: server statut changed '
-          '($serverSaved → $currentServerStatut) '
-          'for vente $idVente — discarding local cache',
-        );
+          serverSaved          != null &&
+          currentServerStatut  != serverSaved) {
+        print('🔄 VoyageDao: server statut changed '
+              '($serverSaved → $currentServerStatut) '
+              'for vente $idVente — discarding local cache');
         await clearVoyageStatut(idVente);
         await _clearCloturePendingForVente(idVente);
         return null;
@@ -130,6 +138,7 @@ class VoyageDao {
         where: 'id_vente = ?',
         whereArgs: [idVente],
       );
+      print('✓ VoyageDao.clearVoyageStatut: vente=$idVente');
     } catch (e) {
       print('❌ VoyageDao.clearVoyageStatut: $e');
     }
@@ -137,8 +146,6 @@ class VoyageDao {
 
   // ═══════════════════════════════════════════════════════════
   // ── VOYAGES LIST CACHE ────────────────────────────────────────
-  // Positive matricule  → voyages programmés
-  // Negative matricule  → voyages non programmés
   // ═══════════════════════════════════════════════════════════
 
   static Future<void> saveVoyages(int matricule, List<dynamic> voyages) async {
@@ -152,7 +159,8 @@ class VoyageDao {
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      print('✓ VoyageDao.saveVoyages: matricule=$matricule (${voyages.length} items)');
+      print('✓ VoyageDao.saveVoyages: matricule=$matricule '
+            '(${voyages.length} items)');
     } catch (e) {
       print('❌ VoyageDao.saveVoyages: $e');
     }
@@ -169,8 +177,10 @@ class VoyageDao {
         print('ℹ️ VoyageDao: No voyages cached for matricule=$matricule');
         return null;
       }
-      final list = jsonDecode(rows.first['data'] as String) as List<dynamic>;
-      print('✓ VoyageDao.getVoyages: matricule=$matricule (${list.length} items)');
+      final list =
+          jsonDecode(rows.first['data'] as String) as List<dynamic>;
+      print('✓ VoyageDao.getVoyages: matricule=$matricule '
+            '(${list.length} items)');
       return list;
     } catch (e) {
       print('❌ VoyageDao.getVoyages: $e');
@@ -178,9 +188,10 @@ class VoyageDao {
     }
   }
 
-  /// Cross-checks every voyage in [serverVoyages] against the local cache.
-  /// Any row whose saved server_statut no longer matches the live value is
-  /// automatically evicted (via [getVoyageStatut] with stale-check enabled).
+  /// Called after a successful server fetch.
+  /// For each voyage in [serverVoyages], runs the stale-check so any
+  /// voyage_cache row whose server_statut no longer matches the live server
+  /// value is automatically discarded.
   static Future<void> clearStaleVoyageStatuts(
       List<dynamic> serverVoyages) async {
     try {
@@ -194,6 +205,178 @@ class VoyageDao {
       }
     } catch (e) {
       print('❌ VoyageDao.clearStaleVoyageStatuts: $e');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ── CLOTURE PENDING (full voyage) ───────────────────────────
+  // Queued when the agent clôtures a voyage while offline.
+  // SyncService drains this table on reconnect.
+  // ═══════════════════════════════════════════════════════════
+
+// ── VoyageDao: fix saveCloturePending ──────────────────────
+static Future<void> saveCloturePending(int idVente) async {
+  try {
+    await _clearReopenPendingForVente(idVente);
+    await (await LocalDatabase.db).insert(
+      'cloture_pending',
+      {
+        'id_vente':    idVente,
+        'created_at':  DateTime.now().toIso8601String(),
+        'statut_sync': 'pending',
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    // ✅ FIX: reflect closure immediately in local UI
+    await saveVoyageStatut(idVente, 'cloture', serverStatut: 'actif');
+    print('✓ VoyageDao.saveCloturePending: vente=$idVente');
+  } catch (e) {
+    print('❌ VoyageDao.saveCloturePending: $e');
+  }
+}
+
+  static Future<List<Map<String, dynamic>>> getPendingClotures() async {
+    try {
+      return await (await LocalDatabase.db).query(
+        'cloture_pending',
+        where: "statut_sync = 'pending'",
+        orderBy: 'created_at ASC',
+      );
+    } catch (e) {
+      print('❌ VoyageDao.getPendingClotures: $e');
+      return [];
+    }
+  }
+
+  static Future<void> markClotureSynced(int idVente) async {
+    try {
+      await (await LocalDatabase.db).update(
+        'cloture_pending',
+        {'statut_sync': 'synced'},
+        where: 'id_vente = ?',
+        whereArgs: [idVente],
+      );
+      print('✓ VoyageDao.markClotureSynced: vente=$idVente');
+    } catch (e) {
+      print('❌ VoyageDao.markClotureSynced: $e');
+    }
+  }
+
+  static Future<void> markClotureFailed(int idVente) async {
+    try {
+      await (await LocalDatabase.db).update(
+        'cloture_pending',
+        {'statut_sync': 'failed'},
+        where: 'id_vente = ?',
+        whereArgs: [idVente],
+      );
+      print('✓ VoyageDao.markClotureFailed: vente=$idVente');
+    } catch (e) {
+      print('❌ VoyageDao.markClotureFailed: $e');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ── REOPEN PENDING ───────────────────────────────────────────
+  // Queued when the agent reopens a voyage while offline.
+  // scope = 'single'  → individual voyage
+  // scope = 'journee' → full journée batch (synced one-by-one)
+  // ═══════════════════════════════════════════════════════════
+
+ // ── VoyageDao: fix saveReopenPending ───────────────────────
+static Future<void> saveReopenPending(
+  int idVente, {
+  String scope = 'single',
+}) async {
+  try {
+    await _clearCloturePendingForVente(idVente);
+    await (await LocalDatabase.db).insert(
+      'reopen_pending',
+      {
+        'id_vente':    idVente,
+        'scope':       scope,
+        'created_at':  DateTime.now().toIso8601String(),
+        'statut_sync': 'pending',
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    // ✅ FIX: reflect reopen immediately in local UI
+    await saveVoyageStatut(idVente, 'actif', serverStatut: 'cloture');
+    print('✓ VoyageDao.saveReopenPending: vente=$idVente scope=$scope');
+  } catch (e) {
+    print('❌ VoyageDao.saveReopenPending: $e');
+  }
+}
+// ── TicketDao: add the missing scoped query ─────────────────
+static Future<List<Map<String, dynamic>>> getUnsyncedTicketsForVente(
+    int idVente) async {
+  try {
+    return await (await LocalDatabase.db).query(
+      'ticket_vendu_local',
+      where: "id_vente = ? AND statut_sync = 'pending'",
+      whereArgs: [idVente],
+    );
+  } catch (e) {
+    print('❌ TicketDao.getUnsyncedTicketsForVente: $e');
+    return [];
+  }
+}
+
+  static Future<List<Map<String, dynamic>>> getPendingReopens() async {
+    try {
+      return await (await LocalDatabase.db).query(
+        'reopen_pending',
+        where: "statut_sync = 'pending'",
+        orderBy: 'created_at ASC',
+      );
+    } catch (e) {
+      print('❌ VoyageDao.getPendingReopens: $e');
+      return [];
+    }
+  }
+
+  /// Returns true when a reopen is queued for [idVente] and has not yet been
+  /// synced.  Used by _mergeLocalStatuts to override a server 'cloture' with
+  /// 'actif' while the device is still offline.
+  static Future<bool> isReopenPending(int idVente) async {
+    try {
+      final rows = await (await LocalDatabase.db).query(
+        'reopen_pending',
+        where: "id_vente = ? AND statut_sync = 'pending'",
+        whereArgs: [idVente],
+      );
+      return rows.isNotEmpty;
+    } catch (e) {
+      print('❌ VoyageDao.isReopenPending: $e');
+      return false;
+    }
+  }
+
+  static Future<void> markReopenSynced(int idVente) async {
+    try {
+      await (await LocalDatabase.db).update(
+        'reopen_pending',
+        {'statut_sync': 'synced'},
+        where: 'id_vente = ?',
+        whereArgs: [idVente],
+      );
+      print('✓ VoyageDao.markReopenSynced: vente=$idVente');
+    } catch (e) {
+      print('❌ VoyageDao.markReopenSynced: $e');
+    }
+  }
+
+  static Future<void> markReopenFailed(int idVente) async {
+    try {
+      await (await LocalDatabase.db).update(
+        'reopen_pending',
+        {'statut_sync': 'failed'},
+        where: 'id_vente = ?',
+        whereArgs: [idVente],
+      );
+      print('✓ VoyageDao.markReopenFailed: vente=$idVente');
+    } catch (e) {
+      print('❌ VoyageDao.markReopenFailed: $e');
     }
   }
 
@@ -213,15 +396,18 @@ class VoyageDao {
         'segment_cache',
         {
           'id_vente':         idVente,
-          'actif_segment':    actifSegment    != null ? jsonEncode(actifSegment)    : null,
-          'prochain_segment': prochainSegment != null ? jsonEncode(prochainSegment) : null,
+          'actif_segment':    actifSegment    != null
+              ? jsonEncode(actifSegment) : null,
+          'prochain_segment': prochainSegment != null
+              ? jsonEncode(prochainSegment) : null,
           'tous_segments':    jsonEncode(tousSecteurs),
           'tous_clotures':    tousClotures ? 1 : 0,
           'cached_at':        DateTime.now().toIso8601String(),
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      print('✓ VoyageDao.saveSegments: vente=$idVente tousClotures=$tousClotures');
+      print('✓ VoyageDao.saveSegments: vente=$idVente '
+            'tousClotures=$tousClotures');
     } catch (e) {
       print('❌ VoyageDao.saveSegments: $e');
     }
@@ -237,13 +423,12 @@ class VoyageDao {
       if (rows.isEmpty) return null;
       final row = rows.first;
       return {
-        'segment': row['actif_segment'] != null
-            ? jsonDecode(row['actif_segment'] as String)
-            : null,
+        'segment':  row['actif_segment'] != null
+            ? jsonDecode(row['actif_segment'] as String) : null,
         'prochain': row['prochain_segment'] != null
-            ? jsonDecode(row['prochain_segment'] as String)
-            : null,
-        'segments':      jsonDecode(row['tous_segments'] as String) as List<dynamic>,
+            ? jsonDecode(row['prochain_segment'] as String) : null,
+        'segments':      jsonDecode(row['tous_segments'] as String)
+            as List<dynamic>,
         'tous_clotures': (row['tous_clotures'] as int?) == 1,
         'cached_at':     row['cached_at'],
       };
@@ -287,13 +472,15 @@ class VoyageDao {
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      print('✓ VoyageDao.saveSegmentCloturePending: vente=$idVente seg=$idSegment');
+      print('✓ VoyageDao.saveSegmentCloturePending: '
+            'vente=$idVente seg=$idSegment');
     } catch (e) {
       print('❌ VoyageDao.saveSegmentCloturePending: $e');
     }
   }
 
-  static Future<List<Map<String, dynamic>>> getPendingSegmentClotures() async {
+  static Future<List<Map<String, dynamic>>>
+      getPendingSegmentClotures() async {
     try {
       return await (await LocalDatabase.db).query(
         'segment_cloture_pending',
@@ -315,7 +502,6 @@ class VoyageDao {
         where: 'id_vente = ? AND id_segment = ?',
         whereArgs: [idVente, idSegment],
       );
-      print('✓ VoyageDao.markSegmentClotureSynced: vente=$idVente seg=$idSegment');
     } catch (e) {
       print('❌ VoyageDao.markSegmentClotureSynced: $e');
     }
@@ -330,74 +516,14 @@ class VoyageDao {
         where: 'id_vente = ? AND id_segment = ?',
         whereArgs: [idVente, idSegment],
       );
-      print('✓ VoyageDao.markSegmentClotureFailed: vente=$idVente seg=$idSegment');
     } catch (e) {
       print('❌ VoyageDao.markSegmentClotureFailed: $e');
     }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // ── CLOTURE PENDING (full voyage) ───────────────────────────
+  // ── PRIVATE HELPERS ──────────────────────────────────────────
   // ═══════════════════════════════════════════════════════════
-
-  static Future<void> saveCloturePending(int idVente) async {
-    try {
-      await (await LocalDatabase.db).insert(
-        'cloture_pending',
-        {
-          'id_vente':    idVente,
-          'created_at':  DateTime.now().toIso8601String(),
-          'statut_sync': 'pending',
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-      print('✓ VoyageDao.saveCloturePending: vente=$idVente');
-    } catch (e) {
-      print('❌ VoyageDao.saveCloturePending: $e');
-    }
-  }
-
-  static Future<List<Map<String, dynamic>>> getPendingClotures() async {
-    try {
-      return await (await LocalDatabase.db).query(
-        'cloture_pending',
-        where: "statut_sync = 'pending'",
-      );
-    } catch (e) {
-      print('❌ VoyageDao.getPendingClotures: $e');
-      return [];
-    }
-  }
-
-  static Future<void> markClotureSynced(int idVente) async {
-    try {
-      await (await LocalDatabase.db).update(
-        'cloture_pending',
-        {'statut_sync': 'synced'},
-        where: 'id_vente = ?',
-        whereArgs: [idVente],
-      );
-      print('✓ VoyageDao.markClotureSynced: vente=$idVente');
-    } catch (e) {
-      print('❌ VoyageDao.markClotureSynced: $e');
-    }
-  }
-
-  static Future<void> markClotureFailed(int idVente) async {
-    try {
-      await (await LocalDatabase.db).update(
-        'cloture_pending',
-        {'statut_sync': 'failed'},
-        where: 'id_vente = ?',
-        whereArgs: [idVente],
-      );
-      print('✓ VoyageDao.markClotureFailed: vente=$idVente');
-    } catch (e) {
-      print('❌ VoyageDao.markClotureFailed: $e');
-    }
-  }
-
-  // ── Private helpers ─────────────────────────────────────────
 
   static Future<void> _clearCloturePendingForVente(int idVente) async {
     try {
@@ -408,6 +534,18 @@ class VoyageDao {
       );
     } catch (e) {
       print('❌ VoyageDao._clearCloturePendingForVente: $e');
+    }
+  }
+
+  static Future<void> _clearReopenPendingForVente(int idVente) async {
+    try {
+      await (await LocalDatabase.db).delete(
+        'reopen_pending',
+        where: 'id_vente = ?',
+        whereArgs: [idVente],
+      );
+    } catch (e) {
+      print('❌ VoyageDao._clearReopenPendingForVente: $e');
     }
   }
 }

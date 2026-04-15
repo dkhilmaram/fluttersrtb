@@ -8,19 +8,33 @@ class ApiConstants {
   static const String vendreTicket = '$billetterie/tickets/vendre';
 
   // ── Voyages ──
-  static const String voyagesProgrammes    = '$billetterie/voyages/programmes';
-  static const String voyagesNonProgrammes = '$billetterie/voyages/non-programmes';
+  static const String voyagesProgrammesBase    = '$billetterie/ventes/programmees';
+  static const String voyagesNonProgrammesBase = '$billetterie/ventes/agent';
 
-  // ── Sync ──
+  static String voyagesProgrammes(int matricule) =>
+      '$voyagesProgrammesBase/$matricule';
+  static String voyagesNonProgrammes(int matricule) =>
+      '$voyagesNonProgrammesBase/$matricule';
+
+  // ── Clôture / Réouverture ──
+  static const String clotureJournee = '$billetterie/ventes/cloturer-journee';
+  static const String reopenJournee  = '$billetterie/ventes/reopen-journee';
+
+  static String cloturerVoyage(int idVente) =>
+      '$billetterie/vente/$idVente/cloturer';
+  static String reopenVoyage(int idVente) =>
+      '$billetterie/vente/$idVente/reopen';
+
+  // ── Segments ──
   static String voyageSegments(int idVente) =>
       '$billetterie/voyages/$idVente/segments';
   static String ouvrirSegment(int idVente) =>
       '$billetterie/voyages/$idVente/segment/ouvrir';
   static String cloturerSegment(int idVente, int idSegment) =>
       '$billetterie/voyages/$idVente/segments/$idSegment/cloturer';
-  static String cloturerVoyage(int idVente) =>
-      '$billetterie/vente/$idVente/cloturer';
 
   // ── Timeouts ──
-  static const Duration defaultTimeout = Duration(seconds: 6);
+  static const Duration defaultTimeout  = Duration(seconds: 6);
+  static const Duration actionTimeout   = Duration(seconds: 10);
+  static const Duration reopenTimeout   = Duration(seconds: 8);
 }

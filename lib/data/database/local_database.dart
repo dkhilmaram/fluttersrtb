@@ -29,7 +29,8 @@ class LocalDatabase {
     final path = join(await getDatabasesPath(), 'srtb_offline.db');
     return openDatabase(
       path,
-      version: 7,
+      // ⬆️ Bumped to 8 — adds reopen_pending table
+      version: 8,
       onCreate: (db, version) async {
         print('📦 Creating database v$version...');
         await _createAllTables(db);
@@ -37,6 +38,7 @@ class LocalDatabase {
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         print('⬆️ Upgrading database v$oldVersion → v$newVersion...');
+
         if (oldVersion < 7) {
           try {
             await db.execute(
@@ -47,6 +49,25 @@ class LocalDatabase {
             print('⚠️ server_statut migration skipped: $e');
           }
         }
+
+        // v8 — reopen_pending
+        if (oldVersion < 8) {
+          try {
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS reopen_pending (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                id_vente    INTEGER NOT NULL UNIQUE,
+                scope       TEXT    NOT NULL DEFAULT 'single',
+                created_at  TEXT    NOT NULL,
+                statut_sync TEXT    NOT NULL DEFAULT 'pending'
+              )
+            ''');
+            print('✓ Created reopen_pending table');
+          } catch (e) {
+            print('⚠️ reopen_pending migration skipped: $e');
+          }
+        }
+
         await _createAllTables(db);
         print('✓ Database upgraded');
       },
@@ -126,6 +147,16 @@ class LocalDatabase {
         created_at  TEXT    NOT NULL,
         statut_sync TEXT    NOT NULL DEFAULT 'pending',
         UNIQUE(id_vente, id_segment)
+      )''',
+      // ── NEW v8 ────────────────────────────────────────────────
+      // scope = 'single'  → one voyage was reopened offline
+      // scope = 'journee' → full journée reopen (all clotured voyages)
+      '''CREATE TABLE IF NOT EXISTS reopen_pending (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        id_vente    INTEGER NOT NULL UNIQUE,
+        scope       TEXT    NOT NULL DEFAULT 'single',
+        created_at  TEXT    NOT NULL,
+        statut_sync TEXT    NOT NULL DEFAULT 'pending'
       )''',
     ];
 
