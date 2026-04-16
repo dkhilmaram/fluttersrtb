@@ -193,6 +193,312 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Société Régionale des Transports de Bizerte'**
   String get srtbFullName;
+
+  /// No description provided for @mesVoyages.
+  ///
+  /// In fr, this message translates to:
+  /// **'Mes Voyages'**
+  String get mesVoyages;
+
+  /// No description provided for @programmes.
+  ///
+  /// In fr, this message translates to:
+  /// **'Programmés'**
+  String get programmes;
+
+  /// No description provided for @nonProgrammes.
+  ///
+  /// In fr, this message translates to:
+  /// **'Non programmés'**
+  String get nonProgrammes;
+
+  /// No description provided for @total.
+  ///
+  /// In fr, this message translates to:
+  /// **'Total'**
+  String get total;
+
+  /// No description provided for @clotures.
+  ///
+  /// In fr, this message translates to:
+  /// **'Clôturés'**
+  String get clotures;
+
+  /// No description provided for @enCours.
+  ///
+  /// In fr, this message translates to:
+  /// **'En cours'**
+  String get enCours;
+
+  /// No description provided for @actifs.
+  ///
+  /// In fr, this message translates to:
+  /// **'Actifs'**
+  String get actifs;
+
+  /// No description provided for @aucunVoyageProgramme.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucun voyage programmé'**
+  String get aucunVoyageProgramme;
+
+  /// No description provided for @aucunVoyageNonProgramme.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucun voyage non programmé'**
+  String get aucunVoyageNonProgramme;
+
+  /// No description provided for @cloturerJournee.
+  ///
+  /// In fr, this message translates to:
+  /// **'Clôture Journée'**
+  String get cloturerJournee;
+
+  /// No description provided for @cloturerJourneeQuestion.
+  ///
+  /// In fr, this message translates to:
+  /// **'Clôturer toute la journée ?'**
+  String get cloturerJourneeQuestion;
+
+  /// No description provided for @annuler.
+  ///
+  /// In fr, this message translates to:
+  /// **'Annuler'**
+  String get annuler;
+
+  /// No description provided for @confirmer.
+  ///
+  /// In fr, this message translates to:
+  /// **'Confirmer'**
+  String get confirmer;
+
+  /// No description provided for @reouvrirJournee.
+  ///
+  /// In fr, this message translates to:
+  /// **'Réouvrir la Journée'**
+  String get reouvrirJournee;
+
+  /// No description provided for @exporterRapport.
+  ///
+  /// In fr, this message translates to:
+  /// **'Exporter & Envoyer le rapport'**
+  String get exporterRapport;
+
+  /// No description provided for @statutCloture.
+  ///
+  /// In fr, this message translates to:
+  /// **'Clôturé'**
+  String get statutCloture;
+
+  /// No description provided for @statutEnAttente.
+  ///
+  /// In fr, this message translates to:
+  /// **'En attente'**
+  String get statutEnAttente;
+
+  /// No description provided for @statutActif.
+  ///
+  /// In fr, this message translates to:
+  /// **'Actif'**
+  String get statutActif;
+
+  /// No description provided for @horsLignePasDeDonnees.
+  ///
+  /// In fr, this message translates to:
+  /// **'Hors-ligne — pas de données disponibles'**
+  String get horsLignePasDeDonnees;
+
+  /// No description provided for @modeHorsLigne.
+  ///
+  /// In fr, this message translates to:
+  /// **'Mode hors-ligne'**
+  String get modeHorsLigne;
+
+  /// No description provided for @tousDejaClotureToast.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tous les voyages sont déjà clôturés'**
+  String get tousDejaClotureToast;
+
+  /// No description provided for @echecCloture.
+  ///
+  /// In fr, this message translates to:
+  /// **'Échec de la clôture'**
+  String get echecCloture;
+
+  /// No description provided for @aucunAReouvrirToast.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucun voyage clôturé à réouvrir'**
+  String get aucunAReouvrirToast;
+
+  /// No description provided for @reouvertureEnCours.
+  ///
+  /// In fr, this message translates to:
+  /// **'Réouverture en cours…'**
+  String get reouvertureEnCours;
+
+  /// No description provided for @echecReouverture.
+  ///
+  /// In fr, this message translates to:
+  /// **'Échec de la réouverture'**
+  String get echecReouverture;
+
+  /// No description provided for @voyageReouvertOffline.
+  ///
+  /// In fr, this message translates to:
+  /// **'Voyage réouvert (hors-ligne)'**
+  String get voyageReouvertOffline;
+
+  /// No description provided for @voyageReouvert.
+  ///
+  /// In fr, this message translates to:
+  /// **'Voyage réouvert avec succès'**
+  String get voyageReouvert;
+
+  /// No description provided for @generationExcel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Génération du fichier Excel…'**
+  String get generationExcel;
+
+  /// No description provided for @generationPdf.
+  ///
+  /// In fr, this message translates to:
+  /// **'Génération du fichier PDF…'**
+  String get generationPdf;
+
+  /// No description provided for @rapportEnvoye.
+  ///
+  /// In fr, this message translates to:
+  /// **'Rapport envoyé avec succès'**
+  String get rapportEnvoye;
+
+  /// No description provided for @terminerVoyageEnCoursToast.
+  ///
+  /// In fr, this message translates to:
+  /// **'Terminez le voyage en cours avant de continuer'**
+  String get terminerVoyageEnCoursToast;
+
+  /// No description provided for @cloturureEnCours.
+  ///
+  /// In fr, this message translates to:
+  /// **'Clôture en cours…'**
+  String get cloturureEnCours;
+
+  /// No description provided for @envoiEnCours.
+  ///
+  /// In fr, this message translates to:
+  /// **'Envoi en cours…'**
+  String get envoiEnCours;
+
+  /// No description provided for @appuyerReouvrirLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Appuyer pour réouvrir'**
+  String get appuyerReouvrirLabel;
+
+  /// No description provided for @enAttenteVoyagePrecedent.
+  ///
+  /// In fr, this message translates to:
+  /// **'En attente du voyage précédent'**
+  String get enAttenteVoyagePrecedent;
+
+  /// No description provided for @reessayer.
+  ///
+  /// In fr, this message translates to:
+  /// **'Réessayer'**
+  String get reessayer;
+
+  /// No description provided for @envoyerRapport.
+  ///
+  /// In fr, this message translates to:
+  /// **'Envoyer le rapport'**
+  String get envoyerRapport;
+
+  /// No description provided for @reouvrirJourneeQuestion.
+  ///
+  /// In fr, this message translates to:
+  /// **'Réouvrir la journée ?'**
+  String get reouvrirJourneeQuestion;
+
+  /// No description provided for @actionReversible.
+  ///
+  /// In fr, this message translates to:
+  /// **'Cette action est réversible'**
+  String get actionReversible;
+
+  /// No description provided for @reouvrirTout.
+  ///
+  /// In fr, this message translates to:
+  /// **'Réouvrir tout'**
+  String get reouvrirTout;
+
+  /// No description provided for @reouvrirCeVoyage.
+  ///
+  /// In fr, this message translates to:
+  /// **'Réouvrir ce voyage ?'**
+  String get reouvrirCeVoyage;
+
+  /// No description provided for @reouvrirVoyageBody.
+  ///
+  /// In fr, this message translates to:
+  /// **'Le voyage sera remis en statut actif et vous pourrez à nouveau vendre des tickets.'**
+  String get reouvrirVoyageBody;
+
+  /// No description provided for @rouvrir.
+  ///
+  /// In fr, this message translates to:
+  /// **'Rouvrir'**
+  String get rouvrir;
+
+  /// No description provided for @journeeClotureOffline.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count} voyage(s) clôturé(s) (hors-ligne)'**
+  String journeeClotureOffline(int count);
+
+  /// No description provided for @journeeCloture.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count} voyage(s) clôturé(s) avec succès'**
+  String journeeCloture(int count);
+
+  /// No description provided for @journeeReouverteOffline.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count} voyage(s) réouvert(s) (hors-ligne)'**
+  String journeeReouverteOffline(int count);
+
+  /// No description provided for @journeeReouverte.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count} voyage(s) réouvert(s) avec succès'**
+  String journeeReouverte(int count);
+
+  /// No description provided for @erreurExport.
+  ///
+  /// In fr, this message translates to:
+  /// **'Erreur lors de l\'export : {error}'**
+  String erreurExport(String error);
+
+  /// No description provided for @voyagesConfirmBody.
+  ///
+  /// In fr, this message translates to:
+  /// **'Vous êtes sur le point de clôturer {count} voyage(s) pour le {date}.'**
+  String voyagesConfirmBody(int count, String date);
+
+  /// No description provided for @envoyerRapportBody.
+  ///
+  /// In fr, this message translates to:
+  /// **'Le rapport du {date} sera envoyé par e-mail à :'**
+  String envoyerRapportBody(String date);
+
+  /// No description provided for @reouvrirJourneeBody.
+  ///
+  /// In fr, this message translates to:
+  /// **'Vous allez réouvrir {count} voyage(s) clôturé(s) du {date}.'**
+  String reouvrirJourneeBody(int count, String date);
 }
 
 class _AppLocalizationsDelegate

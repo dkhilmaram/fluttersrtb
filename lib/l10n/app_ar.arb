@@ -26,5 +26,86 @@
   "loginError": "رقم التسجيل أو كلمة المرور غير صحيحة",
   "matriculeInvalid": "رقم التسجيل غير صالح",
   "offlineNoAccount": "بدون اتصال — لم يتم العثور على حساب محلي",
-  "srtbFullName": "الشركة الجهوية للنقل ببنزرت"
+  "srtbFullName": "الشركة الجهوية للنقل ببنزرت",
+  "mesVoyages": "رحلاتي",
+  "programmes": "المبرمجة",
+  "nonProgrammes": "غير المبرمجة",
+  "total": "المجموع",
+  "clotures": "المغلقة",
+  "enCours": "جارية",
+  "actifs": "نشطة",
+  "aucunVoyageProgramme": "لا توجد رحلات مبرمجة",
+  "aucunVoyageNonProgramme": "لا توجد رحلات غير مبرمجة",
+  "cloturerJournee": "إغلاق اليوم",
+  "cloturerJourneeQuestion": "إغلاق كل اليوم؟",
+  "annuler": "إلغاء",
+  "confirmer": "تأكيد",
+  "reouvrirJournee": "إعادة فتح اليوم",
+  "exporterRapport": "تصدير وإرسال التقرير",
+  "statutCloture": "مغلق",
+  "statutEnAttente": "في الانتظار",
+  "statutActif": "نشط",
+  "horsLignePasDeDonnees": "بدون اتصال — لا توجد بيانات متاحة",
+  "modeHorsLigne": "وضع عدم الاتصال",
+  "tousDejaClotureToast": "جميع الرحلات مغلقة بالفعل",
+  "echecCloture": "فشل الإغلاق",
+  "aucunAReouvrirToast": "لا توجد رحلات مغلقة لإعادة فتحها",
+  "reouvertureEnCours": "جارٍ إعادة الفتح…",
+  "echecReouverture": "فشل إعادة الفتح",
+  "voyageReouvertOffline": "تمت إعادة فتح الرحلة (بدون اتصال)",
+  "voyageReouvert": "تمت إعادة فتح الرحلة بنجاح",
+  "generationExcel": "جارٍ إنشاء ملف Excel…",
+  "generationPdf": "جارٍ إنشاء ملف PDF…",
+  "rapportEnvoye": "تم إرسال التقرير بنجاح",
+  "terminerVoyageEnCoursToast": "أنهِ الرحلة الجارية قبل المتابعة",
+  "cloturureEnCours": "جارٍ الإغلاق…",
+  "envoiEnCours": "جارٍ الإرسال…",
+  "appuyerReouvrirLabel": "اضغط لإعادة الفتح",
+  "enAttenteVoyagePrecedent": "في انتظار الرحلة السابقة",
+  "reessayer": "إعادة المحاولة",
+  "envoyerRapport": "إرسال التقرير",
+  "reouvrirJourneeQuestion": "إعادة فتح اليوم؟",
+  "actionReversible": "هذا الإجراء قابل للتراجع",
+  "reouvrirTout": "إعادة فتح الكل",
+  "reouvrirCeVoyage": "إعادة فتح هذه الرحلة؟",
+  "reouvrirVoyageBody": "ستعود الرحلة إلى الحالة النشطة وستتمكن من بيع التذاكر مجدداً.",
+  "rouvrir": "إعادة فتح",
+  "journeeClotureOffline": "تم إغلاق {count} رحلة (بدون اتصال)",
+  "@journeeClotureOffline": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "journeeCloture": "تم إغلاق {count} رحلة بنجاح",
+  "@journeeCloture": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "journeeReouverteOffline": "تمت إعادة فتح {count} رحلة (بدون اتصال)",
+  "@journeeReouverteOffline": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "journeeReouverte": "تمت إعادة فتح {count} رحلة بنجاح",
+  "@journeeReouverte": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "erreurExport": "خطأ أثناء التصدير: {error}",
+  "@erreurExport": {
+    "placeholders": { "error": { "type": "String" } }
+  },
+  "voyagesConfirmBody": "أنت على وشك إغلاق {count} رحلة ليوم {date}.",
+  "@voyagesConfirmBody": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "date":  { "type": "String" }
+    }
+  },
+  "envoyerRapportBody": "سيتم إرسال تقرير يوم {date} عبر البريد الإلكتروني إلى:",
+  "@envoyerRapportBody": {
+    "placeholders": { "date": { "type": "String" } }
+  },
+  "reouvrirJourneeBody": "ستقوم بإعادة فتح {count} رحلة مغلقة ليوم {date}.",
+  "@reouvrirJourneeBody": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "date":  { "type": "String" }
+    }
+  }
 }

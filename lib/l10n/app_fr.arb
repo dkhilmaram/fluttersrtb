@@ -26,5 +26,86 @@
   "loginError": "Matricule ou mot de passe incorrect",
   "matriculeInvalid": "Matricule invalide",
   "offlineNoAccount": "Hors-ligne — aucun compte local trouvé",
-  "srtbFullName": "Société Régionale des Transports de Bizerte"
+  "srtbFullName": "Société Régionale des Transports de Bizerte",
+  "mesVoyages": "Mes Voyages",
+  "programmes": "Programmés",
+  "nonProgrammes": "Non programmés",
+  "total": "Total",
+  "clotures": "Clôturés",
+  "enCours": "En cours",
+  "actifs": "Actifs",
+  "aucunVoyageProgramme": "Aucun voyage programmé",
+  "aucunVoyageNonProgramme": "Aucun voyage non programmé",
+  "cloturerJournee": "Clôture Journée",
+  "cloturerJourneeQuestion": "Clôturer toute la journée ?",
+  "annuler": "Annuler",
+  "confirmer": "Confirmer",
+  "reouvrirJournee": "Réouvrir la Journée",
+  "exporterRapport": "Exporter & Envoyer le rapport",
+  "statutCloture": "Clôturé",
+  "statutEnAttente": "En attente",
+  "statutActif": "Actif",
+  "horsLignePasDeDonnees": "Hors-ligne — pas de données disponibles",
+  "modeHorsLigne": "Mode hors-ligne",
+  "tousDejaClotureToast": "Tous les voyages sont déjà clôturés",
+  "echecCloture": "Échec de la clôture",
+  "aucunAReouvrirToast": "Aucun voyage clôturé à réouvrir",
+  "reouvertureEnCours": "Réouverture en cours…",
+  "echecReouverture": "Échec de la réouverture",
+  "voyageReouvertOffline": "Voyage réouvert (hors-ligne)",
+  "voyageReouvert": "Voyage réouvert avec succès",
+  "generationExcel": "Génération du fichier Excel…",
+  "generationPdf": "Génération du fichier PDF…",
+  "rapportEnvoye": "Rapport envoyé avec succès",
+  "terminerVoyageEnCoursToast": "Terminez le voyage en cours avant de continuer",
+  "cloturureEnCours": "Clôture en cours…",
+  "envoiEnCours": "Envoi en cours…",
+  "appuyerReouvrirLabel": "Appuyer pour réouvrir",
+  "enAttenteVoyagePrecedent": "En attente du voyage précédent",
+  "reessayer": "Réessayer",
+  "envoyerRapport": "Envoyer le rapport",
+  "reouvrirJourneeQuestion": "Réouvrir la journée ?",
+  "actionReversible": "Cette action est réversible",
+  "reouvrirTout": "Réouvrir tout",
+  "reouvrirCeVoyage": "Réouvrir ce voyage ?",
+  "reouvrirVoyageBody": "Le voyage sera remis en statut actif et vous pourrez à nouveau vendre des tickets.",
+  "rouvrir": "Rouvrir",
+  "journeeClotureOffline": "{count} voyage(s) clôturé(s) (hors-ligne)",
+  "@journeeClotureOffline": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "journeeCloture": "{count} voyage(s) clôturé(s) avec succès",
+  "@journeeCloture": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "journeeReouverteOffline": "{count} voyage(s) réouvert(s) (hors-ligne)",
+  "@journeeReouverteOffline": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "journeeReouverte": "{count} voyage(s) réouvert(s) avec succès",
+  "@journeeReouverte": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "erreurExport": "Erreur lors de l'export : {error}",
+  "@erreurExport": {
+    "placeholders": { "error": { "type": "String" } }
+  },
+  "voyagesConfirmBody": "Vous êtes sur le point de clôturer {count} voyage(s) pour le {date}.",
+  "@voyagesConfirmBody": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "date":  { "type": "String" }
+    }
+  },
+  "envoyerRapportBody": "Le rapport du {date} sera envoyé par e-mail à :",
+  "@envoyerRapportBody": {
+    "placeholders": { "date": { "type": "String" } }
+  },
+  "reouvrirJourneeBody": "Vous allez réouvrir {count} voyage(s) clôturé(s) du {date}.",
+  "@reouvrirJourneeBody": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "date":  { "type": "String" }
+    }
+  }
 }

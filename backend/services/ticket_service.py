@@ -21,7 +21,7 @@ class TicketService:
         type_tarif    = data.get("type_tarif", "")
         prix_unitaire = float(data.get("prix_unitaire", 0))
         montant_total = float(data.get("montant_total", 0))
-        id_vente      = data.get("id_vente")
+        id_voyage      = data.get("id_voyage")
         id_segment    = data.get("id_segment", 0)
 
         # Validate special passage pricing
@@ -30,18 +30,18 @@ class TicketService:
 
         # Resolve segment if not provided
         if id_segment == 0:
-            seg = self.seg_repo.get_actif(id_vente)
+            seg = self.seg_repo.get_actif(id_voyage)
             if seg:
                 id_segment = seg["id_segment"]
             else:
-                last = self.seg_repo.get_last(id_vente)
+                last = self.seg_repo.get_last(id_voyage)
                 if last:
                     id_segment = last["id_segment"]
                 else:
                     raise SegmentIntrouvable()
 
         return self.repo.create(
-            id_vente      = id_vente,
+            id_voyage      = id_voyage,
             id_segment    = id_segment,
             point_depart  = data.get("point_depart"),
             point_arrivee = data.get("point_arrivee"),
@@ -52,8 +52,8 @@ class TicketService:
             matricule_agent = data.get("matricule_agent"),
         )
 
-    def get_by_voyage(self, id_vente: int):
-        rows = self.repo.get_by_voyage(id_vente)
+    def get_by_voyage(self, id_voyage: int):
+        rows = self.repo.get_by_voyage(id_voyage)
         return [
             {
                 **r,
@@ -64,5 +64,5 @@ class TicketService:
             for r in rows
         ]
 
-    def get_special_stats(self, id_vente: int):
-        return self.repo.get_special_stats(id_vente)
+    def get_special_stats(self, id_voyage: int):
+        return self.repo.get_special_stats(id_voyage)

@@ -3,9 +3,20 @@ import 'package:path/path.dart';
 
 class OfflineClotureResult {
   final bool allDone;
-  final Map<String, dynamic>? newActif;
-  final Map<String, dynamic>? newProchain;
-  final List<dynamic> updatedSegments;
+  final Map<
+    String,
+    dynamic
+  >?
+  newActif;
+  final Map<
+    String,
+    dynamic
+  >?
+  newProchain;
+  final List<
+    dynamic
+  >
+  updatedSegments;
 
   const OfflineClotureResult({
     required this.allDone,
@@ -20,66 +31,122 @@ class LocalDatabase {
 
   static Database? _db;
 
-  static Future<Database> get db async {
+  static Future<
+    Database
+  >
+  get db async {
     _db ??= await _init();
     return _db!;
   }
 
-  static Future<Database> _init() async {
-    final path = join(await getDatabasesPath(), 'srtb_offline.db');
+  static Future<
+    Database
+  >
+  _init() async {
+    final path = join(
+      await getDatabasesPath(),
+      'srtb_offline.db',
+    );
     return openDatabase(
       path,
       // ⬆️ Bumped to 8 — adds reopen_pending table
       version: 8,
-      onCreate: (db, version) async {
-        print('📦 Creating database v$version...');
-        await _createAllTables(db);
-        print('✓ Database created');
-      },
-      onUpgrade: (db, oldVersion, newVersion) async {
-        print('⬆️ Upgrading database v$oldVersion → v$newVersion...');
-
-        if (oldVersion < 7) {
-          try {
-            await db.execute(
-              'ALTER TABLE voyage_cache ADD COLUMN server_statut TEXT',
+      onCreate:
+          (
+            db,
+            version,
+          ) async {
+            print(
+              '📦 Creating database v$version...',
             );
-            print('✓ Added server_statut to voyage_cache');
-          } catch (e) {
-            print('⚠️ server_statut migration skipped: $e');
-          }
-        }
+            await _createAllTables(
+              db,
+            );
+            print(
+              '✓ Database created',
+            );
+          },
+      onUpgrade:
+          (
+            db,
+            oldVersion,
+            newVersion,
+          ) async {
+            print(
+              '⬆️ Upgrading database v$oldVersion → v$newVersion...',
+            );
 
-        // v8 — reopen_pending
-        if (oldVersion < 8) {
-          try {
-            await db.execute('''
+            if (oldVersion <
+                7) {
+              try {
+                await db.execute(
+                  'ALTER TABLE voyage_cache ADD COLUMN server_statut TEXT',
+                );
+                print(
+                  '✓ Added server_statut to voyage_cache',
+                );
+              } catch (
+                e
+              ) {
+                print(
+                  '⚠️ server_statut migration skipped: $e',
+                );
+              }
+            }
+
+            // v8 — reopen_pending
+            if (oldVersion <
+                8) {
+              try {
+                await db.execute(
+                  '''
               CREATE TABLE IF NOT EXISTS reopen_pending (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                id_vente    INTEGER NOT NULL UNIQUE,
+                id_voyage    INTEGER NOT NULL UNIQUE,
                 scope       TEXT    NOT NULL DEFAULT 'single',
                 created_at  TEXT    NOT NULL,
                 statut_sync TEXT    NOT NULL DEFAULT 'pending'
               )
-            ''');
-            print('✓ Created reopen_pending table');
-          } catch (e) {
-            print('⚠️ reopen_pending migration skipped: $e');
-          }
-        }
+            ''',
+                );
+                print(
+                  '✓ Created reopen_pending table',
+                );
+              } catch (
+                e
+              ) {
+                print(
+                  '⚠️ reopen_pending migration skipped: $e',
+                );
+              }
+            }
 
-        await _createAllTables(db);
-        print('✓ Database upgraded');
-      },
-      onOpen: (db) async => _createAllTables(db),
+            await _createAllTables(
+              db,
+            );
+            print(
+              '✓ Database upgraded',
+            );
+          },
+      onOpen:
+          (
+            db,
+          ) async => _createAllTables(
+            db,
+          ),
     );
   }
 
-  static Future<void> _createAllTables(Database db) async {
+  static Future<
+    void
+  >
+  _createAllTables(
+    Database db,
+  ) async {
     const tables = [
       '''CREATE TABLE IF NOT EXISTS ticket_vendu_local (
         id               INTEGER PRIMARY KEY AUTOINCREMENT,
-        id_vente         INTEGER NOT NULL,
+        id_voyage         INTEGER NOT NULL,
         id_segment       INTEGER NOT NULL DEFAULT 0,
         point_depart     TEXT    NOT NULL,
         point_arrivee    TEXT    NOT NULL,
@@ -109,7 +176,7 @@ class LocalDatabase {
         cached_at    TEXT    NOT NULL
       )''',
       '''CREATE TABLE IF NOT EXISTS voyage_cache (
-        id_vente       INTEGER PRIMARY KEY,
+        id_voyage       INTEGER PRIMARY KEY,
         statut         TEXT    NOT NULL,
         server_statut  TEXT,
         cached_at      TEXT    NOT NULL
@@ -120,7 +187,7 @@ class LocalDatabase {
         cached_at  TEXT    NOT NULL
       )''',
       '''CREATE TABLE IF NOT EXISTS segment_cache (
-        id_vente         INTEGER PRIMARY KEY,
+        id_voyage         INTEGER PRIMARY KEY,
         actif_segment    TEXT,
         prochain_segment TEXT,
         tous_segments    TEXT    NOT NULL,
@@ -135,25 +202,25 @@ class LocalDatabase {
       )''',
       '''CREATE TABLE IF NOT EXISTS cloture_pending (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        id_vente    INTEGER NOT NULL UNIQUE,
+        id_voyage    INTEGER NOT NULL UNIQUE,
         created_at  TEXT    NOT NULL,
         statut_sync TEXT    NOT NULL DEFAULT 'pending'
       )''',
       '''CREATE TABLE IF NOT EXISTS segment_cloture_pending (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        id_vente    INTEGER NOT NULL,
+        id_voyage    INTEGER NOT NULL,
         id_segment  INTEGER NOT NULL,
         open_next   INTEGER NOT NULL DEFAULT 1,
         created_at  TEXT    NOT NULL,
         statut_sync TEXT    NOT NULL DEFAULT 'pending',
-        UNIQUE(id_vente, id_segment)
+        UNIQUE(id_voyage, id_segment)
       )''',
       // ── NEW v8 ────────────────────────────────────────────────
       // scope = 'single'  → one voyage was reopened offline
       // scope = 'journee' → full journée reopen (all clotured voyages)
       '''CREATE TABLE IF NOT EXISTS reopen_pending (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        id_vente    INTEGER NOT NULL UNIQUE,
+        id_voyage    INTEGER NOT NULL UNIQUE,
         scope       TEXT    NOT NULL DEFAULT 'single',
         created_at  TEXT    NOT NULL,
         statut_sync TEXT    NOT NULL DEFAULT 'pending'
@@ -162,9 +229,15 @@ class LocalDatabase {
 
     for (final sql in tables) {
       try {
-        await db.execute(sql);
-      } catch (e) {
-        print('⚠️ Table creation error: $e');
+        await db.execute(
+          sql,
+        );
+      } catch (
+        e
+      ) {
+        print(
+          '⚠️ Table creation error: $e',
+        );
       }
     }
   }

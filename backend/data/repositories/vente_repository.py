@@ -11,7 +11,7 @@ class VenteRepository:
         cursor = conn.cursor()
         try:
             cursor.execute(
-                """INSERT INTO billetterie.vente
+                """INSERT INTO billetterie.voyage
                    (id_ligne, id_appareil, date_heure, matricule_agent, code_agence, type)
                    VALUES (%s, %s, %s, %s, %s, %s)""",
                 (data.id_ligne, data.id_appareil, data.date_heure,
@@ -25,23 +25,23 @@ class VenteRepository:
         finally:
             conn.close()
 
-    def find_by_id(self, id_vente: int) -> dict | None:
+    def find_by_id(self, id_voyage: int) -> dict | None:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         try:
             cursor.execute(
-                "SELECT * FROM billetterie.vente WHERE id_vente = %s", (id_vente,)
+                "SELECT * FROM billetterie.voyage WHERE id_voyage = %s", (id_voyage,)
             )
             return cursor.fetchone()
         finally:
             conn.close()
 
-    def get_statut(self, id_vente: int) -> str | None:
+    def get_statut(self, id_voyage: int) -> str | None:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         try:
             cursor.execute(
-                "SELECT statut FROM billetterie.vente WHERE id_vente = %s", (id_vente,)
+                "SELECT statut FROM billetterie.voyage WHERE id_voyage = %s", (id_voyage,)
             )
             row = cursor.fetchone()
             return row["statut"] if row else None
@@ -53,12 +53,12 @@ class VenteRepository:
         cursor = conn.cursor(dictionary=True)
         try:
             cursor.execute("""
-                SELECT v.id_vente, v.id_ligne, v.id_appareil,
+                SELECT v.id_voyage, v.id_ligne, v.id_appareil,
                        v.date_heure, v.type, v.statut,
                        v.matricule_agent, v.code_agence,
                        l.nom_ligne, l.point_depart, l.point_arrive,
                        a.nom, a.prenom
-                FROM billetterie.vente v
+                FROM billetterie.voyage v
                 JOIN  base_global.ligne l ON v.id_ligne        = l.id_ligne
                 LEFT JOIN base_global.agent a ON v.matricule_agent = a.matricule_agent
                 WHERE v.type = 'programmé' AND v.matricule_agent = %s
@@ -73,11 +73,11 @@ class VenteRepository:
         cursor = conn.cursor(dictionary=True)
         try:
             cursor.execute("""
-                SELECT v.id_vente, v.id_ligne, v.date_heure, v.type,
+                SELECT v.id_voyage, v.id_ligne, v.date_heure, v.type,
                        v.statut, v.id_appareil, v.code_agence,
                        v.matricule_agent,
                        l.nom_ligne, l.point_depart, l.point_arrive
-                FROM billetterie.vente v
+                FROM billetterie.voyage v
                 JOIN base_global.ligne l ON v.id_ligne = l.id_ligne
                 WHERE v.matricule_agent = %s
                 ORDER BY v.date_heure DESC
@@ -86,12 +86,12 @@ class VenteRepository:
         finally:
             conn.close()
 
-    def delete(self, id_vente: int) -> bool:
+    def delete(self, id_voyage: int) -> bool:
         conn = get_db()
         cursor = conn.cursor()
         try:
             cursor.execute(
-                "DELETE FROM billetterie.vente WHERE id_vente = %s", (id_vente,)
+                "DELETE FROM billetterie.voyage WHERE id_voyage = %s", (id_voyage,)
             )
             conn.commit()
             return cursor.rowcount > 0
@@ -101,14 +101,14 @@ class VenteRepository:
         finally:
             conn.close()
 
-    def cloturer(self, id_vente: int) -> str:
+    def cloturer(self, id_voyage: int) -> str:
         now = _now()
         conn = get_db()
         cursor = conn.cursor()
         try:
             cursor.execute(
-                "UPDATE billetterie.vente SET statut='cloture', date_cloture=%s WHERE id_vente=%s",
-                (now, id_vente)
+                "UPDATE billetterie.voyage SET statut='cloture', date_cloture=%s WHERE id_voyage=%s",
+                (now, id_voyage)
             )
             conn.commit()
             return now
@@ -118,13 +118,13 @@ class VenteRepository:
         finally:
             conn.close()
 
-    def reopen(self, id_vente: int):
+    def reopen(self, id_voyage: int):
         conn = get_db()
         cursor = conn.cursor()
         try:
             cursor.execute(
-                "UPDATE billetterie.vente SET statut='actif', date_cloture=NULL WHERE id_vente=%s",
-                (id_vente,)
+                "UPDATE billetterie.voyage SET statut='actif', date_cloture=NULL WHERE id_voyage=%s",
+                (id_voyage,)
             )
             conn.commit()
         except Exception:
@@ -139,12 +139,12 @@ class VenteRepository:
         cursor = conn.cursor()
         closed = 0
         try:
-            for id_vente in ids:
+            for id_voyage in ids:
                 cursor.execute(
-                    """UPDATE billetterie.vente
+                    """UPDATE billetterie.voyage
                        SET statut='cloture', date_cloture=%s
-                       WHERE id_vente=%s AND statut != 'cloture'""",
-                    (now, id_vente)
+                       WHERE id_voyage=%s AND statut != 'cloture'""",
+                    (now, id_voyage)
                 )
                 closed += cursor.rowcount
             conn.commit()
@@ -160,12 +160,12 @@ class VenteRepository:
         cursor = conn.cursor()
         reopened = 0
         try:
-            for id_vente in ids:
+            for id_voyage in ids:
                 cursor.execute(
-                    """UPDATE billetterie.vente
+                    """UPDATE billetterie.voyage
                        SET statut='actif', date_cloture=NULL
-                       WHERE id_vente=%s AND statut='cloture'""",
-                    (id_vente,)
+                       WHERE id_voyage=%s AND statut='cloture'""",
+                    (id_voyage,)
                 )
                 reopened += cursor.rowcount
             conn.commit()

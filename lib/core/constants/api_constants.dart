@@ -24,7 +24,7 @@ class ApiConstants {
 
   static String cloturerVoyage(
     int idVente,
-  ) => '$billetterie/vente/$idVente/cloturer';
+  ) => '$billetterie/voyage/$idVente/cloturer';
   static String reopenVoyage(
     int idVente,
   ) => '$billetterie/vente/$idVente/reopen';

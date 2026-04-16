@@ -2,7 +2,7 @@ from core.database import get_db
 
 class SegmentRepository:
 
-    def get_arrets(self, id_vente: int) -> list[dict]:
+    def get_arrets(self, id_voyage: int) -> list[dict]:
         """Reconstruct ordered stop list from segment_voyage rows."""
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
@@ -10,9 +10,9 @@ class SegmentRepository:
             cursor.execute("""
                 SELECT point_depart AS nom_arret, ordre
                 FROM billetterie.segment_voyage
-                WHERE id_vente = %s
+                WHERE id_voyage = %s
                 ORDER BY ordre ASC
-            """, (id_vente,))
+            """, (id_voyage,))
             rows = cursor.fetchall()
             if not rows:
                 return []
@@ -22,9 +22,9 @@ class SegmentRepository:
             cursor.execute("""
                 SELECT point_arrivee AS nom_arret, ordre + 1 AS ordre
                 FROM billetterie.segment_voyage
-                WHERE id_vente = %s
+                WHERE id_voyage = %s
                 ORDER BY ordre DESC LIMIT 1
-            """, (id_vente,))
+            """, (id_voyage,))
             last = cursor.fetchone()
             if last:
                 arrets.append(last)
@@ -33,20 +33,20 @@ class SegmentRepository:
         finally:
             conn.close()
 
-    def get_last(self, id_vente: int) -> dict | None:
+    def get_last(self, id_voyage: int) -> dict | None:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         try:
             cursor.execute("""
                 SELECT id_segment, point_depart, point_arrivee, ordre
                 FROM billetterie.segment_voyage
-                WHERE id_vente = %s ORDER BY ordre DESC LIMIT 1
-            """, (id_vente,))
+                WHERE id_voyage = %s ORDER BY ordre DESC LIMIT 1
+            """, (id_voyage,))
             return cursor.fetchone()
         finally:
             conn.close()
 
-    def get_actif(self, id_vente: int) -> dict | None:
+    def get_actif(self, id_voyage: int) -> dict | None:
         """Return the current active segment for a vente (last by ordre)."""
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
@@ -54,14 +54,14 @@ class SegmentRepository:
             cursor.execute("""
                 SELECT id_segment, point_depart, point_arrivee, ordre
                 FROM billetterie.segment_voyage
-                WHERE id_vente = %s
+                WHERE id_voyage = %s
                 ORDER BY ordre DESC LIMIT 1
-            """, (id_vente,))
+            """, (id_voyage,))
             return cursor.fetchone()
         finally:
             conn.close()
 
-    def get_all(self, id_vente: int) -> list[dict]:
+    def get_all(self, id_voyage: int) -> list[dict]:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         try:
@@ -70,12 +70,12 @@ class SegmentRepository:
                        v.id_ligne, v.matricule_agent,
                        l.nom_ligne, a.nom, a.prenom
                 FROM billetterie.segment_voyage sv
-                JOIN  billetterie.vente     v  ON sv.id_vente        = v.id_vente
+                JOIN  billetterie.voyage     v  ON sv.id_voyage        = v.id_voyage
                 JOIN  base_global.ligne     l  ON v.id_ligne         = l.id_ligne
                 LEFT JOIN base_global.agent a  ON v.matricule_agent  = a.matricule_agent
-                WHERE sv.id_vente = %s
+                WHERE sv.id_voyage = %s
                 ORDER BY sv.ordre
-            """, (id_vente,))
+            """, (id_voyage,))
             return cursor.fetchall()
         finally:
             conn.close()

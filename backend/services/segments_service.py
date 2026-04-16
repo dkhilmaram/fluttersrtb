@@ -4,14 +4,14 @@ class SegmentService:
     def __init__(self):
         self.repo = SegmentRepository()
 
-    def get_arrets(self, id_vente: int) -> dict:
-        arrets = self.repo.get_arrets(id_vente)
+    def get_arrets(self, id_voyage: int) -> dict:
+        arrets = self.repo.get_arrets(id_voyage)
         if not arrets:
             return {"success": False, "arrets": [], "message": "Aucun arrêt trouvé"}
         return {"success": True, "arrets": [a["nom_arret"] for a in arrets]}
 
-    def get_all_segments(self, id_vente: int) -> dict:
-        rows = self.repo.get_all(id_vente)
+    def get_all_segments(self, id_voyage: int) -> dict:
+        rows = self.repo.get_all(id_voyage)
         return {
             "success": True,
             "segments": [

@@ -9,8 +9,8 @@ _seg_svc = SegmentService()
 
 @router.post("/ajouter_vente")
 def ajouter_vente(data: VenteData):
-    id_vente = _svc.create(data)
-    return {"success": True, "id_vente": id_vente}
+    id_voyage = _svc.create(data)
+    return {"success": True, "id_voyage": id_voyage}
 
 @router.get("/ventes/programmees/{matricule_agent}")
 def get_ventes_programmees(matricule_agent: int):
@@ -25,18 +25,18 @@ def supprimer_vente(vente_id: int):
     _svc.delete(vente_id)
     return {"success": True, "message": "Vente supprimée"}
 
-@router.get("/vente/{id_vente}/statut")
-def get_statut(id_vente: int):
-    return {"success": True, "statut": _svc.get_statut(id_vente)}
+@router.get("/vente/{id_voyage}/statut")
+def get_statut(id_voyage: int):
+    return {"success": True, "statut": _svc.get_statut(id_voyage)}
 
-@router.put("/vente/{id_vente}/cloturer")
-def cloturer(id_vente: int):
-    date_cloture = _svc.cloturer(id_vente)
+@router.put("/vente/{id_voyage}/cloturer")
+def cloturer(id_voyage: int):
+    date_cloture = _svc.cloturer(id_voyage)
     return {"success": True, "message": "Voyage clôturé", "date_cloture": date_cloture}
 
-@router.put("/vente/{id_vente}/reopen")
-def reopen(id_vente: int):
-    _svc.reopen(id_vente)
+@router.put("/vente/{id_voyage}/reopen")
+def reopen(id_voyage: int):
+    _svc.reopen(id_voyage)
     return {"success": True, "message": "Voyage réouvert"}
 
 @router.put("/ventes/cloturer-journee")

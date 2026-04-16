@@ -6,18 +6,18 @@ def _now() -> str:
 
 class TicketRepository:
 
-    def create(self, id_vente, id_segment, point_depart, point_arrivee,
+    def create(self, id_voyage, id_segment, point_depart, point_arrivee,
                type_tarif, quantite, prix_unitaire, montant_total, matricule_agent) -> int:
         conn = get_db()
         cursor = conn.cursor()
         try:
             cursor.execute("""
                 INSERT INTO billetterie.ticket_vendu
-                (id_vente, id_segment, point_depart, point_arrivee,
+                (id_voyage, id_segment, point_depart, point_arrivee,
                  type_tarif, quantite, prix_unitaire, montant_total,
                  date_heure, matricule_agent)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (id_vente, id_segment, point_depart, point_arrivee,
+            """, (id_voyage, id_segment, point_depart, point_arrivee,
                   type_tarif, quantite, prix_unitaire, montant_total,
                   _now(), matricule_agent))
             conn.commit()
@@ -28,7 +28,7 @@ class TicketRepository:
         finally:
             conn.close()
 
-    def get_by_voyage(self, id_vente: int) -> list[dict]:
+    def get_by_voyage(self, id_voyage: int) -> list[dict]:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         try:
@@ -40,16 +40,16 @@ class TicketRepository:
                        l.nom_ligne, a.nom, a.prenom
                 FROM billetterie.ticket_vendu t
                 LEFT JOIN billetterie.segment_voyage sv ON t.id_segment  = sv.id_segment
-                LEFT JOIN billetterie.vente          v  ON t.id_vente    = v.id_vente
+                LEFT JOIN billetterie.voyage          v  ON t.id_voyage    = v.id_voyage
                 LEFT JOIN base_global.ligne          l  ON v.id_ligne    = l.id_ligne
                 LEFT JOIN base_global.agent          a  ON t.matricule_agent = a.matricule_agent
-                WHERE t.id_vente = %s ORDER BY t.date_heure DESC
-            """, (id_vente,))
+                WHERE t.id_voyage = %s ORDER BY t.date_heure DESC
+            """, (id_voyage,))
             return cursor.fetchall()
         finally:
             conn.close()
 
-    def get_special_stats(self, id_vente: int) -> list[dict]:
+    def get_special_stats(self, id_voyage: int) -> list[dict]:
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         try:
@@ -58,9 +58,9 @@ class TicketRepository:
                        COUNT(*)      AS count,
                        SUM(quantite) AS total_quantite
                 FROM billetterie.ticket_vendu
-                WHERE id_vente = %s AND prix_unitaire = 0
+                WHERE id_voyage = %s AND prix_unitaire = 0
                 GROUP BY type_tarif ORDER BY count DESC
-            """, (id_vente,))
+            """, (id_voyage,))
             return cursor.fetchall()
         finally:
             conn.close()

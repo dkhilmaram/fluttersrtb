@@ -21,7 +21,7 @@ class TypePassageSpecial(str, Enum):
     ABONNEMENT_RETRAITE    = "Abonnement Retraité"
 
 class TicketVendreData(BaseModel):
-    id_vente:        int
+    id_voyage:        int
     id_segment:      int   = 0
     point_depart:    str
     point_arrivee:   str
