@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import '../history/HistoriquePage.dart';
 import '../voyage/cloture_voyage.dart';
 import 'ticketing_page.dart';
@@ -9,7 +7,6 @@ import '../history/sync_log_page.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/database/daos/ticket_dao.dart';
-import '../../../data/database/daos/voyage_dao.dart';
 
 // ─────────────────────────────────────────────────────────────
 // Widget
@@ -25,11 +22,7 @@ class VenteTicketsPage extends StatefulWidget {
 }
 
 class _VenteTicketsPageState extends State<VenteTicketsPage> {
-  bool isCloture         = false;
-  bool isLoading         = true;
-  bool _reopenConfirming = false;
-  bool _reopenLoading    = false;
-  int  _pendingCount     = 0;
+  int _pendingCount = 0;
 
   OverlayEntry? _toastEntry;
   Timer?        _toastTimer;
@@ -38,7 +31,6 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
   void initState() {
     super.initState();
     _loadPendingCount();
-    _resolveStatut();
   }
 
   @override
@@ -89,112 +81,6 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Statut resolution
-  // ─────────────────────────────────────────────────────────────
-
-  Future<void> _resolveStatut() async {
-    if (!mounted) return;
-    setState(() => isLoading = true);
-
-    final id = widget.voyage['id'] as int?;
-    if (id == null) {
-      setState(() => isLoading = false);
-      return;
-    }
-
-    String? serverStatut;
-    try {
-      final response = await http
-          .get(Uri.parse('${ApiConstants.billetterie}/vente/$id/statut'))
-          .timeout(ApiConstants.defaultTimeout);
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        serverStatut = data['statut'] as String?;
-      }
-    } catch (_) {}
-
-    // ── Server responded ──────────────────────────────────────
-    if (serverStatut != null) {
-      if (serverStatut != 'cloture') {
-        await VoyageDao.clearVoyageStatut(id);
-      }
-      if (mounted) {
-        setState(() {
-          isCloture = serverStatut == 'cloture';
-          isLoading = false;
-        });
-      }
-      return;
-    }
-
-    // ── Offline fallback ──────────────────────────────────────
-    final lastKnown   = widget.voyage['statut'] as String? ?? 'actif';
-    final localStatut = await VoyageDao.getVoyageStatut(
-      id,
-      currentServerStatut: lastKnown,
-    );
-
-    if (mounted) {
-      setState(() {
-        isCloture = localStatut == 'cloture' ||
-            localStatut == 'cloture_pending' ||
-            lastKnown == 'cloture';
-        isLoading = false;
-      });
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // Reopen voyage
-  // ─────────────────────────────────────────────────────────────
-
-  Future<void> _reopenVoyage() async {
-    final id = widget.voyage['id'] as int?;
-    if (id == null) return;
-
-    setState(() => _reopenLoading = true);
-
-    bool success = false;
-    bool offline = false;
-
-    try {
-      final response = await http
-          .put(Uri.parse('${ApiConstants.billetterie}/vente/$id/reopen'))
-          .timeout(ApiConstants.defaultTimeout);
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        success = data['success'] == true;
-      }
-    } catch (_) {
-      offline = true;
-      await VoyageDao.clearVoyageStatut(id);
-      success = true;
-    }
-
-    if (!mounted) return;
-
-    if (success) {
-      setState(() {
-        isCloture         = false;
-        _reopenConfirming = false;
-        _reopenLoading    = false;
-      });
-      _showToast(
-        offline ? 'Réouverture enregistrée (hors-ligne)' : 'Voyage réouvert avec succès',
-        isWarning: offline,
-      );
-    } else {
-      setState(() {
-        _reopenConfirming = false;
-        _reopenLoading    = false;
-      });
-      _showToast('Échec de la réouverture', isError: true);
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────
   // Helpers
   // ─────────────────────────────────────────────────────────────
 
@@ -227,44 +113,10 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
         child: Column(
           children: [
             _buildHeader(depart, arrivee),
-
-            if (isCloture)
-              Container(
-                width: double.infinity,
-                color: const Color.fromARGB(255, 109, 108, 108),
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.lock, color: Colors.white, size: 16),
-                    SizedBox(width: 8),
-                    Text(
-                      'Voyage clôturé',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
             _buildInfoCard(depart, arrivee),
-
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
-              child: isLoading
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.only(top: 40),
-                        child: CircularProgressIndicator(
-                            color: AppTheme.navyMid),
-                      ),
-                    )
-                  : isCloture
-                      ? _buildClotureButtons(hasId)
-                      : _buildActiveButtons(hasId),
+              child: _buildActiveButtons(hasId),
             ),
           ],
         ),
@@ -273,184 +125,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Clôturé state
-  // ─────────────────────────────────────────────────────────────
-
-  Widget _buildClotureButtons(bool hasId) {
-    return Column(
-      children: [
-        Container(
-          width: double.infinity,
-          margin: const EdgeInsets.only(bottom: 20),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade50,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.grey.shade200, width: 1.5),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.info_outline, color: Colors.grey.shade400, size: 18),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Ce voyage est clôturé. Réouvrez-le pour accéder à la billetterie.',
-                  style: TextStyle(
-                    color: Colors.grey.shade500,
-                    fontSize: 12,
-                    height: 1.4,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        if (hasId) ...[
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            transitionBuilder: (child, anim) =>
-                FadeTransition(opacity: anim, child: child),
-            child: _reopenConfirming
-                ? _buildReopenConfirmCard()
-                : _actionBtn(
-                    key: const ValueKey('reopen_btn'),
-                    label: 'Réouvrir le voyage',
-                    icon: Icons.lock_open_rounded,
-                    colors: const [
-                      Color.fromARGB(255, 3, 74, 54),
-                      Color.fromARGB(255, 3, 74, 54),
-                    ],
-                    onTap: () => setState(() => _reopenConfirming = true),
-                  ),
-          ),
-          const SizedBox(height: 12),
-        ],
-
-        _actionBtn(
-          label: 'Historique',
-          icon: Icons.history,
-          colors: [AppTheme.navyDark, AppTheme.navyLight],
-          onTap: hasId
-              ? () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          HistoriquePage(voyage: widget.voyage),
-                    ),
-                  )
-              : null,
-        ),
-        const SizedBox(height: 12),
-        _syncLogBtn(),
-      ],
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // Inline reopen confirmation card
-  // ─────────────────────────────────────────────────────────────
-
-  Widget _buildReopenConfirmCard() {
-    return Container(
-      key: const ValueKey('reopen_confirm'),
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.orange.shade50,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: const Color.fromARGB(255, 39, 57, 56),
-          width: 1.5,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.warning_amber_rounded,
-                  color: Color.fromARGB(255, 2, 69, 50), size: 18),
-              SizedBox(width: 8),
-              Text(
-                'Confirmer la réouverture ?',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                  color: Color.fromARGB(255, 3, 69, 64),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Le voyage sera remis en statut actif et la billetterie sera accessible.',
-            style: TextStyle(
-              color: Color.fromARGB(255, 3, 69, 64),
-              fontSize: 12,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 44,
-                  child: OutlinedButton(
-                    onPressed: _reopenLoading
-                        ? null
-                        : () => setState(() => _reopenConfirming = false),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color.fromARGB(255, 2, 61, 30),
-                      side: const BorderSide(
-                          color: Color.fromARGB(255, 3, 62, 26)),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                    ),
-                    child: const Text('Annuler',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 13)),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: SizedBox(
-                  height: 44,
-                  child: ElevatedButton(
-                    onPressed: _reopenLoading ? null : _reopenVoyage,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color.fromARGB(255, 3, 60, 51),
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor:
-                          const Color.fromARGB(255, 3, 60, 51),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                    ),
-                    child: _reopenLoading
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2),
-                          )
-                        : const Text('Réouvrir',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 13)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // Active state buttons
+  // Active buttons
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildActiveButtons(bool hasId) {
@@ -486,8 +161,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
               ? () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) =>
-                          HistoriquePage(voyage: widget.voyage),
+                      builder: (_) => HistoriquePage(voyage: widget.voyage),
                     ),
                   )
               : null,
@@ -506,11 +180,9 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
               await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) =>
-                      ClotureVoyagePage(voyage: widget.voyage),
+                  builder: (_) => ClotureVoyagePage(voyage: widget.voyage),
                 ),
               );
-              await _resolveStatut();
             },
           ),
         ],
@@ -547,11 +219,9 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
   Widget _buildHeader(String depart, String arrivee) {
     return Container(
       width: double.infinity,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: isCloture
-              ? const [Color(0xFF2D2D2D), Color(0xFF4A4A4A)]
-              : [AppTheme.navyDark, AppTheme.navyMid, AppTheme.navyLight],
+          colors: [AppTheme.navyDark, AppTheme.navyMid, AppTheme.navyLight],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -603,8 +273,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
                           decoration: BoxDecoration(
                             color: const Color.fromARGB(255, 3, 90, 55),
                             shape: BoxShape.circle,
-                            border:
-                                Border.all(color: Colors.white, width: 1.5),
+                            border: Border.all(color: Colors.white, width: 1.5),
                           ),
                           child: Center(
                             child: Text(
@@ -660,7 +329,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            isCloture ? 'Voyage clôturé' : 'Vente & Historique',
+            'Vente & Historique',
             style: TextStyle(
               color: Colors.white.withOpacity(0.7),
               fontSize: 12,
@@ -669,8 +338,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
           ),
           const SizedBox(height: 14),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.1),
               borderRadius: BorderRadius.circular(30),
@@ -720,7 +388,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Voyage info card  — shows today's date
+  // Voyage info card
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildInfoCard(String depart, String arrivee) {
@@ -732,15 +400,12 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
           color: AppTheme.cardWhite,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isCloture
-                ? Colors.grey.shade200
-                : AppTheme.navyLight.withOpacity(0.2),
+            color: AppTheme.navyLight.withOpacity(0.2),
             width: 1.5,
           ),
           boxShadow: [
             BoxShadow(
-              color: (isCloture ? Colors.grey : AppTheme.navyMid)
-                  .withOpacity(0.06),
+              color: AppTheme.navyMid.withOpacity(0.06),
               blurRadius: 12,
               offset: const Offset(0, 3),
             ),
@@ -752,13 +417,12 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
               width: 46,
               height: 46,
               decoration: BoxDecoration(
-                color: (isCloture ? Colors.grey : AppTheme.navyMid)
-                    .withOpacity(0.1),
+                color: AppTheme.navyMid.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(13),
               ),
-              child: Icon(
+              child: const Icon(
                 Icons.directions_bus,
-                color: isCloture ? Colors.grey : AppTheme.navyMid,
+                color: AppTheme.navyMid,
                 size: 24,
               ),
             ),
@@ -769,12 +433,10 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
                 children: [
                   Text(
                     '$depart → $arrivee',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
-                      color: isCloture
-                          ? Colors.grey.shade400
-                          : AppTheme.navyDark,
+                      color: AppTheme.navyDark,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -796,27 +458,18 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
               ),
             ),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: isCloture
-                    ? Colors.red.shade50
-                    : Colors.green.shade50,
+                color: Colors.green.shade50,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isCloture
-                      ? Colors.red.shade200
-                      : Colors.green.shade200,
-                ),
+                border: Border.all(color: Colors.green.shade200),
               ),
               child: Text(
-                isCloture ? 'Clôturé' : 'Actif',
+                'Actif',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 11,
-                  color: isCloture
-                      ? Colors.red.shade700
-                      : Colors.green.shade700,
+                  color: Colors.green.shade700,
                 ),
               ),
             ),

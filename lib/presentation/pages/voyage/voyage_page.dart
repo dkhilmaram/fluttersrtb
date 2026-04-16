@@ -18,7 +18,7 @@ import '../ticketing/vente_tickets.dart';
 // ─────────────────────────────────────────────────────────────
 // ⚠️  CONFIGURE THIS before shipping
 // ─────────────────────────────────────────────────────────────
-const String _kReportRecipient = 'dkhilmaram12@gmail.com';
+const String _kReportRecipient = 'khalilbenritha@gmail.com';
 const String _kSmtpHost        = 'smtp.gmail.com';
 const int    _kSmtpPort        = 587;
 const String _kSmtpUser        = 'dkhilmaram0@gmail.com';

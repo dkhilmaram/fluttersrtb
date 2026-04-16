@@ -1,7 +1,7 @@
 class ApiConstants {
   ApiConstants._();
 
-  static const String baseUrl = 'http://192.168.1.35:8000';
+  static const String baseUrl = 'http://172.24.114.63:8000';
   static const String billetterie = '$baseUrl/billetterie';
 
   // ── Tickets ──
