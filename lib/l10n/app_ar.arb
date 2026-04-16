@@ -1,0 +1,30 @@
+{
+  "@@locale": "ar",
+  "appTitle": "SRTB",
+  "connexion": "تسجيل الدخول",
+  "matricule": "رقم التسجيل",
+  "matriculeHint": "أدخل رقم التسجيل",
+  "matriculeError": "يرجى إدخال رقم التسجيل",
+  "motDePasse": "كلمة المرور",
+  "motDePasseHint": "أدخل كلمة المرور",
+  "motDePasseError": "يرجى إدخال كلمة المرور",
+  "seConnecter": "تسجيل الدخول",
+  "offlineHint": "سجّل دخولك مرة واحدة عبر الإنترنت\nلتفعيل وضع عدم الاتصال",
+  "bienvenue": "مرحباً {prenom} {nom} !",
+  "@bienvenue": {
+    "placeholders": {
+      "prenom": { "type": "String" },
+      "nom":    { "type": "String" }
+    }
+  },
+  "bienvenueOffline": "بدون اتصال — مرحباً {prenom} !",
+  "@bienvenueOffline": {
+    "placeholders": {
+      "prenom": { "type": "String" }
+    }
+  },
+  "loginError": "رقم التسجيل أو كلمة المرور غير صحيحة",
+  "matriculeInvalid": "رقم التسجيل غير صالح",
+  "offlineNoAccount": "بدون اتصال — لم يتم العثور على حساب محلي",
+  "srtbFullName": "الشركة الجهوية للنقل ببنزرت"
+}

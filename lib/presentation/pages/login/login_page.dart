@@ -1,13 +1,15 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../l10n/app_localizations.dart';   // in login_page.dart
+
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/database/daos/agent_dao.dart';
 import '../voyage/voyage_page.dart';
+import '../../widgets/language_switcher.dart';
 
-// ── Local aliases for brevity (mapped from AppTheme) ──────────
 const _navyDark  = AppTheme.navyDark;
 const _navyMid   = AppTheme.navyMid;
 const _navyLight = AppTheme.navyLight;
@@ -29,7 +31,6 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading       = false;
   bool _obscurePassword = true;
 
-  // ── Toast overlay ─────────────────────────────────────────
   OverlayEntry? _toastEntry;
   Timer?        _toastTimer;
 
@@ -70,10 +71,9 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  // ── Login logic ───────────────────────────────────────────
-
   void _seConnecter() async {
     if (!_formKey.currentState!.validate()) return;
+    final t = AppLocalizations.of(context)!;
     setState(() => _isLoading = true);
 
     // 1. Try server login
@@ -96,11 +96,11 @@ class _LoginPageState extends State<LoginPage> {
       if (data['success'] == true) {
         final employe = data['employe'] as Map<String, dynamic>;
         await AgentDao.saveAgent(
-          matricule:    int.parse(_matriculeController.text),
-          motDePasse:   _motDePasseController.text,
-          employeData:  employe,
+          matricule:   int.parse(_matriculeController.text),
+          motDePasse:  _motDePasseController.text,
+          employeData: employe,
         );
-        _showToast('Bienvenue ${employe['prenom']} ${employe['nom']} !');
+        _showToast(t.bienvenue(employe['prenom'], employe['nom']));
         if (!mounted) return;
         Navigator.push(
           context,
@@ -109,7 +109,7 @@ class _LoginPageState extends State<LoginPage> {
           ),
         );
       } else {
-        _showToast('Matricule ou mot de passe incorrect', isError: true);
+        _showToast(t.loginError, isError: true);
       }
       return;
     } catch (_) {}
@@ -119,7 +119,7 @@ class _LoginPageState extends State<LoginPage> {
     // 2. Offline login
     final matricule = int.tryParse(_matriculeController.text);
     if (matricule == null) {
-      _showToast('Matricule invalide', isError: true);
+      _showToast(t.matriculeInvalid, isError: true);
       return;
     }
 
@@ -127,8 +127,7 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted) return;
 
     if (cached != null) {
-      _showToast('Hors-ligne — Bienvenue ${cached['prenom']} !',
-          isWarning: true);
+      _showToast(t.bienvenueOffline(cached['prenom']), isWarning: true);
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -136,89 +135,99 @@ class _LoginPageState extends State<LoginPage> {
         ),
       );
     } else {
-      _showToast('Hors-ligne — aucun compte local trouvé', isError: true);
+      _showToast(t.offlineNoAccount, isError: true);
     }
   }
 
-  // ── Build ─────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
+
     return Scaffold(
       backgroundColor: _surface,
       body: SingleChildScrollView(
         child: Column(
           children: [
             // ── Header gradient ──────────────────────────────
-            Container(
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [_navyDark, _navyMid, _navyLight],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              padding: const EdgeInsets.fromLTRB(20, 60, 20, 36),
-              child: Column(
-                children: [
-                  Container(
-                    width: 88,
-                    height: 88,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(22),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    padding: const EdgeInsets.all(10),
-                    child: Image.asset(
-                      'assets/images/logo_srtb.png',
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const Icon(
-                        Icons.directions_bus,
-                        size: 50,
-                        color: _navyMid,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'S R T B',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 8,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Société Régionale des Transports de Bizerte',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.65),
-                      fontSize: 12,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: _goldLight.withOpacity(0.6),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ],
-              ),
+           Container(
+  width: double.infinity,
+  decoration: const BoxDecoration(
+    gradient: LinearGradient(
+      colors: [_navyDark, _navyMid, _navyLight],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    ),
+  ),
+  padding: const EdgeInsets.fromLTRB(20, 50, 20, 36),
+  child: Column(
+    children: [
+      // ── Top row: spacer + language switcher ──
+      Row(
+        children: const [
+          Spacer(),
+          LanguageSwitcher(),
+        ],
+      ),
+      const SizedBox(height: 16),
+
+      // ── Centered logo ─────────────────────────
+      Container(
+        width: 88,
+        height: 88,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
             ),
+          ],
+        ),
+        padding: const EdgeInsets.all(10),
+        child: Image.asset(
+          'assets/images/logo_srtb.png',
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => const Icon(
+            Icons.directions_bus,
+            size: 50,
+            color: _navyMid,
+          ),
+        ),
+      ),
+      const SizedBox(height: 16),
+      const Text(
+        'S R T B',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 8,
+        ),
+      ),
+      const SizedBox(height: 6),
+      Text(
+        t.srtbFullName,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: Colors.white.withOpacity(0.65),
+          fontSize: 12,
+          letterSpacing: 0.3,
+        ),
+      ),
+      const SizedBox(height: 20),
+      Container(
+        width: 40,
+        height: 4,
+        decoration: BoxDecoration(
+          color: _goldLight.withOpacity(0.6),
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+    ],
+  ),
+),
 
             // ── Form card ─────────────────────────────────────
             Padding(
@@ -253,9 +262,9 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          const Text(
-                            'Connexion',
-                            style: TextStyle(
+                          Text(
+                            t.connexion,
+                            style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
                               color: _navyDark,
@@ -266,27 +275,27 @@ class _LoginPageState extends State<LoginPage> {
 
                       const SizedBox(height: 24),
 
-                      _fieldLabel(Icons.badge_outlined, 'Matricule'),
+                      _fieldLabel(Icons.badge_outlined, t.matricule),
                       const SizedBox(height: 8),
                       _textField(
                         controller:      _matriculeController,
-                        hint:            'Entrez votre matricule',
+                        hint:            t.matriculeHint,
                         keyboardType:    TextInputType.number,
                         textInputAction: TextInputAction.next,
                         validator: (v) => (v == null || v.isEmpty)
-                            ? 'Veuillez entrer votre matricule'
+                            ? t.matriculeError
                             : null,
                       ),
 
                       const SizedBox(height: 20),
 
-                      _fieldLabel(Icons.lock_outline, 'Mot de passe'),
+                      _fieldLabel(Icons.lock_outline, t.motDePasse),
                       const SizedBox(height: 8),
                       _textField(
-                        controller:      _motDePasseController,
-                        hint:            'Entrez votre mot de passe',
-                        obscureText:     _obscurePassword,
-                        textInputAction: TextInputAction.done,
+                        controller:       _motDePasseController,
+                        hint:             t.motDePasseHint,
+                        obscureText:      _obscurePassword,
+                        textInputAction:  TextInputAction.done,
                         onFieldSubmitted: (_) => _seConnecter(),
                         suffixIcon: IconButton(
                           icon: Icon(
@@ -300,7 +309,7 @@ class _LoginPageState extends State<LoginPage> {
                               () => _obscurePassword = !_obscurePassword),
                         ),
                         validator: (v) => (v == null || v.isEmpty)
-                            ? 'Veuillez entrer votre mot de passe'
+                            ? t.motDePasseError
                             : null,
                       ),
 
@@ -325,9 +334,6 @@ class _LoginPageState extends State<LoginPage> {
                                         begin: Alignment.topLeft,
                                         end: Alignment.bottomRight,
                                       ),
-                                color: _isLoading
-                                    ? null
-                                    : null,
                                 borderRadius: BorderRadius.circular(14),
                                 boxShadow: _isLoading
                                     ? []
@@ -349,9 +355,9 @@ class _LoginPageState extends State<LoginPage> {
                                           strokeWidth: 2.5,
                                         ),
                                       )
-                                    : const Text(
-                                        'Se connecter',
-                                        style: TextStyle(
+                                    : Text(
+                                        t.seConnecter,
+                                        style: const TextStyle(
                                           color: Colors.white,
                                           fontSize: 15,
                                           fontWeight: FontWeight.bold,
@@ -368,7 +374,7 @@ class _LoginPageState extends State<LoginPage> {
 
                       Center(
                         child: Text(
-                          'Connectez-vous une fois avec internet\npour activer le mode hors-ligne',
+                          t.offlineHint,
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 11,
@@ -387,8 +393,6 @@ class _LoginPageState extends State<LoginPage> {
       ),
     );
   }
-
-  // ── Helper widgets ────────────────────────────────────────
 
   Widget _fieldLabel(IconData icon, String label) {
     return Row(
@@ -419,10 +423,10 @@ class _LoginPageState extends State<LoginPage> {
     String? Function(String?)? validator,
   }) {
     return TextFormField(
-      controller:      controller,
-      keyboardType:    keyboardType,
-      textInputAction: textInputAction,
-      obscureText:     obscureText,
+      controller:       controller,
+      keyboardType:     keyboardType,
+      textInputAction:  textInputAction,
+      obscureText:      obscureText,
       onFieldSubmitted: onFieldSubmitted,
       style: const TextStyle(
         color: _navyDark,
@@ -468,7 +472,7 @@ class _LoginPageState extends State<LoginPage> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Toast — pill-shaped, slide-in from right
+// Toast
 // ─────────────────────────────────────────────────────────────
 
 class _ToastWidget extends StatefulWidget {

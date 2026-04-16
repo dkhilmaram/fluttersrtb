@@ -1,0 +1,30 @@
+{
+  "@@locale": "fr",
+  "appTitle": "SRTB",
+  "connexion": "Connexion",
+  "matricule": "Matricule",
+  "matriculeHint": "Entrez votre matricule",
+  "matriculeError": "Veuillez entrer votre matricule",
+  "motDePasse": "Mot de passe",
+  "motDePasseHint": "Entrez votre mot de passe",
+  "motDePasseError": "Veuillez entrer votre mot de passe",
+  "seConnecter": "Se connecter",
+  "offlineHint": "Connectez-vous une fois avec internet\npour activer le mode hors-ligne",
+  "bienvenue": "Bienvenue {prenom} {nom} !",
+  "@bienvenue": {
+    "placeholders": {
+      "prenom": { "type": "String" },
+      "nom":    { "type": "String" }
+    }
+  },
+  "bienvenueOffline": "Hors-ligne — Bienvenue {prenom} !",
+  "@bienvenueOffline": {
+    "placeholders": {
+      "prenom": { "type": "String" }
+    }
+  },
+  "loginError": "Matricule ou mot de passe incorrect",
+  "matriculeInvalid": "Matricule invalide",
+  "offlineNoAccount": "Hors-ligne — aucun compte local trouvé",
+  "srtbFullName": "Société Régionale des Transports de Bizerte"
+}
