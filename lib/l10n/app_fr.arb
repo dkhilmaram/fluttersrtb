@@ -4,12 +4,12 @@
   "connexion": "Connexion",
   "matricule": "Matricule",
   "matriculeHint": "Entrez votre matricule",
-  "matriculeError": "Veuillez entrer votre matricule",
+  "matriculeError": "Veuillez saisir votre matricule",
   "motDePasse": "Mot de passe",
   "motDePasseHint": "Entrez votre mot de passe",
-  "motDePasseError": "Veuillez entrer votre mot de passe",
+  "motDePasseError": "Veuillez saisir votre mot de passe",
   "seConnecter": "Se connecter",
-  "offlineHint": "Connectez-vous une fois avec internet\npour activer le mode hors-ligne",
+  "offlineHint": "Connectez-vous une fois en ligne\npour activer le mode hors ligne",
   "bienvenue": "Bienvenue {prenom} {nom} !",
   "@bienvenue": {
     "placeholders": {
@@ -17,7 +17,7 @@
       "nom":    { "type": "String" }
     }
   },
-  "bienvenueOffline": "Hors-ligne — Bienvenue {prenom} !",
+  "bienvenueOffline": "Hors ligne — Bienvenue {prenom} !",
   "@bienvenueOffline": {
     "placeholders": {
       "prenom": { "type": "String" }
@@ -25,9 +25,9 @@
   },
   "loginError": "Matricule ou mot de passe incorrect",
   "matriculeInvalid": "Matricule invalide",
-  "offlineNoAccount": "Hors-ligne — aucun compte local trouvé",
-  "srtbFullName": "Société Régionale des Transports de Bizerte",
-  "mesVoyages": "Mes Voyages",
+  "offlineNoAccount": "Hors ligne — aucun compte local trouvé",
+  "srtbFullName": "Société Régionale de Transport de Bizerte",
+  "mesVoyages": "Mes voyages",
   "programmes": "Programmés",
   "nonProgrammes": "Non programmés",
   "total": "Total",
@@ -36,41 +36,41 @@
   "actifs": "Actifs",
   "aucunVoyageProgramme": "Aucun voyage programmé",
   "aucunVoyageNonProgramme": "Aucun voyage non programmé",
-  "cloturerJournee": "Clôture Journée",
+  "cloturerJournee": "Clôturer la journée",
   "cloturerJourneeQuestion": "Clôturer toute la journée ?",
   "annuler": "Annuler",
   "confirmer": "Confirmer",
-  "reouvrirJournee": "Réouvrir la Journée",
-  "exporterRapport": "Exporter & Envoyer le rapport",
+  "reouvrirJournee": "Rouvrir la journée",
+  "exporterRapport": "Exporter et envoyer le rapport",
   "statutCloture": "Clôturé",
   "statutEnAttente": "En attente",
   "statutActif": "Actif",
-  "horsLignePasDeDonnees": "Hors-ligne — pas de données disponibles",
-  "modeHorsLigne": "Mode hors-ligne",
+  "horsLignePasDeDonnees": "Hors ligne — aucune donnée disponible",
+  "modeHorsLigne": "Mode hors ligne",
   "tousDejaClotureToast": "Tous les voyages sont déjà clôturés",
   "echecCloture": "Échec de la clôture",
-  "aucunAReouvrirToast": "Aucun voyage clôturé à réouvrir",
+  "aucunAReouvrirToast": "Aucun voyage clôturé à rouvrir",
   "reouvertureEnCours": "Réouverture en cours…",
   "echecReouverture": "Échec de la réouverture",
-  "voyageReouvertOffline": "Voyage réouvert (hors-ligne)",
-  "voyageReouvert": "Voyage réouvert avec succès",
+  "voyageReouvertOffline": "Voyage rouvert (hors ligne)",
+  "voyageReouvert": "Voyage rouvert avec succès",
   "generationExcel": "Génération du fichier Excel…",
   "generationPdf": "Génération du fichier PDF…",
   "rapportEnvoye": "Rapport envoyé avec succès",
   "terminerVoyageEnCoursToast": "Terminez le voyage en cours avant de continuer",
   "cloturureEnCours": "Clôture en cours…",
   "envoiEnCours": "Envoi en cours…",
-  "appuyerReouvrirLabel": "Appuyer pour réouvrir",
+  "appuyerReouvrirLabel": "Appuyer pour rouvrir",
   "enAttenteVoyagePrecedent": "En attente du voyage précédent",
   "reessayer": "Réessayer",
   "envoyerRapport": "Envoyer le rapport",
-  "reouvrirJourneeQuestion": "Réouvrir la journée ?",
+  "reouvrirJourneeQuestion": "Rouvrir la journée ?",
   "actionReversible": "Cette action est réversible",
-  "reouvrirTout": "Réouvrir tout",
-  "reouvrirCeVoyage": "Réouvrir ce voyage ?",
-  "reouvrirVoyageBody": "Le voyage sera remis en statut actif et vous pourrez à nouveau vendre des tickets.",
+  "reouvrirTout": "Tout rouvrir",
+  "reouvrirCeVoyage": "Rouvrir ce voyage ?",
+  "reouvrirVoyageBody": "Le voyage reviendra à l'état actif et vous pourrez à nouveau vendre des billets.",
   "rouvrir": "Rouvrir",
-  "journeeClotureOffline": "{count} voyage(s) clôturé(s) (hors-ligne)",
+  "journeeClotureOffline": "{count} voyage(s) clôturé(s) (hors ligne)",
   "@journeeClotureOffline": {
     "placeholders": { "count": { "type": "int" } }
   },
@@ -78,11 +78,11 @@
   "@journeeCloture": {
     "placeholders": { "count": { "type": "int" } }
   },
-  "journeeReouverteOffline": "{count} voyage(s) réouvert(s) (hors-ligne)",
+  "journeeReouverteOffline": "{count} voyage(s) rouvert(s) (hors ligne)",
   "@journeeReouverteOffline": {
     "placeholders": { "count": { "type": "int" } }
   },
-  "journeeReouverte": "{count} voyage(s) réouvert(s) avec succès",
+  "journeeReouverte": "{count} voyage(s) rouvert(s) avec succès",
   "@journeeReouverte": {
     "placeholders": { "count": { "type": "int" } }
   },
@@ -90,7 +90,7 @@
   "@erreurExport": {
     "placeholders": { "error": { "type": "String" } }
   },
-  "voyagesConfirmBody": "Vous êtes sur le point de clôturer {count} voyage(s) pour le {date}.",
+  "voyagesConfirmBody": "Vous êtes sur le point de clôturer {count} voyage(s) du {date}.",
   "@voyagesConfirmBody": {
     "placeholders": {
       "count": { "type": "int" },
@@ -101,11 +101,87 @@
   "@envoyerRapportBody": {
     "placeholders": { "date": { "type": "String" } }
   },
-  "reouvrirJourneeBody": "Vous allez réouvrir {count} voyage(s) clôturé(s) du {date}.",
+  "reouvrirJourneeBody": "Vous allez rouvrir {count} voyage(s) clôturé(s) du {date}.",
   "@reouvrirJourneeBody": {
     "placeholders": {
       "count": { "type": "int" },
       "date":  { "type": "String" }
     }
+  },
+  "venteEtHistorique": "Ventes et historique",
+  "billetterie": "Billetterie",
+  "historique": "Historique",
+  "journauxSync": "Journaux de synchronisation",
+  "journauxSyncEnAttente": "Journaux sync · {count} en attente",
+  "@journauxSyncEnAttente": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "clotureVoyage": "Clôture du voyage",
+  "actif": "Actif",
+  "srtbLetters": "S R T B",
+
+  "horsLignePasDeCacheErreur": "Hors ligne et aucun cache disponible. Veuillez vous connecter à Internet.",
+  "horsLigneDonneesCache": "Données chargées depuis le cache (mode hors ligne)",
+  "horsLigneSynchronise": "Ce billet sera synchronisé dès le retour en ligne.",
+  "horsLigneActionsSync": "Les actions seront synchronisées à la reconnexion.",
+  "horsLigneTicketSauvegarde": "Billet sauvegardé localement (hors ligne)",
+
+  "typeDeTarif": "Type de tarif",
+  "trajetLabel": "Trajet",
+  "pointDeMontee": "Point de montée",
+  "pointDeDescente": "Point de descente",
+  "choisirArret": "Choisir un arrêt",
+  "choisirDabordMontee": "Choisissez d'abord la montée",
+  "aucunArretDisponible": "Aucun arrêt disponible",
+  "nombreDeTickets": "Nombre de billets",
+
+  "confirmerTicket": "Confirmer le billet",
+  "monteeLabel": "Montée",
+  "descenteLabel": "Descente",
+  "tarifLabel": "Tarif",
+  "quantiteLabel": "Quantité",
+  "millimes": "millimes",
+  "gratuit": "Gratuit",
+  "qrCodeTicket": "QR CODE DU BILLET",
+
+  "ticketSingulier": "billet",
+  "ticketPluriel": "billets",
+  "valider": "Valider",
+  "enregistrement": "Enregistrement…",
+
+  "validerLeTicket": "Valider le billet",
+  "validerTickets": "Valider {count} billets",
+  "@validerTickets": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+
+  "passageGratuit": "Passage gratuit",
+  "ticketsVendusLabel": "Billets vendus",
+  "totalCollecte": "Total collecté",
+
+  "idVoyageManquant": "Identifiant du voyage manquant",
+  "inconnu": "inconnu",
+
+  "ticketsVendusToast": "{count} billet(s) vendu(s) — {montant} millimes",
+  "@ticketsVendusToast": {
+    "placeholders": {
+      "count":   { "type": "int" },
+      "montant": { "type": "int" }
+    }
+  },
+  "passagesGratuitsEnregistres": "{count} passage(s) gratuit(s) enregistré(s)",
+  "@passagesGratuitsEnregistres": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "ticketErreur": "Erreur : {message}",
+  "@ticketErreur": {
+    "placeholders": { "message": { "type": "String" } }
+  },
+
+  "pourcentageApplique": "−{pct}% appliqué",
+  "@pourcentageApplique": {
+    "placeholders": { "pct": { "type": "int" } }
   }
 }

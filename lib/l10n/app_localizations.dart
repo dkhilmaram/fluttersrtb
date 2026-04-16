@@ -125,7 +125,7 @@ abstract class AppLocalizations {
   /// No description provided for @matriculeError.
   ///
   /// In fr, this message translates to:
-  /// **'Veuillez entrer votre matricule'**
+  /// **'Veuillez saisir votre matricule'**
   String get matriculeError;
 
   /// No description provided for @motDePasse.
@@ -143,7 +143,7 @@ abstract class AppLocalizations {
   /// No description provided for @motDePasseError.
   ///
   /// In fr, this message translates to:
-  /// **'Veuillez entrer votre mot de passe'**
+  /// **'Veuillez saisir votre mot de passe'**
   String get motDePasseError;
 
   /// No description provided for @seConnecter.
@@ -155,7 +155,7 @@ abstract class AppLocalizations {
   /// No description provided for @offlineHint.
   ///
   /// In fr, this message translates to:
-  /// **'Connectez-vous une fois avec internet\npour activer le mode hors-ligne'**
+  /// **'Connectez-vous une fois en ligne\npour activer le mode hors ligne'**
   String get offlineHint;
 
   /// No description provided for @bienvenue.
@@ -167,7 +167,7 @@ abstract class AppLocalizations {
   /// No description provided for @bienvenueOffline.
   ///
   /// In fr, this message translates to:
-  /// **'Hors-ligne — Bienvenue {prenom} !'**
+  /// **'Hors ligne — Bienvenue {prenom} !'**
   String bienvenueOffline(String prenom);
 
   /// No description provided for @loginError.
@@ -185,19 +185,19 @@ abstract class AppLocalizations {
   /// No description provided for @offlineNoAccount.
   ///
   /// In fr, this message translates to:
-  /// **'Hors-ligne — aucun compte local trouvé'**
+  /// **'Hors ligne — aucun compte local trouvé'**
   String get offlineNoAccount;
 
   /// No description provided for @srtbFullName.
   ///
   /// In fr, this message translates to:
-  /// **'Société Régionale des Transports de Bizerte'**
+  /// **'Société Régionale de Transport de Bizerte'**
   String get srtbFullName;
 
   /// No description provided for @mesVoyages.
   ///
   /// In fr, this message translates to:
-  /// **'Mes Voyages'**
+  /// **'Mes voyages'**
   String get mesVoyages;
 
   /// No description provided for @programmes.
@@ -251,7 +251,7 @@ abstract class AppLocalizations {
   /// No description provided for @cloturerJournee.
   ///
   /// In fr, this message translates to:
-  /// **'Clôture Journée'**
+  /// **'Clôturer la journée'**
   String get cloturerJournee;
 
   /// No description provided for @cloturerJourneeQuestion.
@@ -275,13 +275,13 @@ abstract class AppLocalizations {
   /// No description provided for @reouvrirJournee.
   ///
   /// In fr, this message translates to:
-  /// **'Réouvrir la Journée'**
+  /// **'Rouvrir la journée'**
   String get reouvrirJournee;
 
   /// No description provided for @exporterRapport.
   ///
   /// In fr, this message translates to:
-  /// **'Exporter & Envoyer le rapport'**
+  /// **'Exporter et envoyer le rapport'**
   String get exporterRapport;
 
   /// No description provided for @statutCloture.
@@ -305,13 +305,13 @@ abstract class AppLocalizations {
   /// No description provided for @horsLignePasDeDonnees.
   ///
   /// In fr, this message translates to:
-  /// **'Hors-ligne — pas de données disponibles'**
+  /// **'Hors ligne — aucune donnée disponible'**
   String get horsLignePasDeDonnees;
 
   /// No description provided for @modeHorsLigne.
   ///
   /// In fr, this message translates to:
-  /// **'Mode hors-ligne'**
+  /// **'Mode hors ligne'**
   String get modeHorsLigne;
 
   /// No description provided for @tousDejaClotureToast.
@@ -329,7 +329,7 @@ abstract class AppLocalizations {
   /// No description provided for @aucunAReouvrirToast.
   ///
   /// In fr, this message translates to:
-  /// **'Aucun voyage clôturé à réouvrir'**
+  /// **'Aucun voyage clôturé à rouvrir'**
   String get aucunAReouvrirToast;
 
   /// No description provided for @reouvertureEnCours.
@@ -347,13 +347,13 @@ abstract class AppLocalizations {
   /// No description provided for @voyageReouvertOffline.
   ///
   /// In fr, this message translates to:
-  /// **'Voyage réouvert (hors-ligne)'**
+  /// **'Voyage rouvert (hors ligne)'**
   String get voyageReouvertOffline;
 
   /// No description provided for @voyageReouvert.
   ///
   /// In fr, this message translates to:
-  /// **'Voyage réouvert avec succès'**
+  /// **'Voyage rouvert avec succès'**
   String get voyageReouvert;
 
   /// No description provided for @generationExcel.
@@ -395,7 +395,7 @@ abstract class AppLocalizations {
   /// No description provided for @appuyerReouvrirLabel.
   ///
   /// In fr, this message translates to:
-  /// **'Appuyer pour réouvrir'**
+  /// **'Appuyer pour rouvrir'**
   String get appuyerReouvrirLabel;
 
   /// No description provided for @enAttenteVoyagePrecedent.
@@ -419,7 +419,7 @@ abstract class AppLocalizations {
   /// No description provided for @reouvrirJourneeQuestion.
   ///
   /// In fr, this message translates to:
-  /// **'Réouvrir la journée ?'**
+  /// **'Rouvrir la journée ?'**
   String get reouvrirJourneeQuestion;
 
   /// No description provided for @actionReversible.
@@ -431,19 +431,19 @@ abstract class AppLocalizations {
   /// No description provided for @reouvrirTout.
   ///
   /// In fr, this message translates to:
-  /// **'Réouvrir tout'**
+  /// **'Tout rouvrir'**
   String get reouvrirTout;
 
   /// No description provided for @reouvrirCeVoyage.
   ///
   /// In fr, this message translates to:
-  /// **'Réouvrir ce voyage ?'**
+  /// **'Rouvrir ce voyage ?'**
   String get reouvrirCeVoyage;
 
   /// No description provided for @reouvrirVoyageBody.
   ///
   /// In fr, this message translates to:
-  /// **'Le voyage sera remis en statut actif et vous pourrez à nouveau vendre des tickets.'**
+  /// **'Le voyage reviendra à l\'état actif et vous pourrez à nouveau vendre des billets.'**
   String get reouvrirVoyageBody;
 
   /// No description provided for @rouvrir.
@@ -455,7 +455,7 @@ abstract class AppLocalizations {
   /// No description provided for @journeeClotureOffline.
   ///
   /// In fr, this message translates to:
-  /// **'{count} voyage(s) clôturé(s) (hors-ligne)'**
+  /// **'{count} voyage(s) clôturé(s) (hors ligne)'**
   String journeeClotureOffline(int count);
 
   /// No description provided for @journeeCloture.
@@ -467,13 +467,13 @@ abstract class AppLocalizations {
   /// No description provided for @journeeReouverteOffline.
   ///
   /// In fr, this message translates to:
-  /// **'{count} voyage(s) réouvert(s) (hors-ligne)'**
+  /// **'{count} voyage(s) rouvert(s) (hors ligne)'**
   String journeeReouverteOffline(int count);
 
   /// No description provided for @journeeReouverte.
   ///
   /// In fr, this message translates to:
-  /// **'{count} voyage(s) réouvert(s) avec succès'**
+  /// **'{count} voyage(s) rouvert(s) avec succès'**
   String journeeReouverte(int count);
 
   /// No description provided for @erreurExport.
@@ -485,7 +485,7 @@ abstract class AppLocalizations {
   /// No description provided for @voyagesConfirmBody.
   ///
   /// In fr, this message translates to:
-  /// **'Vous êtes sur le point de clôturer {count} voyage(s) pour le {date}.'**
+  /// **'Vous êtes sur le point de clôturer {count} voyage(s) du {date}.'**
   String voyagesConfirmBody(int count, String date);
 
   /// No description provided for @envoyerRapportBody.
@@ -497,8 +497,272 @@ abstract class AppLocalizations {
   /// No description provided for @reouvrirJourneeBody.
   ///
   /// In fr, this message translates to:
-  /// **'Vous allez réouvrir {count} voyage(s) clôturé(s) du {date}.'**
+  /// **'Vous allez rouvrir {count} voyage(s) clôturé(s) du {date}.'**
   String reouvrirJourneeBody(int count, String date);
+
+  /// No description provided for @venteEtHistorique.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ventes et historique'**
+  String get venteEtHistorique;
+
+  /// No description provided for @billetterie.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billetterie'**
+  String get billetterie;
+
+  /// No description provided for @historique.
+  ///
+  /// In fr, this message translates to:
+  /// **'Historique'**
+  String get historique;
+
+  /// No description provided for @journauxSync.
+  ///
+  /// In fr, this message translates to:
+  /// **'Journaux de synchronisation'**
+  String get journauxSync;
+
+  /// No description provided for @journauxSyncEnAttente.
+  ///
+  /// In fr, this message translates to:
+  /// **'Journaux sync · {count} en attente'**
+  String journauxSyncEnAttente(int count);
+
+  /// No description provided for @clotureVoyage.
+  ///
+  /// In fr, this message translates to:
+  /// **'Clôture du voyage'**
+  String get clotureVoyage;
+
+  /// No description provided for @actif.
+  ///
+  /// In fr, this message translates to:
+  /// **'Actif'**
+  String get actif;
+
+  /// No description provided for @srtbLetters.
+  ///
+  /// In fr, this message translates to:
+  /// **'S R T B'**
+  String get srtbLetters;
+
+  /// No description provided for @horsLignePasDeCacheErreur.
+  ///
+  /// In fr, this message translates to:
+  /// **'Hors ligne et aucun cache disponible. Veuillez vous connecter à Internet.'**
+  String get horsLignePasDeCacheErreur;
+
+  /// No description provided for @horsLigneDonneesCache.
+  ///
+  /// In fr, this message translates to:
+  /// **'Données chargées depuis le cache (mode hors ligne)'**
+  String get horsLigneDonneesCache;
+
+  /// No description provided for @horsLigneSynchronise.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ce billet sera synchronisé dès le retour en ligne.'**
+  String get horsLigneSynchronise;
+
+  /// No description provided for @horsLigneActionsSync.
+  ///
+  /// In fr, this message translates to:
+  /// **'Les actions seront synchronisées à la reconnexion.'**
+  String get horsLigneActionsSync;
+
+  /// No description provided for @horsLigneTicketSauvegarde.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billet sauvegardé localement (hors ligne)'**
+  String get horsLigneTicketSauvegarde;
+
+  /// No description provided for @typeDeTarif.
+  ///
+  /// In fr, this message translates to:
+  /// **'Type de tarif'**
+  String get typeDeTarif;
+
+  /// No description provided for @trajetLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Trajet'**
+  String get trajetLabel;
+
+  /// No description provided for @pointDeMontee.
+  ///
+  /// In fr, this message translates to:
+  /// **'Point de montée'**
+  String get pointDeMontee;
+
+  /// No description provided for @pointDeDescente.
+  ///
+  /// In fr, this message translates to:
+  /// **'Point de descente'**
+  String get pointDeDescente;
+
+  /// No description provided for @choisirArret.
+  ///
+  /// In fr, this message translates to:
+  /// **'Choisir un arrêt'**
+  String get choisirArret;
+
+  /// No description provided for @choisirDabordMontee.
+  ///
+  /// In fr, this message translates to:
+  /// **'Choisissez d\'abord la montée'**
+  String get choisirDabordMontee;
+
+  /// No description provided for @aucunArretDisponible.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucun arrêt disponible'**
+  String get aucunArretDisponible;
+
+  /// No description provided for @nombreDeTickets.
+  ///
+  /// In fr, this message translates to:
+  /// **'Nombre de billets'**
+  String get nombreDeTickets;
+
+  /// No description provided for @confirmerTicket.
+  ///
+  /// In fr, this message translates to:
+  /// **'Confirmer le billet'**
+  String get confirmerTicket;
+
+  /// No description provided for @monteeLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Montée'**
+  String get monteeLabel;
+
+  /// No description provided for @descenteLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Descente'**
+  String get descenteLabel;
+
+  /// No description provided for @tarifLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tarif'**
+  String get tarifLabel;
+
+  /// No description provided for @quantiteLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Quantité'**
+  String get quantiteLabel;
+
+  /// No description provided for @millimes.
+  ///
+  /// In fr, this message translates to:
+  /// **'millimes'**
+  String get millimes;
+
+  /// No description provided for @gratuit.
+  ///
+  /// In fr, this message translates to:
+  /// **'Gratuit'**
+  String get gratuit;
+
+  /// No description provided for @qrCodeTicket.
+  ///
+  /// In fr, this message translates to:
+  /// **'QR CODE DU BILLET'**
+  String get qrCodeTicket;
+
+  /// No description provided for @ticketSingulier.
+  ///
+  /// In fr, this message translates to:
+  /// **'billet'**
+  String get ticketSingulier;
+
+  /// No description provided for @ticketPluriel.
+  ///
+  /// In fr, this message translates to:
+  /// **'billets'**
+  String get ticketPluriel;
+
+  /// No description provided for @valider.
+  ///
+  /// In fr, this message translates to:
+  /// **'Valider'**
+  String get valider;
+
+  /// No description provided for @enregistrement.
+  ///
+  /// In fr, this message translates to:
+  /// **'Enregistrement…'**
+  String get enregistrement;
+
+  /// No description provided for @validerLeTicket.
+  ///
+  /// In fr, this message translates to:
+  /// **'Valider le billet'**
+  String get validerLeTicket;
+
+  /// No description provided for @validerTickets.
+  ///
+  /// In fr, this message translates to:
+  /// **'Valider {count} billets'**
+  String validerTickets(int count);
+
+  /// No description provided for @passageGratuit.
+  ///
+  /// In fr, this message translates to:
+  /// **'Passage gratuit'**
+  String get passageGratuit;
+
+  /// No description provided for @ticketsVendusLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Billets vendus'**
+  String get ticketsVendusLabel;
+
+  /// No description provided for @totalCollecte.
+  ///
+  /// In fr, this message translates to:
+  /// **'Total collecté'**
+  String get totalCollecte;
+
+  /// No description provided for @idVoyageManquant.
+  ///
+  /// In fr, this message translates to:
+  /// **'Identifiant du voyage manquant'**
+  String get idVoyageManquant;
+
+  /// No description provided for @inconnu.
+  ///
+  /// In fr, this message translates to:
+  /// **'inconnu'**
+  String get inconnu;
+
+  /// No description provided for @ticketsVendusToast.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count} billet(s) vendu(s) — {montant} millimes'**
+  String ticketsVendusToast(int count, int montant);
+
+  /// No description provided for @passagesGratuitsEnregistres.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count} passage(s) gratuit(s) enregistré(s)'**
+  String passagesGratuitsEnregistres(int count);
+
+  /// No description provided for @ticketErreur.
+  ///
+  /// In fr, this message translates to:
+  /// **'Erreur : {message}'**
+  String ticketErreur(String message);
+
+  /// No description provided for @pourcentageApplique.
+  ///
+  /// In fr, this message translates to:
+  /// **'−{pct}% appliqué'**
+  String pourcentageApplique(int pct);
 }
 
 class _AppLocalizationsDelegate

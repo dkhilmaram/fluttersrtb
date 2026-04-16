@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../l10n/app_localizations.dart';
 import '../history/HistoriquePage.dart';
 import '../voyage/cloture_voyage.dart';
 import 'ticketing_page.dart';
 import '../history/sync_log_page.dart';
-import '../../../core/constants/api_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/database/daos/ticket_dao.dart';
+import '../../widgets/language_switcher.dart';
 
 // ─────────────────────────────────────────────────────────────
 // Widget
@@ -129,11 +130,13 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildActiveButtons(bool hasId) {
+    final t = AppLocalizations.of(context)!;
+
     return Column(
       children: [
         if (hasId) ...[
           _actionBtn(
-            label: 'Billetterie',
+            label: t.billetterie,
             icon: Icons.confirmation_number_rounded,
             colors: const [Color(0xFF0D6E5E), Color(0xFF0D9E87)],
             onTap: () => Navigator.push(
@@ -154,7 +157,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
         ],
 
         _actionBtn(
-          label: 'Historique',
+          label: t.historique,
           icon: Icons.history,
           colors: [AppTheme.navyDark, AppTheme.navyLight],
           onTap: hasId
@@ -173,7 +176,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
         if (hasId) ...[
           const SizedBox(height: 12),
           _actionBtn(
-            label: 'Clôture Voyage',
+            label: t.clotureVoyage,
             icon: Icons.flag_rounded,
             colors: const [Color(0xFF9B1C1C), Color(0xFFDC2626)],
             onTap: () async {
@@ -195,10 +198,12 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
   // ─────────────────────────────────────────────────────────────
 
   Widget _syncLogBtn() {
+    final t = AppLocalizations.of(context)!;
+
     return _actionBtn(
       label: _pendingCount > 0
-          ? 'Journaux de sync · $_pendingCount en attente'
-          : 'Journaux de synchronisation',
+          ? t.journauxSyncEnAttente(_pendingCount)
+          : t.journauxSync,
       icon: Icons.sync_rounded,
       colors: _pendingCount > 0
           ? [Colors.orange.shade700, Colors.orange.shade500]
@@ -213,10 +218,12 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Header
+  // Header  ← matches login_page.dart structure exactly
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildHeader(String depart, String arrivee) {
+    final t = AppLocalizations.of(context)!;
+
     return Container(
       width: double.infinity,
       decoration: const BoxDecoration(
@@ -226,9 +233,10 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
           end: Alignment.bottomRight,
         ),
       ),
-      padding: const EdgeInsets.fromLTRB(20, 52, 20, 28),
+      padding: const EdgeInsets.fromLTRB(20, 50, 20, 36),
       child: Column(
         children: [
+          // ── Top row: back button + spacer + language switcher ──
           Row(
             children: [
               GestureDetector(
@@ -239,11 +247,15 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
                     color: Colors.white.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.arrow_back_ios_new,
-                      color: Colors.white, size: 17),
+                  child: const Icon(
+                    Icons.arrow_back_ios_new,
+                    color: Colors.white,
+                    size: 17,
+                  ),
                 ),
               ),
               const Spacer(),
+              // ── Sync badge icon ──
               GestureDetector(
                 onTap: () => Navigator.push(
                   context,
@@ -260,8 +272,11 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
                         color: Colors.white.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.sync_rounded,
-                          color: Colors.white, size: 20),
+                      child: const Icon(
+                        Icons.sync_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                     ),
                     if (_pendingCount > 0)
                       Positioned(
@@ -290,9 +305,14 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
+              // ── Language switcher — same as login_page.dart ──
+              const LanguageSwitcher(),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
+
+          // ── Logo ──
           Container(
             width: 72,
             height: 72,
@@ -312,12 +332,14 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
               'assets/images/logo_srtb.png',
               fit: BoxFit.contain,
               errorBuilder: (_, __, ___) => const Icon(
-                  Icons.directions_bus,
-                  size: 44,
-                  color: AppTheme.navyMid),
+                Icons.directions_bus,
+                size: 44,
+                color: AppTheme.navyMid,
+              ),
             ),
           ),
           const SizedBox(height: 12),
+
           const Text(
             'S R T B',
             style: TextStyle(
@@ -329,7 +351,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Vente & Historique',
+            t.venteEtHistorique,
             style: TextStyle(
               color: Colors.white.withOpacity(0.7),
               fontSize: 12,
@@ -337,6 +359,8 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
             ),
           ),
           const SizedBox(height: 14),
+
+          // ── Route pill ──
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
             decoration: BoxDecoration(
@@ -351,18 +375,26 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
                   width: 7,
                   height: 7,
                   decoration: const BoxDecoration(
-                      color: AppTheme.goldLight, shape: BoxShape.circle),
+                    color: AppTheme.goldLight,
+                    shape: BoxShape.circle,
+                  ),
                 ),
                 const SizedBox(width: 8),
-                Text(depart,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600)),
+                Text(
+                  depart,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Icon(Icons.arrow_forward,
-                      color: Colors.white.withOpacity(0.4), size: 13),
+                  child: Icon(
+                    Icons.arrow_forward,
+                    color: Colors.white.withOpacity(0.4),
+                    size: 13,
+                  ),
                 ),
                 Container(
                   width: 7,
@@ -374,11 +406,14 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(arrivee,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600)),
+                Text(
+                  arrivee,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
           ),
@@ -392,6 +427,8 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
   // ─────────────────────────────────────────────────────────────
 
   Widget _buildInfoCard(String depart, String arrivee) {
+    final t = AppLocalizations.of(context)!;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Container(
@@ -450,7 +487,9 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
                             ? '$_heure  ·  $_todayFormatted'
                             : _todayFormatted,
                         style: TextStyle(
-                            color: Colors.grey.shade400, fontSize: 11),
+                          color: Colors.grey.shade400,
+                          fontSize: 11,
+                        ),
                       ),
                     ],
                   ),
@@ -465,7 +504,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
                 border: Border.all(color: Colors.green.shade200),
               ),
               child: Text(
-                'Actif',
+                t.actif,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 11,

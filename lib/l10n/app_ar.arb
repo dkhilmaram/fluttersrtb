@@ -2,14 +2,14 @@
   "@@locale": "ar",
   "appTitle": "SRTB",
   "connexion": "تسجيل الدخول",
-  "matricule": "رقم التسجيل",
-  "matriculeHint": "أدخل رقم التسجيل",
-  "matriculeError": "يرجى إدخال رقم التسجيل",
+  "matricule": "الرقم الوظيفي",
+  "matriculeHint": "أدخل رقمك الوظيفي",
+  "matriculeError": "يرجى إدخال رقمك الوظيفي",
   "motDePasse": "كلمة المرور",
   "motDePasseHint": "أدخل كلمة المرور",
   "motDePasseError": "يرجى إدخال كلمة المرور",
   "seConnecter": "تسجيل الدخول",
-  "offlineHint": "سجّل دخولك مرة واحدة عبر الإنترنت\nلتفعيل وضع عدم الاتصال",
+  "offlineHint": "سجّل الدخول مرة واحدة وأنت متصل\nلتفعيل وضع عدم الاتصال",
   "bienvenue": "مرحباً {prenom} {nom} !",
   "@bienvenue": {
     "placeholders": {
@@ -17,27 +17,27 @@
       "nom":    { "type": "String" }
     }
   },
-  "bienvenueOffline": "بدون اتصال — مرحباً {prenom} !",
+  "bienvenueOffline": "غير متصل — مرحباً {prenom} !",
   "@bienvenueOffline": {
     "placeholders": {
       "prenom": { "type": "String" }
     }
   },
-  "loginError": "رقم التسجيل أو كلمة المرور غير صحيحة",
-  "matriculeInvalid": "رقم التسجيل غير صالح",
-  "offlineNoAccount": "بدون اتصال — لم يتم العثور على حساب محلي",
+  "loginError": "الرقم الوظيفي أو كلمة المرور غير صحيحة",
+  "matriculeInvalid": "الرقم الوظيفي غير صالح",
+  "offlineNoAccount": "غير متصل — لم يُعثر على حساب محلي",
   "srtbFullName": "الشركة الجهوية للنقل ببنزرت",
   "mesVoyages": "رحلاتي",
-  "programmes": "المبرمجة",
-  "nonProgrammes": "غير المبرمجة",
+  "programmes": "مجدولة",
+  "nonProgrammes": "غير مجدولة",
   "total": "المجموع",
-  "clotures": "المغلقة",
+  "clotures": "مغلقة",
   "enCours": "جارية",
   "actifs": "نشطة",
-  "aucunVoyageProgramme": "لا توجد رحلات مبرمجة",
-  "aucunVoyageNonProgramme": "لا توجد رحلات غير مبرمجة",
+  "aucunVoyageProgramme": "لا توجد رحلات مجدولة",
+  "aucunVoyageNonProgramme": "لا توجد رحلات غير مجدولة",
   "cloturerJournee": "إغلاق اليوم",
-  "cloturerJourneeQuestion": "إغلاق كل اليوم؟",
+  "cloturerJourneeQuestion": "هل تريد إغلاق اليوم بأكمله؟",
   "annuler": "إلغاء",
   "confirmer": "تأكيد",
   "reouvrirJournee": "إعادة فتح اليوم",
@@ -45,14 +45,14 @@
   "statutCloture": "مغلق",
   "statutEnAttente": "في الانتظار",
   "statutActif": "نشط",
-  "horsLignePasDeDonnees": "بدون اتصال — لا توجد بيانات متاحة",
+  "horsLignePasDeDonnees": "غير متصل — لا توجد بيانات متاحة",
   "modeHorsLigne": "وضع عدم الاتصال",
   "tousDejaClotureToast": "جميع الرحلات مغلقة بالفعل",
   "echecCloture": "فشل الإغلاق",
   "aucunAReouvrirToast": "لا توجد رحلات مغلقة لإعادة فتحها",
   "reouvertureEnCours": "جارٍ إعادة الفتح…",
   "echecReouverture": "فشل إعادة الفتح",
-  "voyageReouvertOffline": "تمت إعادة فتح الرحلة (بدون اتصال)",
+  "voyageReouvertOffline": "تمت إعادة فتح الرحلة (غير متصل)",
   "voyageReouvert": "تمت إعادة فتح الرحلة بنجاح",
   "generationExcel": "جارٍ إنشاء ملف Excel…",
   "generationPdf": "جارٍ إنشاء ملف PDF…",
@@ -64,25 +64,25 @@
   "enAttenteVoyagePrecedent": "في انتظار الرحلة السابقة",
   "reessayer": "إعادة المحاولة",
   "envoyerRapport": "إرسال التقرير",
-  "reouvrirJourneeQuestion": "إعادة فتح اليوم؟",
-  "actionReversible": "هذا الإجراء قابل للتراجع",
+  "reouvrirJourneeQuestion": "هل تريد إعادة فتح اليوم؟",
+  "actionReversible": "يمكن التراجع عن هذا الإجراء",
   "reouvrirTout": "إعادة فتح الكل",
-  "reouvrirCeVoyage": "إعادة فتح هذه الرحلة؟",
+  "reouvrirCeVoyage": "هل تريد إعادة فتح هذه الرحلة؟",
   "reouvrirVoyageBody": "ستعود الرحلة إلى الحالة النشطة وستتمكن من بيع التذاكر مجدداً.",
-  "rouvrir": "إعادة فتح",
-  "journeeClotureOffline": "تم إغلاق {count} رحلة (بدون اتصال)",
+  "rouvrir": "إعادة الفتح",
+  "journeeClotureOffline": "تم إغلاق {count} رحلة (رحلات) (غير متصل)",
   "@journeeClotureOffline": {
     "placeholders": { "count": { "type": "int" } }
   },
-  "journeeCloture": "تم إغلاق {count} رحلة بنجاح",
+  "journeeCloture": "تم إغلاق {count} رحلة (رحلات) بنجاح",
   "@journeeCloture": {
     "placeholders": { "count": { "type": "int" } }
   },
-  "journeeReouverteOffline": "تمت إعادة فتح {count} رحلة (بدون اتصال)",
+  "journeeReouverteOffline": "تمت إعادة فتح {count} رحلة (رحلات) (غير متصل)",
   "@journeeReouverteOffline": {
     "placeholders": { "count": { "type": "int" } }
   },
-  "journeeReouverte": "تمت إعادة فتح {count} رحلة بنجاح",
+  "journeeReouverte": "تمت إعادة فتح {count} رحلة (رحلات) بنجاح",
   "@journeeReouverte": {
     "placeholders": { "count": { "type": "int" } }
   },
@@ -90,22 +90,98 @@
   "@erreurExport": {
     "placeholders": { "error": { "type": "String" } }
   },
-  "voyagesConfirmBody": "أنت على وشك إغلاق {count} رحلة ليوم {date}.",
+  "voyagesConfirmBody": "أنت على وشك إغلاق {count} رحلة (رحلات) بتاريخ {date}.",
   "@voyagesConfirmBody": {
     "placeholders": {
       "count": { "type": "int" },
       "date":  { "type": "String" }
     }
   },
-  "envoyerRapportBody": "سيتم إرسال تقرير يوم {date} عبر البريد الإلكتروني إلى:",
+  "envoyerRapportBody": "سيتم إرسال تقرير {date} بالبريد الإلكتروني إلى:",
   "@envoyerRapportBody": {
     "placeholders": { "date": { "type": "String" } }
   },
-  "reouvrirJourneeBody": "ستقوم بإعادة فتح {count} رحلة مغلقة ليوم {date}.",
+  "reouvrirJourneeBody": "ستقوم بإعادة فتح {count} رحلة (رحلات) مغلقة بتاريخ {date}.",
   "@reouvrirJourneeBody": {
     "placeholders": {
       "count": { "type": "int" },
       "date":  { "type": "String" }
     }
+  },
+  "venteEtHistorique": "المبيعات والسجل",
+  "billetterie": "التذاكر",
+  "historique": "السجل",
+  "journauxSync": "سجلات المزامنة",
+  "journauxSyncEnAttente": "سجلات المزامنة · {count} في الانتظار",
+  "@journauxSyncEnAttente": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "clotureVoyage": "إغلاق الرحلة",
+  "actif": "نشط",
+  "srtbLetters": "S R T B",
+
+  "horsLignePasDeCacheErreur": "غير متصل ولا يوجد ذاكرة تخزين مؤقت. يرجى الاتصال بالإنترنت.",
+  "horsLigneDonneesCache": "تم تحميل البيانات من الذاكرة المؤقتة (وضع عدم الاتصال)",
+  "horsLigneSynchronise": "سيتم مزامنة هذه التذكرة عند العودة إلى الاتصال.",
+  "horsLigneActionsSync": "ستتم مزامنة الإجراءات عند إعادة الاتصال.",
+  "horsLigneTicketSauvegarde": "تم حفظ التذكرة محلياً (غير متصل)",
+
+  "typeDeTarif": "نوع التعريفة",
+  "trajetLabel": "المسار",
+  "pointDeMontee": "نقطة الصعود",
+  "pointDeDescente": "نقطة النزول",
+  "choisirArret": "اختر محطة",
+  "choisirDabordMontee": "اختر نقطة الصعود أولاً",
+  "aucunArretDisponible": "لا توجد محطات متاحة",
+  "nombreDeTickets": "عدد التذاكر",
+
+  "confirmerTicket": "تأكيد التذكرة",
+  "monteeLabel": "الصعود",
+  "descenteLabel": "النزول",
+  "tarifLabel": "التعريفة",
+  "quantiteLabel": "الكمية",
+  "millimes": "مليم",
+  "gratuit": "مجاني",
+  "qrCodeTicket": "رمز QR للتذكرة",
+
+  "ticketSingulier": "تذكرة",
+  "ticketPluriel": "تذاكر",
+  "valider": "تحقق",
+  "enregistrement": "جارٍ الحفظ…",
+
+  "validerLeTicket": "تحقق من التذكرة",
+  "validerTickets": "تحقق من {count} تذاكر",
+  "@validerTickets": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+
+  "passageGratuit": "مرور مجاني",
+  "ticketsVendusLabel": "التذاكر المباعة",
+  "totalCollecte": "إجمالي المحصّل",
+
+  "idVoyageManquant": "معرّف الرحلة مفقود",
+  "inconnu": "غير معروف",
+
+  "ticketsVendusToast": "تم بيع {count} تذكرة (تذاكر) — {montant} مليم",
+  "@ticketsVendusToast": {
+    "placeholders": {
+      "count":   { "type": "int" },
+      "montant": { "type": "int" }
+    }
+  },
+  "passagesGratuitsEnregistres": "تم تسجيل {count} مرور (مرورات) مجاني",
+  "@passagesGratuitsEnregistres": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "ticketErreur": "خطأ: {message}",
+  "@ticketErreur": {
+    "placeholders": { "message": { "type": "String" } }
+  },
+
+  "pourcentageApplique": "−{pct}% مطبّق",
+  "@pourcentageApplique": {
+    "placeholders": { "pct": { "type": "int" } }
   }
 }
