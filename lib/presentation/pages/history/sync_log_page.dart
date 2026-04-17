@@ -4,7 +4,6 @@ import '../../../data/database/daos/ticket_dao.dart';
 import '../../../data/database/daos/log_dao.dart';
 import '../../../services/sync_service.dart';
 import '../../../l10n/app_localizations.dart';
-import '../../widgets/language_switcher.dart';
 
 // ── Palette ───────────────────────────────────────────────────
 const Color _dark0   = Color(0xFF0B1120);
