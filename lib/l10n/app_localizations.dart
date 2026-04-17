@@ -125,7 +125,7 @@ abstract class AppLocalizations {
   /// No description provided for @matriculeError.
   ///
   /// In fr, this message translates to:
-  /// **'Veuillez saisir votre matricule'**
+  /// **'Veuillez entrer votre matricule'**
   String get matriculeError;
 
   /// No description provided for @motDePasse.
@@ -143,7 +143,7 @@ abstract class AppLocalizations {
   /// No description provided for @motDePasseError.
   ///
   /// In fr, this message translates to:
-  /// **'Veuillez saisir votre mot de passe'**
+  /// **'Veuillez entrer votre mot de passe'**
   String get motDePasseError;
 
   /// No description provided for @seConnecter.
@@ -185,7 +185,7 @@ abstract class AppLocalizations {
   /// No description provided for @offlineNoAccount.
   ///
   /// In fr, this message translates to:
-  /// **'Hors ligne — aucun compte local trouvé'**
+  /// **'Hors ligne — Aucun compte local trouvé'**
   String get offlineNoAccount;
 
   /// No description provided for @srtbFullName.
@@ -257,7 +257,7 @@ abstract class AppLocalizations {
   /// No description provided for @cloturerJourneeQuestion.
   ///
   /// In fr, this message translates to:
-  /// **'Clôturer toute la journée ?'**
+  /// **'Souhaitez-vous clôturer toute la journée ?'**
   String get cloturerJourneeQuestion;
 
   /// No description provided for @annuler.
@@ -305,7 +305,7 @@ abstract class AppLocalizations {
   /// No description provided for @horsLignePasDeDonnees.
   ///
   /// In fr, this message translates to:
-  /// **'Hors ligne — aucune donnée disponible'**
+  /// **'Hors ligne — Aucune donnée disponible'**
   String get horsLignePasDeDonnees;
 
   /// No description provided for @modeHorsLigne.
@@ -419,7 +419,7 @@ abstract class AppLocalizations {
   /// No description provided for @reouvrirJourneeQuestion.
   ///
   /// In fr, this message translates to:
-  /// **'Rouvrir la journée ?'**
+  /// **'Souhaitez-vous rouvrir la journée ?'**
   String get reouvrirJourneeQuestion;
 
   /// No description provided for @actionReversible.
@@ -431,19 +431,19 @@ abstract class AppLocalizations {
   /// No description provided for @reouvrirTout.
   ///
   /// In fr, this message translates to:
-  /// **'Tout rouvrir'**
+  /// **'Rouvrir tout'**
   String get reouvrirTout;
 
   /// No description provided for @reouvrirCeVoyage.
   ///
   /// In fr, this message translates to:
-  /// **'Rouvrir ce voyage ?'**
+  /// **'Souhaitez-vous rouvrir ce voyage ?'**
   String get reouvrirCeVoyage;
 
   /// No description provided for @reouvrirVoyageBody.
   ///
   /// In fr, this message translates to:
-  /// **'Le voyage reviendra à l\'état actif et vous pourrez à nouveau vendre des billets.'**
+  /// **'Le voyage reviendra à l\'état actif et vous pourrez à nouveau vendre des tickets.'**
   String get reouvrirVoyageBody;
 
   /// No description provided for @rouvrir.
@@ -503,7 +503,7 @@ abstract class AppLocalizations {
   /// No description provided for @venteEtHistorique.
   ///
   /// In fr, this message translates to:
-  /// **'Ventes et historique'**
+  /// **'Vente & Historique'**
   String get venteEtHistorique;
 
   /// No description provided for @billetterie.
@@ -521,13 +521,13 @@ abstract class AppLocalizations {
   /// No description provided for @journauxSync.
   ///
   /// In fr, this message translates to:
-  /// **'Journaux de synchronisation'**
+  /// **'Journaux de sync'**
   String get journauxSync;
 
   /// No description provided for @journauxSyncEnAttente.
   ///
   /// In fr, this message translates to:
-  /// **'Journaux sync · {count} en attente'**
+  /// **'Journaux de sync · {count} en attente'**
   String journauxSyncEnAttente(int count);
 
   /// No description provided for @clotureVoyage.
@@ -551,31 +551,31 @@ abstract class AppLocalizations {
   /// No description provided for @horsLignePasDeCacheErreur.
   ///
   /// In fr, this message translates to:
-  /// **'Hors ligne et aucun cache disponible. Veuillez vous connecter à Internet.'**
+  /// **'Hors ligne et pas de cache. Veuillez vous connecter à Internet.'**
   String get horsLignePasDeCacheErreur;
 
   /// No description provided for @horsLigneDonneesCache.
   ///
   /// In fr, this message translates to:
-  /// **'Données chargées depuis le cache (mode hors ligne)'**
+  /// **'Données chargées depuis le cache (hors ligne)'**
   String get horsLigneDonneesCache;
 
   /// No description provided for @horsLigneSynchronise.
   ///
   /// In fr, this message translates to:
-  /// **'Ce billet sera synchronisé dès le retour en ligne.'**
+  /// **'Ce ticket sera synchronisé lors du retour en ligne.'**
   String get horsLigneSynchronise;
 
   /// No description provided for @horsLigneActionsSync.
   ///
   /// In fr, this message translates to:
-  /// **'Les actions seront synchronisées à la reconnexion.'**
+  /// **'Les actions seront synchronisées lors du retour en ligne.'**
   String get horsLigneActionsSync;
 
   /// No description provided for @horsLigneTicketSauvegarde.
   ///
   /// In fr, this message translates to:
-  /// **'Billet sauvegardé localement (hors ligne)'**
+  /// **'Ticket enregistré localement (hors ligne)'**
   String get horsLigneTicketSauvegarde;
 
   /// No description provided for @typeDeTarif.
@@ -611,7 +611,7 @@ abstract class AppLocalizations {
   /// No description provided for @choisirDabordMontee.
   ///
   /// In fr, this message translates to:
-  /// **'Choisissez d\'abord la montée'**
+  /// **'Choisir d\'abord la montée'**
   String get choisirDabordMontee;
 
   /// No description provided for @aucunArretDisponible.
@@ -623,13 +623,13 @@ abstract class AppLocalizations {
   /// No description provided for @nombreDeTickets.
   ///
   /// In fr, this message translates to:
-  /// **'Nombre de billets'**
+  /// **'Nombre de tickets'**
   String get nombreDeTickets;
 
   /// No description provided for @confirmerTicket.
   ///
   /// In fr, this message translates to:
-  /// **'Confirmer le billet'**
+  /// **'Confirmer le ticket'**
   String get confirmerTicket;
 
   /// No description provided for @monteeLabel.
@@ -671,19 +671,19 @@ abstract class AppLocalizations {
   /// No description provided for @qrCodeTicket.
   ///
   /// In fr, this message translates to:
-  /// **'QR CODE DU BILLET'**
+  /// **'QR Code du ticket'**
   String get qrCodeTicket;
 
   /// No description provided for @ticketSingulier.
   ///
   /// In fr, this message translates to:
-  /// **'billet'**
+  /// **'ticket'**
   String get ticketSingulier;
 
   /// No description provided for @ticketPluriel.
   ///
   /// In fr, this message translates to:
-  /// **'billets'**
+  /// **'tickets'**
   String get ticketPluriel;
 
   /// No description provided for @valider.
@@ -701,13 +701,13 @@ abstract class AppLocalizations {
   /// No description provided for @validerLeTicket.
   ///
   /// In fr, this message translates to:
-  /// **'Valider le billet'**
+  /// **'Valider le ticket'**
   String get validerLeTicket;
 
   /// No description provided for @validerTickets.
   ///
   /// In fr, this message translates to:
-  /// **'Valider {count} billets'**
+  /// **'Valider {count} tickets'**
   String validerTickets(int count);
 
   /// No description provided for @passageGratuit.
@@ -719,7 +719,7 @@ abstract class AppLocalizations {
   /// No description provided for @ticketsVendusLabel.
   ///
   /// In fr, this message translates to:
-  /// **'Billets vendus'**
+  /// **'Tickets vendus'**
   String get ticketsVendusLabel;
 
   /// No description provided for @totalCollecte.
@@ -731,19 +731,19 @@ abstract class AppLocalizations {
   /// No description provided for @idVoyageManquant.
   ///
   /// In fr, this message translates to:
-  /// **'Identifiant du voyage manquant'**
+  /// **'ID voyage manquant'**
   String get idVoyageManquant;
 
   /// No description provided for @inconnu.
   ///
   /// In fr, this message translates to:
-  /// **'inconnu'**
+  /// **'Inconnu'**
   String get inconnu;
 
   /// No description provided for @ticketsVendusToast.
   ///
   /// In fr, this message translates to:
-  /// **'{count} billet(s) vendu(s) — {montant} millimes'**
+  /// **'{count} ticket(s) vendu(s) — {montant} millimes'**
   String ticketsVendusToast(int count, int montant);
 
   /// No description provided for @passagesGratuitsEnregistres.
@@ -763,6 +763,864 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'−{pct}% appliqué'**
   String pourcentageApplique(int pct);
+
+  /// No description provided for @institutionAgence.
+  ///
+  /// In fr, this message translates to:
+  /// **'Institution / Agence'**
+  String get institutionAgence;
+
+  /// No description provided for @typeSpecial.
+  ///
+  /// In fr, this message translates to:
+  /// **'Type spécial'**
+  String get typeSpecial;
+
+  /// No description provided for @nombreDePersonnes.
+  ///
+  /// In fr, this message translates to:
+  /// **'Nombre de personnes'**
+  String get nombreDePersonnes;
+
+  /// No description provided for @personne.
+  ///
+  /// In fr, this message translates to:
+  /// **'personne'**
+  String get personne;
+
+  /// No description provided for @personnes.
+  ///
+  /// In fr, this message translates to:
+  /// **'personnes'**
+  String get personnes;
+
+  /// No description provided for @enregistrerLePassage.
+  ///
+  /// In fr, this message translates to:
+  /// **'Enregistrer le passage'**
+  String get enregistrerLePassage;
+
+  /// No description provided for @enregistrementEnCours.
+  ///
+  /// In fr, this message translates to:
+  /// **'Enregistrement...'**
+  String get enregistrementEnCours;
+
+  /// No description provided for @passagesSession.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count} passage(s) enregistré(s) cette session'**
+  String passagesSession(int count);
+
+  /// No description provided for @passagesToast.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count} passage(s) enregistré(s)'**
+  String passagesToast(int count);
+
+  /// No description provided for @erreurInconnue.
+  ///
+  /// In fr, this message translates to:
+  /// **'inconnue'**
+  String get erreurInconnue;
+
+  /// No description provided for @passagesGratuitsSpeciaux.
+  ///
+  /// In fr, this message translates to:
+  /// **'Passages Gratuits & Spéciaux'**
+  String get passagesGratuitsSpeciaux;
+
+  /// No description provided for @resumePassage.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count} personne(s) · {typeTarif}'**
+  String resumePassage(int count, String typeTarif);
+
+  /// No description provided for @erreurPassage.
+  ///
+  /// In fr, this message translates to:
+  /// **'Erreur : {message}'**
+  String erreurPassage(String message);
+
+  /// No description provided for @categorieArmeeNationale.
+  ///
+  /// In fr, this message translates to:
+  /// **'Armée nationale'**
+  String get categorieArmeeNationale;
+
+  /// No description provided for @categorieGardeNationale.
+  ///
+  /// In fr, this message translates to:
+  /// **'Garde nationale'**
+  String get categorieGardeNationale;
+
+  /// No description provided for @categoriePoliceNationale.
+  ///
+  /// In fr, this message translates to:
+  /// **'Police nationale'**
+  String get categoriePoliceNationale;
+
+  /// No description provided for @categorieDouane.
+  ///
+  /// In fr, this message translates to:
+  /// **'Douane'**
+  String get categorieDouane;
+
+  /// No description provided for @categorieMinistere.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ministère'**
+  String get categorieMinistere;
+
+  /// No description provided for @categorieMunicipalite.
+  ///
+  /// In fr, this message translates to:
+  /// **'Municipalité'**
+  String get categorieMunicipalite;
+
+  /// No description provided for @categorieEtablissementScolaire.
+  ///
+  /// In fr, this message translates to:
+  /// **'Établissement scolaire'**
+  String get categorieEtablissementScolaire;
+
+  /// No description provided for @categorieAutreInstitution.
+  ///
+  /// In fr, this message translates to:
+  /// **'Autre institution'**
+  String get categorieAutreInstitution;
+
+  /// No description provided for @categorieAbonnement.
+  ///
+  /// In fr, this message translates to:
+  /// **'Abonnement'**
+  String get categorieAbonnement;
+
+  /// No description provided for @categorieAgent.
+  ///
+  /// In fr, this message translates to:
+  /// **'Agent'**
+  String get categorieAgent;
+
+  /// No description provided for @historiqueVoyage.
+  ///
+  /// In fr, this message translates to:
+  /// **'Historique du voyage'**
+  String get historiqueVoyage;
+
+  /// No description provided for @tickets.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tickets'**
+  String get tickets;
+
+  /// No description provided for @finance.
+  ///
+  /// In fr, this message translates to:
+  /// **'Finance'**
+  String get finance;
+
+  /// No description provided for @liste.
+  ///
+  /// In fr, this message translates to:
+  /// **'Liste'**
+  String get liste;
+
+  /// No description provided for @parSegment.
+  ///
+  /// In fr, this message translates to:
+  /// **'Par segment'**
+  String get parSegment;
+
+  /// No description provided for @apercu.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aperçu'**
+  String get apercu;
+
+  /// No description provided for @parTarif.
+  ///
+  /// In fr, this message translates to:
+  /// **'Par tarif'**
+  String get parTarif;
+
+  /// No description provided for @bilan.
+  ///
+  /// In fr, this message translates to:
+  /// **'Bilan'**
+  String get bilan;
+
+  /// No description provided for @aucunTicketAujourdhui.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucun ticket aujourd\'hui'**
+  String get aucunTicketAujourdhui;
+
+  /// No description provided for @ticketsAujourdhuiApparaitront.
+  ///
+  /// In fr, this message translates to:
+  /// **'Les tickets d\'aujourd\'hui apparaîtront ici'**
+  String get ticketsAujourdhuiApparaitront;
+
+  /// No description provided for @aucunSegmentDisponible.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucun segment disponible'**
+  String get aucunSegmentDisponible;
+
+  /// No description provided for @segmentInfoIndisponible.
+  ///
+  /// In fr, this message translates to:
+  /// **'Les informations de segment ne sont pas disponibles'**
+  String get segmentInfoIndisponible;
+
+  /// No description provided for @aucunTarif.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucun tarif'**
+  String get aucunTarif;
+
+  /// No description provided for @donneesApparaitrontIci.
+  ///
+  /// In fr, this message translates to:
+  /// **'Les données apparaîtront ici'**
+  String get donneesApparaitrontIci;
+
+  /// No description provided for @recetteTotale.
+  ///
+  /// In fr, this message translates to:
+  /// **'Recette totale'**
+  String get recetteTotale;
+
+  /// No description provided for @ticketsVendus.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tickets vendus'**
+  String get ticketsVendus;
+
+  /// No description provided for @aujourdhui.
+  ///
+  /// In fr, this message translates to:
+  /// **'aujourd\'hui'**
+  String get aujourdhui;
+
+  /// No description provided for @prixMoyen.
+  ///
+  /// In fr, this message translates to:
+  /// **'Prix moyen'**
+  String get prixMoyen;
+
+  /// No description provided for @ticketPayant.
+  ///
+  /// In fr, this message translates to:
+  /// **'ticket payant'**
+  String get ticketPayant;
+
+  /// No description provided for @repartitionRecettes.
+  ///
+  /// In fr, this message translates to:
+  /// **'Répartition des recettes'**
+  String get repartitionRecettes;
+
+  /// No description provided for @recetteParTarif.
+  ///
+  /// In fr, this message translates to:
+  /// **'Recette par tarif'**
+  String get recetteParTarif;
+
+  /// No description provided for @detailFinancierParTarif.
+  ///
+  /// In fr, this message translates to:
+  /// **'Détail financier par tarif'**
+  String get detailFinancierParTarif;
+
+  /// No description provided for @recetteTotaleVoyage.
+  ///
+  /// In fr, this message translates to:
+  /// **'Recette totale du voyage — aujourd\'hui'**
+  String get recetteTotaleVoyage;
+
+  /// No description provided for @equivalentDT.
+  ///
+  /// In fr, this message translates to:
+  /// **'≈ {dt} DT'**
+  String equivalentDT(String dt);
+
+  /// No description provided for @ticketsPayants.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tickets payants'**
+  String get ticketsPayants;
+
+  /// No description provided for @totalVoyageurs.
+  ///
+  /// In fr, this message translates to:
+  /// **'Total voyageurs'**
+  String get totalVoyageurs;
+
+  /// No description provided for @prixMoyenPayants.
+  ///
+  /// In fr, this message translates to:
+  /// **'Prix moyen (payants)'**
+  String get prixMoyenPayants;
+
+  /// No description provided for @analyseGratuites.
+  ///
+  /// In fr, this message translates to:
+  /// **'Analyse des gratuités'**
+  String get analyseGratuites;
+
+  /// No description provided for @manqueAGagnerEstime.
+  ///
+  /// In fr, this message translates to:
+  /// **'Manque à gagner estimé'**
+  String get manqueAGagnerEstime;
+
+  /// No description provided for @tauxGratuite.
+  ///
+  /// In fr, this message translates to:
+  /// **'Taux de gratuité'**
+  String get tauxGratuite;
+
+  /// No description provided for @payants.
+  ///
+  /// In fr, this message translates to:
+  /// **'Payants'**
+  String get payants;
+
+  /// No description provided for @typesTarifUtilises.
+  ///
+  /// In fr, this message translates to:
+  /// **'Types de tarif utilisés'**
+  String get typesTarifUtilises;
+
+  /// No description provided for @segmentsPluralLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count} segment(s)'**
+  String segmentsPluralLabel(int count);
+
+  /// No description provided for @recetteParSegment.
+  ///
+  /// In fr, this message translates to:
+  /// **'Recette par segment'**
+  String get recetteParSegment;
+
+  /// No description provided for @segmentLePlusRentable.
+  ///
+  /// In fr, this message translates to:
+  /// **'Segment le + rentable : seg. {seg}'**
+  String segmentLePlusRentable(String seg);
+
+  /// No description provided for @nonClasse.
+  ///
+  /// In fr, this message translates to:
+  /// **'Non classé'**
+  String get nonClasse;
+
+  /// No description provided for @enAttenteSyncLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'En attente'**
+  String get enAttenteSyncLabel;
+
+  /// No description provided for @echecSyncLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Échec'**
+  String get echecSyncLabel;
+
+  /// No description provided for @prixUnitaireParTicket.
+  ///
+  /// In fr, this message translates to:
+  /// **'{prix} ms/ticket'**
+  String prixUnitaireParTicket(int prix);
+
+  /// No description provided for @segLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Segment {seg}'**
+  String segLabel(String seg);
+
+  /// No description provided for @ticketsAujourdhuiCount.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count} ticket(s) aujourd\'hui'**
+  String ticketsAujourdhuiCount(int count);
+
+  /// No description provided for @ticketsCountAvecSync.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count} ticket(s) aujourd\'hui · {pending} en attente · {failed} échoué(s)'**
+  String ticketsCountAvecSync(int count, int pending, int failed);
+
+  /// No description provided for @horsLigneAucunTicketLocal.
+  ///
+  /// In fr, this message translates to:
+  /// **'Hors-ligne — aucun ticket local aujourd\'hui'**
+  String get horsLigneAucunTicketLocal;
+
+  /// No description provided for @horsLigneTicketsEnAttente.
+  ///
+  /// In fr, this message translates to:
+  /// **'Hors-ligne — {count} ticket(s) en attente aujourd\'hui'**
+  String horsLigneTicketsEnAttente(int count);
+
+  /// No description provided for @horsLigneTicketsCache.
+  ///
+  /// In fr, this message translates to:
+  /// **'Hors-ligne — {count} ticket(s) en cache (aujourd\'hui)'**
+  String horsLigneTicketsCache(int count);
+
+  /// No description provided for @idVoyageManquantError.
+  ///
+  /// In fr, this message translates to:
+  /// **'ID du voyage manquant'**
+  String get idVoyageManquantError;
+
+  /// No description provided for @msRecette.
+  ///
+  /// In fr, this message translates to:
+  /// **'ms recette'**
+  String get msRecette;
+
+  /// No description provided for @prixUnitaireMs.
+  ///
+  /// In fr, this message translates to:
+  /// **'prix unitaire (ms)'**
+  String get prixUnitaireMs;
+
+  /// No description provided for @journauxSyncTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Journaux de synchronisation'**
+  String get journauxSyncTitle;
+
+  /// No description provided for @reseauOperationnel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Réseau opérationnel'**
+  String get reseauOperationnel;
+
+  /// No description provided for @requetesEnAttente.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count} requête(s) en attente'**
+  String requetesEnAttente(int count);
+
+  /// No description provided for @kpiOk.
+  ///
+  /// In fr, this message translates to:
+  /// **'200 OK'**
+  String get kpiOk;
+
+  /// No description provided for @kpiErreur.
+  ///
+  /// In fr, this message translates to:
+  /// **'5xx Erreur'**
+  String get kpiErreur;
+
+  /// No description provided for @kpiEnFile.
+  ///
+  /// In fr, this message translates to:
+  /// **'En file'**
+  String get kpiEnFile;
+
+  /// No description provided for @kpiTauxReussite.
+  ///
+  /// In fr, this message translates to:
+  /// **'Taux réussite'**
+  String get kpiTauxReussite;
+
+  /// No description provided for @syncResultat.
+  ///
+  /// In fr, this message translates to:
+  /// **'✓ {synced} synchronisés   ✗ {failed} échoués'**
+  String syncResultat(int synced, int failed);
+
+  /// No description provided for @tabFileAttente.
+  ///
+  /// In fr, this message translates to:
+  /// **'File d\'attente'**
+  String get tabFileAttente;
+
+  /// No description provided for @tabRequetesHttp.
+  ///
+  /// In fr, this message translates to:
+  /// **'Requêtes HTTP'**
+  String get tabRequetesHttp;
+
+  /// No description provided for @tabConsole.
+  ///
+  /// In fr, this message translates to:
+  /// **'Console'**
+  String get tabConsole;
+
+  /// No description provided for @fileAttenteVide.
+  ///
+  /// In fr, this message translates to:
+  /// **'File d\'attente vide'**
+  String get fileAttenteVide;
+
+  /// No description provided for @tousTicketsSynchronises.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tous les tickets sont synchronisés'**
+  String get tousTicketsSynchronises;
+
+  /// No description provided for @aucuneRequete.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucune requête enregistrée'**
+  String get aucuneRequete;
+
+  /// No description provided for @syncConsoleTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'sync_log — {count} entrées'**
+  String syncConsoleTitle(int count);
+
+  /// No description provided for @aucunLogDisponible.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucun log disponible'**
+  String get aucunLogDisponible;
+
+  /// No description provided for @ticketsLocaux.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tickets locaux — {count} entrées'**
+  String ticketsLocaux(int count);
+
+  /// No description provided for @aucunTicketLocal.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucun ticket local'**
+  String get aucunTicketLocal;
+
+  /// No description provided for @retryLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count}× retry'**
+  String retryLabel(int count);
+
+  /// No description provided for @statusSynced.
+  ///
+  /// In fr, this message translates to:
+  /// **'synced'**
+  String get statusSynced;
+
+  /// No description provided for @statusFailed.
+  ///
+  /// In fr, this message translates to:
+  /// **'failed'**
+  String get statusFailed;
+
+  /// No description provided for @statusPending.
+  ///
+  /// In fr, this message translates to:
+  /// **'pending'**
+  String get statusPending;
+
+  /// No description provided for @finDuVoyage.
+  ///
+  /// In fr, this message translates to:
+  /// **'Fin du Voyage'**
+  String get finDuVoyage;
+
+  /// No description provided for @voyageEnCours.
+  ///
+  /// In fr, this message translates to:
+  /// **'Voyage en cours'**
+  String get voyageEnCours;
+
+  /// No description provided for @attentionTitre.
+  ///
+  /// In fr, this message translates to:
+  /// **'Attention'**
+  String get attentionTitre;
+
+  /// No description provided for @clotureIrreversible.
+  ///
+  /// In fr, this message translates to:
+  /// **'Cette action est irréversible'**
+  String get clotureIrreversible;
+
+  /// No description provided for @clotureAucuneVente.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucune vente ne sera possible après clôture'**
+  String get clotureAucuneVente;
+
+  /// No description provided for @clotureVoyageMarque.
+  ///
+  /// In fr, this message translates to:
+  /// **'Le voyage sera marqué comme terminé'**
+  String get clotureVoyageMarque;
+
+  /// No description provided for @confirmerCloture.
+  ///
+  /// In fr, this message translates to:
+  /// **'Confirmer la clôture'**
+  String get confirmerCloture;
+
+  /// No description provided for @clotureEnCours.
+  ///
+  /// In fr, this message translates to:
+  /// **'Clôture en cours...'**
+  String get clotureEnCours;
+
+  /// No description provided for @voyageCloture.
+  ///
+  /// In fr, this message translates to:
+  /// **'Voyage clôturé !'**
+  String get voyageCloture;
+
+  /// No description provided for @retourEnCours.
+  ///
+  /// In fr, this message translates to:
+  /// **'Retour en cours...'**
+  String get retourEnCours;
+
+  /// No description provided for @erreurInattendue.
+  ///
+  /// In fr, this message translates to:
+  /// **'Erreur inattendue'**
+  String get erreurInattendue;
+
+  /// No description provided for @horsLigneCloturePending.
+  ///
+  /// In fr, this message translates to:
+  /// **'Hors ligne — clôture enregistrée, sera envoyée à la reconnexion'**
+  String get horsLigneCloturePending;
+
+  /// No description provided for @scanReadMode.
+  ///
+  /// In fr, this message translates to:
+  /// **'Mode de lecture'**
+  String get scanReadMode;
+
+  /// No description provided for @scanModeNfc.
+  ///
+  /// In fr, this message translates to:
+  /// **'NFC'**
+  String get scanModeNfc;
+
+  /// No description provided for @scanNfcSublabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Approcher la carte'**
+  String get scanNfcSublabel;
+
+  /// No description provided for @scanModeQr.
+  ///
+  /// In fr, this message translates to:
+  /// **'Code-barres'**
+  String get scanModeQr;
+
+  /// No description provided for @scanQrSublabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Scanner le QR / code'**
+  String get scanQrSublabel;
+
+  /// No description provided for @scanNfcUnavailable.
+  ///
+  /// In fr, this message translates to:
+  /// **'NFC non disponible sur cet appareil'**
+  String get scanNfcUnavailable;
+
+  /// No description provided for @scanNfcApproach.
+  ///
+  /// In fr, this message translates to:
+  /// **'Approchez votre carte de transport'**
+  String get scanNfcApproach;
+
+  /// No description provided for @scanNfcUnreadable.
+  ///
+  /// In fr, this message translates to:
+  /// **'Carte NFC illisible ou invalide'**
+  String get scanNfcUnreadable;
+
+  /// No description provided for @scanNfcReadError.
+  ///
+  /// In fr, this message translates to:
+  /// **'Erreur de lecture'**
+  String get scanNfcReadError;
+
+  /// No description provided for @scanNfcError.
+  ///
+  /// In fr, this message translates to:
+  /// **'Erreur NFC : {error}'**
+  String scanNfcError(String error);
+
+  /// No description provided for @scanNfcSheetTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Approchez la carte NFC'**
+  String get scanNfcSheetTitle;
+
+  /// No description provided for @scanNfcSheetSubtitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Maintenez la carte contre\nle dos de votre téléphone'**
+  String get scanNfcSheetSubtitle;
+
+  /// No description provided for @scanCameraTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Scanner le code-barres / QR'**
+  String get scanCameraTitle;
+
+  /// No description provided for @scanCameraHint.
+  ///
+  /// In fr, this message translates to:
+  /// **'Centrez le code dans le cadre'**
+  String get scanCameraHint;
+
+  /// No description provided for @scanUnknown.
+  ///
+  /// In fr, this message translates to:
+  /// **'Inconnu'**
+  String get scanUnknown;
+
+  /// No description provided for @scanIncompleteData.
+  ///
+  /// In fr, this message translates to:
+  /// **'Données du titre incomplètes (id, type ou expire manquant)'**
+  String get scanIncompleteData;
+
+  /// No description provided for @scanCardNotFound.
+  ///
+  /// In fr, this message translates to:
+  /// **'Carte non reconnue\n{cardId}'**
+  String scanCardNotFound(String cardId);
+
+  /// No description provided for @scanLookupError.
+  ///
+  /// In fr, this message translates to:
+  /// **'Erreur lors de la recherche : {error}'**
+  String scanLookupError(String error);
+
+  /// No description provided for @scanPrefix.
+  ///
+  /// In fr, this message translates to:
+  /// **'Scan'**
+  String get scanPrefix;
+
+  /// No description provided for @scanValidatedToast.
+  ///
+  /// In fr, this message translates to:
+  /// **'Titre validé et enregistré ✓'**
+  String get scanValidatedToast;
+
+  /// No description provided for @scanSaveError.
+  ///
+  /// In fr, this message translates to:
+  /// **'Erreur : {error}'**
+  String scanSaveError(String error);
+
+  /// No description provided for @scanSessionCount.
+  ///
+  /// In fr, this message translates to:
+  /// **'{count} titre(s) validé(s) cette session'**
+  String scanSessionCount(int count);
+
+  /// No description provided for @scanFieldSubscriptionType.
+  ///
+  /// In fr, this message translates to:
+  /// **'Type d\'abonnement'**
+  String get scanFieldSubscriptionType;
+
+  /// No description provided for @scanFieldOrganisme.
+  ///
+  /// In fr, this message translates to:
+  /// **'Organisme'**
+  String get scanFieldOrganisme;
+
+  /// No description provided for @scanFieldAuthorisedLine.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ligne autorisée'**
+  String get scanFieldAuthorisedLine;
+
+  /// No description provided for @scanFieldExpiry.
+  ///
+  /// In fr, this message translates to:
+  /// **'Expire le'**
+  String get scanFieldExpiry;
+
+  /// No description provided for @scanFieldStatus.
+  ///
+  /// In fr, this message translates to:
+  /// **'Statut'**
+  String get scanFieldStatus;
+
+  /// No description provided for @scanStatusExpired.
+  ///
+  /// In fr, this message translates to:
+  /// **'Expiré'**
+  String get scanStatusExpired;
+
+  /// No description provided for @scanStatusValid.
+  ///
+  /// In fr, this message translates to:
+  /// **'Valide'**
+  String get scanStatusValid;
+
+  /// No description provided for @scanExpiredWarning.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ce titre est expiré et ne peut pas être validé.'**
+  String get scanExpiredWarning;
+
+  /// No description provided for @scanSaving.
+  ///
+  /// In fr, this message translates to:
+  /// **'Enregistrement...'**
+  String get scanSaving;
+
+  /// No description provided for @scanBtnExpired.
+  ///
+  /// In fr, this message translates to:
+  /// **'Titre expiré'**
+  String get scanBtnExpired;
+
+  /// No description provided for @scanBtnValidate.
+  ///
+  /// In fr, this message translates to:
+  /// **'Valider & Enregistrer'**
+  String get scanBtnValidate;
+
+  /// No description provided for @scanIdleTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Prêt à scanner'**
+  String get scanIdleTitle;
+
+  /// No description provided for @scanIdleSubtitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Choisissez NFC ou Code-barres\npour lancer la lecture'**
+  String get scanIdleSubtitle;
+
+  /// No description provided for @scanSearching.
+  ///
+  /// In fr, this message translates to:
+  /// **'Recherche du titre…'**
+  String get scanSearching;
+
+  /// No description provided for @scanInvalidTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Titre invalide'**
+  String get scanInvalidTitle;
+
+  /// No description provided for @scanErrorSubtitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ce titre de transport ne peut pas être accepté.'**
+  String get scanErrorSubtitle;
 }
 
 class _AppLocalizationsDelegate

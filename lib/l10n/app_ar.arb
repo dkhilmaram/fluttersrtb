@@ -183,5 +183,225 @@
   "pourcentageApplique": "−{pct}% مطبّق",
   "@pourcentageApplique": {
     "placeholders": { "pct": { "type": "int" } }
-  }
+  },
+   "institutionAgence": "المؤسسة / الوكالة",
+  "typeSpecial": "نوع خاص",
+  "nombreDePersonnes": "عدد الأشخاص",
+  "personne": "شخص",
+  "personnes": "أشخاص",
+  "enregistrerLePassage": "تسجيل العبور",
+  "enregistrementEnCours": "جارٍ التسجيل...",
+  "passagesSession": "تم تسجيل {count} عبور(ات) في هذه الجلسة",
+  "@passagesSession": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "passagesToast": "تم تسجيل {count} عبور(ات)",
+  "@passagesToast": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "erreurInconnue": "غير معروف",
+  "passagesGratuitsSpeciaux": "العبورات المجانية والخاصة",
+  "resumePassage": "{count} شخص(أشخاص) · {typeTarif}",
+  "@resumePassage": {
+    "placeholders": {
+      "count":     { "type": "int" },
+      "typeTarif": { "type": "String" }
+    }
+  },
+  "erreurPassage": "خطأ: {message}",
+  "@erreurPassage": {
+    "placeholders": { "message": { "type": "String" } }
+  },
+  "categorieArmeeNationale": "الجيش الوطني",
+  "categorieGardeNationale": "الحرس الوطني",
+  "categoriePoliceNationale": "الأمن الوطني",
+  "categorieDouane": "الديوانة",
+  "categorieMinistere": "وزارة",
+  "categorieMunicipalite": "بلدية",
+  "categorieEtablissementScolaire": "مؤسسة تعليمية",
+  "categorieAutreInstitution": "مؤسسة أخرى",
+  "categorieAbonnement": "اشتراك",
+  "categorieAgent": "عون",
+  "historiqueVoyage": "سجل الرحلة",
+  "tickets": "التذاكر",
+  "finance": "المالية",
+  "liste": "القائمة",
+  "parSegment": "حسب القطعة",
+  "apercu": "نظرة عامة",
+  "parTarif": "حسب التعريفة",
+  "bilan": "الملخص",
+  "aucunTicketAujourdhui": "لا توجد تذاكر اليوم",
+  "ticketsAujourdhuiApparaitront": "ستظهر تذاكر اليوم هنا",
+  "aucunSegmentDisponible": "لا توجد قطاعات متاحة",
+  "segmentInfoIndisponible": "معلومات القطعة غير متاحة",
+  "aucunTarif": "لا توجد تعريفة",
+  "donneesApparaitrontIci": "ستظهر البيانات هنا",
+  "recetteTotale": "إجمالي الإيرادات",
+  "millimes": "مليم",
+  "ticketsVendus": "التذاكر المباعة",
+  "aujourdhui": "اليوم",
+  "prixMoyen": "متوسط السعر",
+  "ticketPayant": "تذكرة مدفوعة",
+  "repartitionRecettes": "توزيع الإيرادات",
+  "recetteParTarif": "الإيرادات حسب التعريفة",
+  "detailFinancierParTarif": "التفاصيل المالية حسب التعريفة",
+  "recetteTotaleVoyage": "إجمالي إيرادات الرحلة — اليوم",
+  "equivalentDT": "≈ {dt} د.ت",
+  "@equivalentDT": {
+    "placeholders": { "dt": { "type": "String" } }
+  },
+  "ticketsPayants": "التذاكر المدفوعة",
+  "totalVoyageurs": "إجمالي المسافرين",
+  "prixMoyenPayants": "متوسط السعر (مدفوع)",
+  "analyseGratuites": "تحليل التذاكر المجانية",
+  "manqueAGagnerEstime": "الخسارة المقدرة",
+  "tauxGratuite": "نسبة المجانية",
+  "payants": "مدفوعون",
+  "typesTarifUtilises": "أنواع التعريفات المستخدمة",
+  "segmentsPluralLabel": "{count} قطعة (قطاعات)",
+  "@segmentsPluralLabel": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "recetteParSegment": "الإيرادات حسب القطعة",
+  "segmentLePlusRentable": "أكثر القطاعات ربحًا: القطعة {seg}",
+  "@segmentLePlusRentable": {
+    "placeholders": { "seg": { "type": "String" } }
+  },
+  "nonClasse": "غير مصنف",
+  "enAttenteSyncLabel": "في انتظار المزامنة",
+  "echecSyncLabel": "فشل المزامنة",
+  "prixUnitaireParTicket": "{prix} م/تذكرة",
+  "@prixUnitaireParTicket": {
+    "placeholders": { "prix": { "type": "int" } }
+  },
+  "segLabel": "قطعة {seg}",
+  "@segLabel": {
+    "placeholders": { "seg": { "type": "String" } }
+  },
+  "ticketsAujourdhuiCount": "{count} تذكرة (تذاكر) اليوم",
+  "@ticketsAujourdhuiCount": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "ticketsCountAvecSync": "{count} تذكرة (تذاكر) اليوم · {pending} في الانتظار · {failed} فشل",
+  "@ticketsCountAvecSync": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "pending": { "type": "int" },
+      "failed": { "type": "int" }
+    }
+  },
+  "horsLigneAucunTicketLocal": "غير متصل — لا توجد تذاكر محلية اليوم",
+  "horsLigneTicketsEnAttente": "غير متصل — {count} تذكرة (تذاكر) في الانتظار اليوم",
+  "@horsLigneTicketsEnAttente": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "horsLigneTicketsCache": "غير متصل — {count} تذكرة (تذاكر) مؤقتة (اليوم)",
+  "@horsLigneTicketsCache": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "idVoyageManquantError": "معرّف الرحلة مفقود",
+  "msRecette": "م إيرادات",
+  "prixUnitaireMs": "سعر الوحدة (م)",
+  "journauxSyncTitle": "سجلات المزامنة",
+"reseauOperationnel": "الشبكة تعمل",
+"requetesEnAttente": "{count} طلب (طلبات) في الانتظار",
+"@requetesEnAttente": { "placeholders": { "count": { "type": "int" } } },
+"kpiOk": "200 OK",
+"kpiErreur": "5xx خطأ",
+"kpiEnFile": "في الانتظار",
+"kpiTauxReussite": "نسبة النجاح",
+"syncResultat": "✓ {synced} تمت مزامنتها   ✗ {failed} فشلت",
+"@syncResultat": { "placeholders": { "synced": { "type": "int" }, "failed": { "type": "int" } } },
+"tabFileAttente": "قائمة الانتظار",
+"tabRequetesHttp": "طلبات HTTP",
+"tabConsole": "وحدة التحكم",
+"fileAttenteVide": "قائمة الانتظار فارغة",
+"tousTicketsSynchronises": "جميع التذاكر متزامنة",
+"aucuneRequete": "لا توجد طلبات مسجّلة",
+"syncConsoleTitle": "sync_log — {count} سجل",
+"@syncConsoleTitle": { "placeholders": { "count": { "type": "int" } } },
+"aucunLogDisponible": "لا توجد سجلات متاحة",
+"ticketsLocaux": "التذاكر المحلية — {count} سجل",
+"@ticketsLocaux": { "placeholders": { "count": { "type": "int" } } },
+"aucunTicketLocal": "لا توجد تذاكر محلية",
+"retryLabel": "{count}× إعادة محاولة",
+"@retryLabel": { "placeholders": { "count": { "type": "int" } } },
+"statusSynced": "متزامن",
+"statusFailed": "فشل",
+"statusPending": "في الانتظار",
+"finDuVoyage": "نهاية الرحلة",
+"voyageEnCours": "الرحلة الجارية",
+"attentionTitre": "تنبيه",
+"clotureIrreversible": "هذا الإجراء لا يمكن التراجع عنه",
+"clotureAucuneVente": "لن يكون البيع ممكناً بعد الإغلاق",
+"clotureVoyageMarque": "سيتم وضع علامة على الرحلة كمنتهية",
+"confirmerCloture": "تأكيد الإغلاق",
+"clotureEnCours": "جارٍ الإغلاق...",
+"voyageCloture": "تم إغلاق الرحلة !",
+"retourEnCours": "جارٍ العودة...",
+"erreurInattendue": "خطأ غير متوقع",
+"horsLigneCloturePending": "غير متصل — تم تسجيل الإغلاق، سيُرسل عند إعادة الاتصال",
+
+  "scanReadMode": "وضع القراءة",
+  "scanModeNfc": "NFC",
+  "scanNfcSublabel": "أقرّب البطاقة",
+  "scanModeQr": "باركود",
+  "scanQrSublabel": "امسح رمز QR / الباركود",
+
+  "scanNfcUnavailable": "NFC غير متوفر على هذا الجهاز",
+  "scanNfcApproach": "أقرّب بطاقة النقل",
+  "scanNfcUnreadable": "بطاقة NFC غير قابلة للقراءة أو غير صالحة",
+  "scanNfcReadError": "خطأ في القراءة",
+  "scanNfcError": "خطأ NFC: {error}",
+  "@scanNfcError": {
+    "placeholders": { "error": { "type": "String" } }
+  },
+  "scanNfcSheetTitle": "أقرّب بطاقة NFC",
+  "scanNfcSheetSubtitle": "أمسك البطاقة بالقرب من\nظهر هاتفك",
+
+  "scanCameraTitle": "مسح الباركود / رمز QR",
+  "scanCameraHint": "ضع الرمز في منتصف الإطار",
+
+  "scanUnknown": "غير معروف",
+  "scanIncompleteData": "بيانات التذكرة غير مكتملة (id أو type أو expire مفقود)",
+  "scanCardNotFound": "البطاقة غير معروفة\n{cardId}",
+  "@scanCardNotFound": {
+    "placeholders": { "cardId": { "type": "String" } }
+  },
+  "scanLookupError": "خطأ أثناء البحث: {error}",
+  "@scanLookupError": {
+    "placeholders": { "error": { "type": "String" } }
+  },
+
+  "scanPrefix": "مسح",
+  "scanValidatedToast": "تم التحقق من التذكرة وحفظها ✓",
+  "scanSaveError": "خطأ: {error}",
+  "@scanSaveError": {
+    "placeholders": { "error": { "type": "String" } }
+  },
+
+  "scanSessionCount": "تم التحقق من {count} تذكرة (تذاكر) في هذه الجلسة",
+  "@scanSessionCount": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+
+  "scanFieldSubscriptionType": "نوع الاشتراك",
+  "scanFieldOrganisme": "الجهة",
+  "scanFieldAuthorisedLine": "الخط المرخّص",
+  "scanFieldExpiry": "تاريخ الانتهاء",
+  "scanFieldStatus": "الحالة",
+
+  "scanStatusExpired": "منتهي الصلاحية",
+  "scanStatusValid": "صالح",
+  "scanExpiredWarning": "هذه التذكرة منتهية الصلاحية ولا يمكن التحقق منها.",
+
+  "scanSaving": "جارٍ الحفظ...",
+  "scanBtnExpired": "التذكرة منتهية",
+  "scanBtnValidate": "تحقق وحفظ",
+
+  "scanIdleTitle": "جاهز للمسح",
+  "scanIdleSubtitle": "اختر NFC أو الباركود\nلبدء القراءة",
+  "scanSearching": "جارٍ البحث عن التذكرة…",
+  "scanInvalidTitle": "تذكرة غير صالحة",
+  "scanErrorSubtitle": "لا يمكن قبول هذه التذكرة."
 }

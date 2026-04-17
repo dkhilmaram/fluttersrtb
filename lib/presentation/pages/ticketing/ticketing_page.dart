@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../l10n/app_localizations.dart';
+import '../../widgets/language_switcher.dart';
 import 'Nouveauticketpage.dart';
 import 'passage_special_page.dart';
 import '../scan/scan_tab_page.dart';
@@ -95,10 +97,12 @@ class _TicketingPageState extends State<TicketingPage>
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
+
     return Scaffold(
       backgroundColor: _surface,
       body: Column(children: [
-        _buildHeader(),
+        _buildHeader(t),
 
         // Pinned tab bar
         Container(
@@ -116,13 +120,13 @@ class _TicketingPageState extends State<TicketingPage>
             dividerColor: Colors.transparent,
             tabs: [
               _buildTab(Icons.confirmation_number_rounded,
-                  'Nouveau Ticket', 0),
+                  t.billetterie, 0),
               _buildTab(Icons.qr_code_scanner_rounded, 'NFC / Scan', 1),
               _buildTab(
                 _gratuitUnlocked
                     ? Icons.card_membership_rounded
                     : Icons.lock_rounded,
-                'Passage Gratuit', 2,
+                t.passageGratuit, 2,
                 locked: !_gratuitUnlocked,
               ),
             ],
@@ -164,7 +168,7 @@ class _TicketingPageState extends State<TicketingPage>
                       embeddedMode:   true,
                       onPassageSaved: _onPassageSaved,
                     )
-                  : const _LockedTabPlaceholder(),
+                  : _LockedTabPlaceholder(t: t),
             ],
           ),
         ),
@@ -213,7 +217,7 @@ class _TicketingPageState extends State<TicketingPage>
 
   // ── Header ────────────────────────────────────────────────
 
-  Widget _buildHeader() {
+  Widget _buildHeader(AppLocalizations t) {
     return Container(
       width: double.infinity,
       decoration: const BoxDecoration(
@@ -225,21 +229,28 @@ class _TicketingPageState extends State<TicketingPage>
       ),
       padding: const EdgeInsets.fromLTRB(20, 52, 20, 24),
       child: Column(children: [
-        Align(
-          alignment: Alignment.topLeft,
-          child: GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10)),
-              child: const Icon(Icons.arrow_back_ios_new,
-                  color: Colors.white, size: 17),
+        // ── Top row: back button + language switcher ──
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.arrow_back_ios_new,
+                    color: Colors.white, size: 17),
+              ),
             ),
-          ),
+            const LanguageSwitcher(),
+          ],
         ),
+
         const SizedBox(height: 16),
+
+        // ── Logo ──
         Container(
           width: 60, height: 60,
           decoration: BoxDecoration(
@@ -259,19 +270,25 @@ class _TicketingPageState extends State<TicketingPage>
           ),
         ),
         const SizedBox(height: 10),
-        const Text('S R T B',
-            style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 7)),
+        Text(
+          t.srtbLetters,
+          style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 7),
+        ),
         const SizedBox(height: 3),
-        Text('Billetterie — Secteur actif',
-            style: TextStyle(
-                color: Colors.white.withOpacity(0.7),
-                fontSize: 11,
-                letterSpacing: 1.5)),
+        Text(
+          t.billetterie,
+          style: TextStyle(
+              color: Colors.white.withOpacity(0.7),
+              fontSize: 11,
+              letterSpacing: 1.5),
+        ),
         const SizedBox(height: 14),
+
+        // ── Route pill ──
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
@@ -314,6 +331,8 @@ class _TicketingPageState extends State<TicketingPage>
           ]),
         ),
         const SizedBox(height: 10),
+
+        // ── Status pill ──
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
           decoration: BoxDecoration(
@@ -327,12 +346,14 @@ class _TicketingPageState extends State<TicketingPage>
                 decoration: const BoxDecoration(
                     color: Color(0xFF4ADE80), shape: BoxShape.circle)),
             const SizedBox(width: 6),
-            const Text('SECTEUR ACTIF',
-                style: TextStyle(
-                    color: Color(0xFF86EFAC),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.2)),
+            Text(
+              t.actif.toUpperCase(),
+              style: const TextStyle(
+                  color: Color(0xFF86EFAC),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.2),
+            ),
           ]),
         ),
       ]),
@@ -343,7 +364,8 @@ class _TicketingPageState extends State<TicketingPage>
 // ── Locked placeholder ────────────────────────────────────────
 
 class _LockedTabPlaceholder extends StatelessWidget {
-  const _LockedTabPlaceholder();
+  final AppLocalizations t;
+  const _LockedTabPlaceholder({required this.t});
 
   @override
   Widget build(BuildContext context) {
@@ -359,18 +381,18 @@ class _LockedTabPlaceholder extends StatelessWidget {
                 size: 34, color: Colors.grey.shade300),
           ),
           const SizedBox(height: 18),
-          Text('Accès verrouillé',
-              style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade400)),
+          Text(
+            t.passageGratuit,
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade400),
+          ),
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 48),
             child: Text(
-              'Sélectionnez montée & descente dans\n'
-              '"Nouveau Ticket" puis appuyez sur\n'
-              '"Passage Gratuit / Spécial"',
+              t.passagesGratuitsSpeciaux,
               textAlign: TextAlign.center,
               style: TextStyle(
                   fontSize: 12,

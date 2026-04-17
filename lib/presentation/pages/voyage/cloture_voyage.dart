@@ -5,6 +5,7 @@ import '../../../core/constants/api_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/database/daos/voyage_dao.dart';
 import '../../../services/connectivity_service.dart';
+import '../../../l10n/app_localizations.dart';
 
 // ════════════════════════════════════════════════════
 // TOAST WIDGET
@@ -203,47 +204,49 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
   // ════════════════════════════════════════════════════
 
   Future<void> _cloturerVoyage() async {
+    final t = AppLocalizations.of(context)!;
     setState(() => isCloturing = true);
     try {
       final isOnline = await ConnectivityService.isOnline();
       if (isOnline) {
-        await _cloturerOnline();
+        await _cloturerOnline(t);
       } else {
-        await _cloturerOffline();
+        await _cloturerOffline(t);
       }
     } catch (e) {
       setState(() => isCloturing = false);
-      if (mounted) _showToast('Erreur inattendue', isError: true);
+      if (mounted) _showToast(t.erreurInattendue, isError: true);
     }
   }
 
- Future<void> _cloturerOnline() async {
-  final id = widget.voyage['id'] as int;
-  try {
-    final response = await http
-        .put(
-          Uri.parse(ApiConstants.cloturerVoyage(id)), // ← fix: was ApiConstants.baseUrl + '/vente/$id/cloturer'
-          headers: {'Content-Type': 'application/json'},
-        )
-        .timeout(ApiConstants.defaultTimeout); // ← also use the constant
+  Future<void> _cloturerOnline(AppLocalizations t) async {
+    final id = widget.voyage['id'] as int;
+    try {
+      final response = await http
+          .put(
+            Uri.parse(ApiConstants.cloturerVoyage(id)),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(ApiConstants.defaultTimeout);
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      if (data['success'] == true) {
-        await VoyageDao.saveVoyageStatut(id, 'cloture', serverStatut: 'cloture');
-        _onClotureDone();
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          await VoyageDao.saveVoyageStatut(id, 'cloture', serverStatut: 'cloture');
+          _onClotureDone();
+        } else {
+          setState(() => isCloturing = false);
+          if (mounted) _showToast(data['message'] ?? t.erreurInattendue, isError: true);
+        }
       } else {
-        setState(() => isCloturing = false);
-        if (mounted) _showToast(data['message'] ?? 'Erreur', isError: true);
+        await _cloturerOffline(t);
       }
-    } else {
-      await _cloturerOffline();
+    } catch (e) {
+      await _cloturerOffline(t);
     }
-  } catch (e) {
-    await _cloturerOffline();
   }
-}
-  Future<void> _cloturerOffline() async {
+
+  Future<void> _cloturerOffline(AppLocalizations t) async {
     final id = widget.voyage['id'] as int;
     final lastKnownServerStatut =
         widget.voyage['statut'] as String? ?? 'actif';
@@ -256,7 +259,7 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
     await VoyageDao.saveCloturePending(id);
 
     if (mounted) {
-      _showToast('Hors ligne — clôture enregistrée, sera envoyée à la reconnexion');
+      _showToast(t.horsLigneCloturePending);
     }
     _onClotureDone();
   }
@@ -280,6 +283,7 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
     final depart = widget.voyage['depart'] ?? '?';
     final arrivee = widget.voyage['arrivee'] ?? '?';
 
@@ -288,12 +292,12 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            _buildHeader(depart, arrivee),
+            _buildHeader(t, depart, arrivee),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
               child: isCloture
-                  ? _buildSuccess()
-                  : _buildForm(depart, arrivee),
+                  ? _buildSuccess(t)
+                  : _buildForm(t, depart, arrivee),
             ),
           ],
         ),
@@ -305,7 +309,7 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
   // HEADER
   // ════════════════════════════════════════════════════
 
-  Widget _buildHeader(String depart, String arrivee) {
+  Widget _buildHeader(AppLocalizations t, String depart, String arrivee) {
     return Container(
       width: double.infinity,
       decoration: const BoxDecoration(
@@ -368,7 +372,7 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Fin du Voyage',
+            t.finDuVoyage,
             style: TextStyle(
               color: Colors.white.withOpacity(0.7),
               fontSize: 12,
@@ -387,11 +391,9 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 7,
-                  height: 7,
+                  width: 7, height: 7,
                   decoration: const BoxDecoration(
-                    color: AppTheme.goldLight,
-                    shape: BoxShape.circle,
+                    color: AppTheme.goldLight, shape: BoxShape.circle,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -406,8 +408,7 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
                       color: Colors.white.withOpacity(0.4), size: 13),
                 ),
                 Container(
-                  width: 7,
-                  height: 7,
+                  width: 7, height: 7,
                   decoration: BoxDecoration(
                     color: Colors.transparent,
                     shape: BoxShape.circle,
@@ -432,13 +433,12 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
   // SUCCESS STATE
   // ════════════════════════════════════════════════════
 
-  Widget _buildSuccess() {
+  Widget _buildSuccess(AppLocalizations t) {
     return Column(
       children: [
         const SizedBox(height: 40),
         Container(
-          width: 90,
-          height: 90,
+          width: 90, height: 90,
           decoration: BoxDecoration(
             color: AppTheme.navyMid.withOpacity(0.1),
             shape: BoxShape.circle,
@@ -449,15 +449,15 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
               color: AppTheme.navyMid, size: 52),
         ),
         const SizedBox(height: 20),
-        const Text(
-          'Voyage clôturé !',
-          style: TextStyle(
+        Text(
+          t.voyageCloture,
+          style: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
               color: AppTheme.navyDark),
         ),
         const SizedBox(height: 8),
-        Text('Retour en cours...',
+        Text(t.retourEnCours,
             style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
       ],
     );
@@ -467,7 +467,7 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
   // FORM STATE
   // ════════════════════════════════════════════════════
 
-  Widget _buildForm(String depart, String arrivee) {
+  Widget _buildForm(AppLocalizations t, String depart, String arrivee) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -491,7 +491,7 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Voyage en cours',
+              Text(t.voyageEnCours,
                   style: TextStyle(
                       color: Colors.grey.shade400,
                       fontSize: 11,
@@ -500,8 +500,7 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
               Row(
                 children: [
                   Container(
-                    width: 40,
-                    height: 40,
+                    width: 40, height: 40,
                     decoration: BoxDecoration(
                       color: AppTheme.navyMid.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(11),
@@ -556,8 +555,7 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
               Row(
                 children: [
                   Container(
-                    width: 36,
-                    height: 36,
+                    width: 36, height: 36,
                     decoration: BoxDecoration(
                       color: Colors.red.shade100,
                       borderRadius: BorderRadius.circular(10),
@@ -566,7 +564,7 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
                         color: Colors.red.shade700, size: 20),
                   ),
                   const SizedBox(width: 10),
-                  Text('Attention',
+                  Text(t.attentionTitre,
                       style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
@@ -574,9 +572,9 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
                 ],
               ),
               const SizedBox(height: 14),
-              _warningItem('Cette action est irréversible'),
-              _warningItem('Aucune vente ne sera possible après clôture'),
-              _warningItem('Le voyage sera marqué comme terminé'),
+              _warningItem(t.clotureIrreversible),
+              _warningItem(t.clotureAucuneVente),
+              _warningItem(t.clotureVoyageMarque),
             ],
           ),
         ),
@@ -585,7 +583,7 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
 
         // ── Confirm button ──
         _actionBtn(
-          label: isCloturing ? 'Clôture en cours...' : 'Confirmer la clôture',
+          label: isCloturing ? t.clotureEnCours : t.confirmerCloture,
           icon: isCloturing ? null : Icons.flag_rounded,
           isLoading: isCloturing,
           enabled: !isCloturing,
@@ -616,7 +614,7 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
                     size: 14,
                     color: isCloturing ? Colors.grey.shade300 : AppTheme.navyMid),
                 const SizedBox(width: 8),
-                Text('Annuler',
+                Text(t.annuler,
                     style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
@@ -641,8 +639,7 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
       child: Row(
         children: [
           Container(
-            width: 20,
-            height: 20,
+            width: 20, height: 20,
             decoration: BoxDecoration(
                 color: Colors.red.shade100, shape: BoxShape.circle),
             child: Icon(Icons.close, color: Colors.red.shade700, size: 12),
@@ -700,8 +697,7 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
               children: [
                 if (isLoading)
                   const SizedBox(
-                    width: 20,
-                    height: 20,
+                    width: 20, height: 20,
                     child: CircularProgressIndicator(
                         color: Colors.white, strokeWidth: 2),
                   )

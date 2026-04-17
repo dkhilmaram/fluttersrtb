@@ -4,10 +4,10 @@
   "connexion": "Connexion",
   "matricule": "Matricule",
   "matriculeHint": "Entrez votre matricule",
-  "matriculeError": "Veuillez saisir votre matricule",
+  "matriculeError": "Veuillez entrer votre matricule",
   "motDePasse": "Mot de passe",
   "motDePasseHint": "Entrez votre mot de passe",
-  "motDePasseError": "Veuillez saisir votre mot de passe",
+  "motDePasseError": "Veuillez entrer votre mot de passe",
   "seConnecter": "Se connecter",
   "offlineHint": "Connectez-vous une fois en ligne\npour activer le mode hors ligne",
   "bienvenue": "Bienvenue {prenom} {nom} !",
@@ -25,7 +25,7 @@
   },
   "loginError": "Matricule ou mot de passe incorrect",
   "matriculeInvalid": "Matricule invalide",
-  "offlineNoAccount": "Hors ligne — aucun compte local trouvé",
+  "offlineNoAccount": "Hors ligne — Aucun compte local trouvé",
   "srtbFullName": "Société Régionale de Transport de Bizerte",
   "mesVoyages": "Mes voyages",
   "programmes": "Programmés",
@@ -37,7 +37,7 @@
   "aucunVoyageProgramme": "Aucun voyage programmé",
   "aucunVoyageNonProgramme": "Aucun voyage non programmé",
   "cloturerJournee": "Clôturer la journée",
-  "cloturerJourneeQuestion": "Clôturer toute la journée ?",
+  "cloturerJourneeQuestion": "Souhaitez-vous clôturer toute la journée ?",
   "annuler": "Annuler",
   "confirmer": "Confirmer",
   "reouvrirJournee": "Rouvrir la journée",
@@ -45,7 +45,7 @@
   "statutCloture": "Clôturé",
   "statutEnAttente": "En attente",
   "statutActif": "Actif",
-  "horsLignePasDeDonnees": "Hors ligne — aucune donnée disponible",
+  "horsLignePasDeDonnees": "Hors ligne — Aucune donnée disponible",
   "modeHorsLigne": "Mode hors ligne",
   "tousDejaClotureToast": "Tous les voyages sont déjà clôturés",
   "echecCloture": "Échec de la clôture",
@@ -64,11 +64,11 @@
   "enAttenteVoyagePrecedent": "En attente du voyage précédent",
   "reessayer": "Réessayer",
   "envoyerRapport": "Envoyer le rapport",
-  "reouvrirJourneeQuestion": "Rouvrir la journée ?",
+  "reouvrirJourneeQuestion": "Souhaitez-vous rouvrir la journée ?",
   "actionReversible": "Cette action est réversible",
-  "reouvrirTout": "Tout rouvrir",
-  "reouvrirCeVoyage": "Rouvrir ce voyage ?",
-  "reouvrirVoyageBody": "Le voyage reviendra à l'état actif et vous pourrez à nouveau vendre des billets.",
+  "reouvrirTout": "Rouvrir tout",
+  "reouvrirCeVoyage": "Souhaitez-vous rouvrir ce voyage ?",
+  "reouvrirVoyageBody": "Le voyage reviendra à l'état actif et vous pourrez à nouveau vendre des tickets.",
   "rouvrir": "Rouvrir",
   "journeeClotureOffline": "{count} voyage(s) clôturé(s) (hors ligne)",
   "@journeeClotureOffline": {
@@ -108,63 +108,53 @@
       "date":  { "type": "String" }
     }
   },
-  "venteEtHistorique": "Ventes et historique",
+  "venteEtHistorique": "Vente & Historique",
   "billetterie": "Billetterie",
   "historique": "Historique",
-  "journauxSync": "Journaux de synchronisation",
-  "journauxSyncEnAttente": "Journaux sync · {count} en attente",
+  "journauxSync": "Journaux de sync",
+  "journauxSyncEnAttente": "Journaux de sync · {count} en attente",
   "@journauxSyncEnAttente": {
-    "placeholders": {
-      "count": { "type": "int" }
-    }
+    "placeholders": { "count": { "type": "int" } }
   },
   "clotureVoyage": "Clôture du voyage",
   "actif": "Actif",
   "srtbLetters": "S R T B",
-
-  "horsLignePasDeCacheErreur": "Hors ligne et aucun cache disponible. Veuillez vous connecter à Internet.",
-  "horsLigneDonneesCache": "Données chargées depuis le cache (mode hors ligne)",
-  "horsLigneSynchronise": "Ce billet sera synchronisé dès le retour en ligne.",
-  "horsLigneActionsSync": "Les actions seront synchronisées à la reconnexion.",
-  "horsLigneTicketSauvegarde": "Billet sauvegardé localement (hors ligne)",
-
+  "horsLignePasDeCacheErreur": "Hors ligne et pas de cache. Veuillez vous connecter à Internet.",
+  "horsLigneDonneesCache": "Données chargées depuis le cache (hors ligne)",
+  "horsLigneSynchronise": "Ce ticket sera synchronisé lors du retour en ligne.",
+  "horsLigneActionsSync": "Les actions seront synchronisées lors du retour en ligne.",
+  "horsLigneTicketSauvegarde": "Ticket enregistré localement (hors ligne)",
   "typeDeTarif": "Type de tarif",
   "trajetLabel": "Trajet",
   "pointDeMontee": "Point de montée",
   "pointDeDescente": "Point de descente",
   "choisirArret": "Choisir un arrêt",
-  "choisirDabordMontee": "Choisissez d'abord la montée",
+  "choisirDabordMontee": "Choisir d'abord la montée",
   "aucunArretDisponible": "Aucun arrêt disponible",
-  "nombreDeTickets": "Nombre de billets",
-
-  "confirmerTicket": "Confirmer le billet",
+  "nombreDeTickets": "Nombre de tickets",
+  "confirmerTicket": "Confirmer le ticket",
   "monteeLabel": "Montée",
   "descenteLabel": "Descente",
   "tarifLabel": "Tarif",
   "quantiteLabel": "Quantité",
-  "millimes": "millimes",
+  "millimes": "Millimes",
   "gratuit": "Gratuit",
-  "qrCodeTicket": "QR CODE DU BILLET",
-
-  "ticketSingulier": "billet",
-  "ticketPluriel": "billets",
+  "qrCodeTicket": "QR Code du ticket",
+  "ticketSingulier": "ticket",
+  "ticketPluriel": "tickets",
   "valider": "Valider",
   "enregistrement": "Enregistrement…",
-
-  "validerLeTicket": "Valider le billet",
-  "validerTickets": "Valider {count} billets",
+  "validerLeTicket": "Valider le ticket",
+  "validerTickets": "Valider {count} tickets",
   "@validerTickets": {
     "placeholders": { "count": { "type": "int" } }
   },
-
   "passageGratuit": "Passage gratuit",
-  "ticketsVendusLabel": "Billets vendus",
+  "ticketsVendusLabel": "Tickets vendus",
   "totalCollecte": "Total collecté",
-
-  "idVoyageManquant": "Identifiant du voyage manquant",
-  "inconnu": "inconnu",
-
-  "ticketsVendusToast": "{count} billet(s) vendu(s) — {montant} millimes",
+  "idVoyageManquant": "ID voyage manquant",
+  "inconnu": "Inconnu",
+  "ticketsVendusToast": "{count} ticket(s) vendu(s) — {montant} millimes",
   "@ticketsVendusToast": {
     "placeholders": {
       "count":   { "type": "int" },
@@ -179,9 +169,228 @@
   "@ticketErreur": {
     "placeholders": { "message": { "type": "String" } }
   },
-
   "pourcentageApplique": "−{pct}% appliqué",
   "@pourcentageApplique": {
     "placeholders": { "pct": { "type": "int" } }
-  }
+  },
+
+  "institutionAgence": "Institution / Agence",
+  "typeSpecial": "Type spécial",
+  "nombreDePersonnes": "Nombre de personnes",
+  "personne": "personne",
+  "personnes": "personnes",
+  "enregistrerLePassage": "Enregistrer le passage",
+  "enregistrementEnCours": "Enregistrement...",
+  "passagesSession": "{count} passage(s) enregistré(s) cette session",
+  "@passagesSession": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "passagesToast": "{count} passage(s) enregistré(s)",
+  "@passagesToast": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "erreurInconnue": "inconnue",
+  "passagesGratuitsSpeciaux": "Passages Gratuits & Spéciaux",
+  "resumePassage": "{count} personne(s) · {typeTarif}",
+  "@resumePassage": {
+    "placeholders": {
+      "count":     { "type": "int" },
+      "typeTarif": { "type": "String" }
+    }
+  },
+  "erreurPassage": "Erreur : {message}",
+  "@erreurPassage": {
+    "placeholders": { "message": { "type": "String" } }
+  },
+  "categorieArmeeNationale": "Armée nationale",
+  "categorieGardeNationale": "Garde nationale",
+  "categoriePoliceNationale": "Police nationale",
+  "categorieDouane": "Douane",
+  "categorieMinistere": "Ministère",
+  "categorieMunicipalite": "Municipalité",
+  "categorieEtablissementScolaire": "Établissement scolaire",
+  "categorieAutreInstitution": "Autre institution",
+  "categorieAbonnement": "Abonnement",
+  "categorieAgent": "Agent",
+  "historiqueVoyage": "Historique du voyage",
+  "tickets": "Tickets",
+  "finance": "Finance",
+  "liste": "Liste",
+  "parSegment": "Par segment",
+  "apercu": "Aperçu",
+  "parTarif": "Par tarif",
+  "bilan": "Bilan",
+  "aucunTicketAujourdhui": "Aucun ticket aujourd'hui",
+  "ticketsAujourdhuiApparaitront": "Les tickets d'aujourd'hui apparaîtront ici",
+  "aucunSegmentDisponible": "Aucun segment disponible",
+  "segmentInfoIndisponible": "Les informations de segment ne sont pas disponibles",
+  "aucunTarif": "Aucun tarif",
+  "donneesApparaitrontIci": "Les données apparaîtront ici",
+  "recetteTotale": "Recette totale",
+  "millimes": "millimes",
+  "ticketsVendus": "Tickets vendus",
+  "aujourdhui": "aujourd'hui",
+  "prixMoyen": "Prix moyen",
+  "ticketPayant": "ticket payant",
+  "repartitionRecettes": "Répartition des recettes",
+  "recetteParTarif": "Recette par tarif",
+  "detailFinancierParTarif": "Détail financier par tarif",
+  "recetteTotaleVoyage": "Recette totale du voyage — aujourd'hui",
+  "equivalentDT": "≈ {dt} DT",
+  "@equivalentDT": {
+    "placeholders": { "dt": { "type": "String" } }
+  },
+  "ticketsPayants": "Tickets payants",
+  "totalVoyageurs": "Total voyageurs",
+  "prixMoyenPayants": "Prix moyen (payants)",
+  "analyseGratuites": "Analyse des gratuités",
+  "manqueAGagnerEstime": "Manque à gagner estimé",
+  "tauxGratuite": "Taux de gratuité",
+  "payants": "Payants",
+  "typesTarifUtilises": "Types de tarif utilisés",
+  "segmentsPluralLabel": "{count} segment(s)",
+  "@segmentsPluralLabel": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "recetteParSegment": "Recette par segment",
+  "segmentLePlusRentable": "Segment le + rentable : seg. {seg}",
+  "@segmentLePlusRentable": {
+    "placeholders": { "seg": { "type": "String" } }
+  },
+  "nonClasse": "Non classé",
+  "enAttenteSyncLabel": "En attente",
+  "echecSyncLabel": "Échec",
+  "prixUnitaireParTicket": "{prix} ms/ticket",
+  "@prixUnitaireParTicket": {
+    "placeholders": { "prix": { "type": "int" } }
+  },
+  "segLabel": "Segment {seg}",
+  "@segLabel": {
+    "placeholders": { "seg": { "type": "String" } }
+  },
+  "ticketsAujourdhuiCount": "{count} ticket(s) aujourd'hui",
+  "@ticketsAujourdhuiCount": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "ticketsCountAvecSync": "{count} ticket(s) aujourd'hui · {pending} en attente · {failed} échoué(s)",
+  "@ticketsCountAvecSync": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "pending": { "type": "int" },
+      "failed": { "type": "int" }
+    }
+  },
+  "horsLigneAucunTicketLocal": "Hors-ligne — aucun ticket local aujourd'hui",
+  "horsLigneTicketsEnAttente": "Hors-ligne — {count} ticket(s) en attente aujourd'hui",
+  "@horsLigneTicketsEnAttente": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "horsLigneTicketsCache": "Hors-ligne — {count} ticket(s) en cache (aujourd'hui)",
+  "@horsLigneTicketsCache": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "idVoyageManquantError": "ID du voyage manquant",
+  "msRecette": "ms recette",
+  "prixUnitaireMs": "prix unitaire (ms)",
+  "journauxSyncTitle": "Journaux de synchronisation",
+"reseauOperationnel": "Réseau opérationnel",
+"requetesEnAttente": "{count} requête(s) en attente",
+"@requetesEnAttente": { "placeholders": { "count": { "type": "int" } } },
+"kpiOk": "200 OK",
+"kpiErreur": "5xx Erreur",
+"kpiEnFile": "En file",
+"kpiTauxReussite": "Taux réussite",
+"syncResultat": "✓ {synced} synchronisés   ✗ {failed} échoués",
+"@syncResultat": { "placeholders": { "synced": { "type": "int" }, "failed": { "type": "int" } } },
+"tabFileAttente": "File d'attente",
+"tabRequetesHttp": "Requêtes HTTP",
+"tabConsole": "Console",
+"fileAttenteVide": "File d'attente vide",
+"tousTicketsSynchronises": "Tous les tickets sont synchronisés",
+"aucuneRequete": "Aucune requête enregistrée",
+"syncConsoleTitle": "sync_log — {count} entrées",
+"@syncConsoleTitle": { "placeholders": { "count": { "type": "int" } } },
+"aucunLogDisponible": "Aucun log disponible",
+"ticketsLocaux": "Tickets locaux — {count} entrées",
+"@ticketsLocaux": { "placeholders": { "count": { "type": "int" } } },
+"aucunTicketLocal": "Aucun ticket local",
+"retryLabel": "{count}× retry",
+"@retryLabel": { "placeholders": { "count": { "type": "int" } } },
+"statusSynced": "synced",
+"statusFailed": "failed",
+"statusPending": "pending",
+"finDuVoyage": "Fin du Voyage",
+"voyageEnCours": "Voyage en cours",
+"attentionTitre": "Attention",
+"clotureIrreversible": "Cette action est irréversible",
+"clotureAucuneVente": "Aucune vente ne sera possible après clôture",
+"clotureVoyageMarque": "Le voyage sera marqué comme terminé",
+"confirmerCloture": "Confirmer la clôture",
+"clotureEnCours": "Clôture en cours...",
+"voyageCloture": "Voyage clôturé !",
+"retourEnCours": "Retour en cours...",
+"erreurInattendue": "Erreur inattendue",
+"horsLigneCloturePending": "Hors ligne — clôture enregistrée, sera envoyée à la reconnexion",
+"scanReadMode": "Mode de lecture",
+  "scanModeNfc": "NFC",
+  "scanNfcSublabel": "Approcher la carte",
+  "scanModeQr": "Code-barres",
+  "scanQrSublabel": "Scanner le QR / code",
+
+  "scanNfcUnavailable": "NFC non disponible sur cet appareil",
+  "scanNfcApproach": "Approchez votre carte de transport",
+  "scanNfcUnreadable": "Carte NFC illisible ou invalide",
+  "scanNfcReadError": "Erreur de lecture",
+  "scanNfcError": "Erreur NFC : {error}",
+  "@scanNfcError": {
+    "placeholders": { "error": { "type": "String" } }
+  },
+  "scanNfcSheetTitle": "Approchez la carte NFC",
+  "scanNfcSheetSubtitle": "Maintenez la carte contre\nle dos de votre téléphone",
+
+  "scanCameraTitle": "Scanner le code-barres / QR",
+  "scanCameraHint": "Centrez le code dans le cadre",
+
+  "scanUnknown": "Inconnu",
+  "scanIncompleteData": "Données du titre incomplètes (id, type ou expire manquant)",
+  "scanCardNotFound": "Carte non reconnue\n{cardId}",
+  "@scanCardNotFound": {
+    "placeholders": { "cardId": { "type": "String" } }
+  },
+  "scanLookupError": "Erreur lors de la recherche : {error}",
+  "@scanLookupError": {
+    "placeholders": { "error": { "type": "String" } }
+  },
+
+  "scanPrefix": "Scan",
+  "scanValidatedToast": "Titre validé et enregistré ✓",
+  "scanSaveError": "Erreur : {error}",
+  "@scanSaveError": {
+    "placeholders": { "error": { "type": "String" } }
+  },
+
+  "scanSessionCount": "{count} titre(s) validé(s) cette session",
+  "@scanSessionCount": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+
+  "scanFieldSubscriptionType": "Type d'abonnement",
+  "scanFieldOrganisme": "Organisme",
+  "scanFieldAuthorisedLine": "Ligne autorisée",
+  "scanFieldExpiry": "Expire le",
+  "scanFieldStatus": "Statut",
+
+  "scanStatusExpired": "Expiré",
+  "scanStatusValid": "Valide",
+  "scanExpiredWarning": "Ce titre est expiré et ne peut pas être validé.",
+
+  "scanSaving": "Enregistrement...",
+  "scanBtnExpired": "Titre expiré",
+  "scanBtnValidate": "Valider & Enregistrer",
+
+  "scanIdleTitle": "Prêt à scanner",
+  "scanIdleSubtitle": "Choisissez NFC ou Code-barres\npour lancer la lecture",
+  "scanSearching": "Recherche du titre…",
+  "scanInvalidTitle": "Titre invalide",
+  "scanErrorSubtitle": "Ce titre de transport ne peut pas être accepté."
 }

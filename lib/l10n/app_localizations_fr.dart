@@ -21,7 +21,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get matriculeHint => 'Entrez votre matricule';
 
   @override
-  String get matriculeError => 'Veuillez saisir votre matricule';
+  String get matriculeError => 'Veuillez entrer votre matricule';
 
   @override
   String get motDePasse => 'Mot de passe';
@@ -30,7 +30,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get motDePasseHint => 'Entrez votre mot de passe';
 
   @override
-  String get motDePasseError => 'Veuillez saisir votre mot de passe';
+  String get motDePasseError => 'Veuillez entrer votre mot de passe';
 
   @override
   String get seConnecter => 'Se connecter';
@@ -56,7 +56,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get matriculeInvalid => 'Matricule invalide';
 
   @override
-  String get offlineNoAccount => 'Hors ligne — aucun compte local trouvé';
+  String get offlineNoAccount => 'Hors ligne — Aucun compte local trouvé';
 
   @override
   String get srtbFullName => 'Société Régionale de Transport de Bizerte';
@@ -92,7 +92,8 @@ class AppLocalizationsFr extends AppLocalizations {
   String get cloturerJournee => 'Clôturer la journée';
 
   @override
-  String get cloturerJourneeQuestion => 'Clôturer toute la journée ?';
+  String get cloturerJourneeQuestion =>
+      'Souhaitez-vous clôturer toute la journée ?';
 
   @override
   String get annuler => 'Annuler';
@@ -116,7 +117,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get statutActif => 'Actif';
 
   @override
-  String get horsLignePasDeDonnees => 'Hors ligne — aucune donnée disponible';
+  String get horsLignePasDeDonnees => 'Hors ligne — Aucune donnée disponible';
 
   @override
   String get modeHorsLigne => 'Mode hors ligne';
@@ -174,20 +175,20 @@ class AppLocalizationsFr extends AppLocalizations {
   String get envoyerRapport => 'Envoyer le rapport';
 
   @override
-  String get reouvrirJourneeQuestion => 'Rouvrir la journée ?';
+  String get reouvrirJourneeQuestion => 'Souhaitez-vous rouvrir la journée ?';
 
   @override
   String get actionReversible => 'Cette action est réversible';
 
   @override
-  String get reouvrirTout => 'Tout rouvrir';
+  String get reouvrirTout => 'Rouvrir tout';
 
   @override
-  String get reouvrirCeVoyage => 'Rouvrir ce voyage ?';
+  String get reouvrirCeVoyage => 'Souhaitez-vous rouvrir ce voyage ?';
 
   @override
   String get reouvrirVoyageBody =>
-      'Le voyage reviendra à l\'état actif et vous pourrez à nouveau vendre des billets.';
+      'Le voyage reviendra à l\'état actif et vous pourrez à nouveau vendre des tickets.';
 
   @override
   String get rouvrir => 'Rouvrir';
@@ -233,7 +234,7 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get venteEtHistorique => 'Ventes et historique';
+  String get venteEtHistorique => 'Vente & Historique';
 
   @override
   String get billetterie => 'Billetterie';
@@ -242,11 +243,11 @@ class AppLocalizationsFr extends AppLocalizations {
   String get historique => 'Historique';
 
   @override
-  String get journauxSync => 'Journaux de synchronisation';
+  String get journauxSync => 'Journaux de sync';
 
   @override
   String journauxSyncEnAttente(int count) {
-    return 'Journaux sync · $count en attente';
+    return 'Journaux de sync · $count en attente';
   }
 
   @override
@@ -260,23 +261,23 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get horsLignePasDeCacheErreur =>
-      'Hors ligne et aucun cache disponible. Veuillez vous connecter à Internet.';
+      'Hors ligne et pas de cache. Veuillez vous connecter à Internet.';
 
   @override
   String get horsLigneDonneesCache =>
-      'Données chargées depuis le cache (mode hors ligne)';
+      'Données chargées depuis le cache (hors ligne)';
 
   @override
   String get horsLigneSynchronise =>
-      'Ce billet sera synchronisé dès le retour en ligne.';
+      'Ce ticket sera synchronisé lors du retour en ligne.';
 
   @override
   String get horsLigneActionsSync =>
-      'Les actions seront synchronisées à la reconnexion.';
+      'Les actions seront synchronisées lors du retour en ligne.';
 
   @override
   String get horsLigneTicketSauvegarde =>
-      'Billet sauvegardé localement (hors ligne)';
+      'Ticket enregistré localement (hors ligne)';
 
   @override
   String get typeDeTarif => 'Type de tarif';
@@ -294,16 +295,16 @@ class AppLocalizationsFr extends AppLocalizations {
   String get choisirArret => 'Choisir un arrêt';
 
   @override
-  String get choisirDabordMontee => 'Choisissez d\'abord la montée';
+  String get choisirDabordMontee => 'Choisir d\'abord la montée';
 
   @override
   String get aucunArretDisponible => 'Aucun arrêt disponible';
 
   @override
-  String get nombreDeTickets => 'Nombre de billets';
+  String get nombreDeTickets => 'Nombre de tickets';
 
   @override
-  String get confirmerTicket => 'Confirmer le billet';
+  String get confirmerTicket => 'Confirmer le ticket';
 
   @override
   String get monteeLabel => 'Montée';
@@ -324,13 +325,13 @@ class AppLocalizationsFr extends AppLocalizations {
   String get gratuit => 'Gratuit';
 
   @override
-  String get qrCodeTicket => 'QR CODE DU BILLET';
+  String get qrCodeTicket => 'QR Code du ticket';
 
   @override
-  String get ticketSingulier => 'billet';
+  String get ticketSingulier => 'ticket';
 
   @override
-  String get ticketPluriel => 'billets';
+  String get ticketPluriel => 'tickets';
 
   @override
   String get valider => 'Valider';
@@ -339,31 +340,31 @@ class AppLocalizationsFr extends AppLocalizations {
   String get enregistrement => 'Enregistrement…';
 
   @override
-  String get validerLeTicket => 'Valider le billet';
+  String get validerLeTicket => 'Valider le ticket';
 
   @override
   String validerTickets(int count) {
-    return 'Valider $count billets';
+    return 'Valider $count tickets';
   }
 
   @override
   String get passageGratuit => 'Passage gratuit';
 
   @override
-  String get ticketsVendusLabel => 'Billets vendus';
+  String get ticketsVendusLabel => 'Tickets vendus';
 
   @override
   String get totalCollecte => 'Total collecté';
 
   @override
-  String get idVoyageManquant => 'Identifiant du voyage manquant';
+  String get idVoyageManquant => 'ID voyage manquant';
 
   @override
-  String get inconnu => 'inconnu';
+  String get inconnu => 'Inconnu';
 
   @override
   String ticketsVendusToast(int count, int montant) {
-    return '$count billet(s) vendu(s) — $montant millimes';
+    return '$count ticket(s) vendu(s) — $montant millimes';
   }
 
   @override
@@ -380,4 +381,489 @@ class AppLocalizationsFr extends AppLocalizations {
   String pourcentageApplique(int pct) {
     return '−$pct% appliqué';
   }
+
+  @override
+  String get institutionAgence => 'Institution / Agence';
+
+  @override
+  String get typeSpecial => 'Type spécial';
+
+  @override
+  String get nombreDePersonnes => 'Nombre de personnes';
+
+  @override
+  String get personne => 'personne';
+
+  @override
+  String get personnes => 'personnes';
+
+  @override
+  String get enregistrerLePassage => 'Enregistrer le passage';
+
+  @override
+  String get enregistrementEnCours => 'Enregistrement...';
+
+  @override
+  String passagesSession(int count) {
+    return '$count passage(s) enregistré(s) cette session';
+  }
+
+  @override
+  String passagesToast(int count) {
+    return '$count passage(s) enregistré(s)';
+  }
+
+  @override
+  String get erreurInconnue => 'inconnue';
+
+  @override
+  String get passagesGratuitsSpeciaux => 'Passages Gratuits & Spéciaux';
+
+  @override
+  String resumePassage(int count, String typeTarif) {
+    return '$count personne(s) · $typeTarif';
+  }
+
+  @override
+  String erreurPassage(String message) {
+    return 'Erreur : $message';
+  }
+
+  @override
+  String get categorieArmeeNationale => 'Armée nationale';
+
+  @override
+  String get categorieGardeNationale => 'Garde nationale';
+
+  @override
+  String get categoriePoliceNationale => 'Police nationale';
+
+  @override
+  String get categorieDouane => 'Douane';
+
+  @override
+  String get categorieMinistere => 'Ministère';
+
+  @override
+  String get categorieMunicipalite => 'Municipalité';
+
+  @override
+  String get categorieEtablissementScolaire => 'Établissement scolaire';
+
+  @override
+  String get categorieAutreInstitution => 'Autre institution';
+
+  @override
+  String get categorieAbonnement => 'Abonnement';
+
+  @override
+  String get categorieAgent => 'Agent';
+
+  @override
+  String get historiqueVoyage => 'Historique du voyage';
+
+  @override
+  String get tickets => 'Tickets';
+
+  @override
+  String get finance => 'Finance';
+
+  @override
+  String get liste => 'Liste';
+
+  @override
+  String get parSegment => 'Par segment';
+
+  @override
+  String get apercu => 'Aperçu';
+
+  @override
+  String get parTarif => 'Par tarif';
+
+  @override
+  String get bilan => 'Bilan';
+
+  @override
+  String get aucunTicketAujourdhui => 'Aucun ticket aujourd\'hui';
+
+  @override
+  String get ticketsAujourdhuiApparaitront =>
+      'Les tickets d\'aujourd\'hui apparaîtront ici';
+
+  @override
+  String get aucunSegmentDisponible => 'Aucun segment disponible';
+
+  @override
+  String get segmentInfoIndisponible =>
+      'Les informations de segment ne sont pas disponibles';
+
+  @override
+  String get aucunTarif => 'Aucun tarif';
+
+  @override
+  String get donneesApparaitrontIci => 'Les données apparaîtront ici';
+
+  @override
+  String get recetteTotale => 'Recette totale';
+
+  @override
+  String get ticketsVendus => 'Tickets vendus';
+
+  @override
+  String get aujourdhui => 'aujourd\'hui';
+
+  @override
+  String get prixMoyen => 'Prix moyen';
+
+  @override
+  String get ticketPayant => 'ticket payant';
+
+  @override
+  String get repartitionRecettes => 'Répartition des recettes';
+
+  @override
+  String get recetteParTarif => 'Recette par tarif';
+
+  @override
+  String get detailFinancierParTarif => 'Détail financier par tarif';
+
+  @override
+  String get recetteTotaleVoyage => 'Recette totale du voyage — aujourd\'hui';
+
+  @override
+  String equivalentDT(String dt) {
+    return '≈ $dt DT';
+  }
+
+  @override
+  String get ticketsPayants => 'Tickets payants';
+
+  @override
+  String get totalVoyageurs => 'Total voyageurs';
+
+  @override
+  String get prixMoyenPayants => 'Prix moyen (payants)';
+
+  @override
+  String get analyseGratuites => 'Analyse des gratuités';
+
+  @override
+  String get manqueAGagnerEstime => 'Manque à gagner estimé';
+
+  @override
+  String get tauxGratuite => 'Taux de gratuité';
+
+  @override
+  String get payants => 'Payants';
+
+  @override
+  String get typesTarifUtilises => 'Types de tarif utilisés';
+
+  @override
+  String segmentsPluralLabel(int count) {
+    return '$count segment(s)';
+  }
+
+  @override
+  String get recetteParSegment => 'Recette par segment';
+
+  @override
+  String segmentLePlusRentable(String seg) {
+    return 'Segment le + rentable : seg. $seg';
+  }
+
+  @override
+  String get nonClasse => 'Non classé';
+
+  @override
+  String get enAttenteSyncLabel => 'En attente';
+
+  @override
+  String get echecSyncLabel => 'Échec';
+
+  @override
+  String prixUnitaireParTicket(int prix) {
+    return '$prix ms/ticket';
+  }
+
+  @override
+  String segLabel(String seg) {
+    return 'Segment $seg';
+  }
+
+  @override
+  String ticketsAujourdhuiCount(int count) {
+    return '$count ticket(s) aujourd\'hui';
+  }
+
+  @override
+  String ticketsCountAvecSync(int count, int pending, int failed) {
+    return '$count ticket(s) aujourd\'hui · $pending en attente · $failed échoué(s)';
+  }
+
+  @override
+  String get horsLigneAucunTicketLocal =>
+      'Hors-ligne — aucun ticket local aujourd\'hui';
+
+  @override
+  String horsLigneTicketsEnAttente(int count) {
+    return 'Hors-ligne — $count ticket(s) en attente aujourd\'hui';
+  }
+
+  @override
+  String horsLigneTicketsCache(int count) {
+    return 'Hors-ligne — $count ticket(s) en cache (aujourd\'hui)';
+  }
+
+  @override
+  String get idVoyageManquantError => 'ID du voyage manquant';
+
+  @override
+  String get msRecette => 'ms recette';
+
+  @override
+  String get prixUnitaireMs => 'prix unitaire (ms)';
+
+  @override
+  String get journauxSyncTitle => 'Journaux de synchronisation';
+
+  @override
+  String get reseauOperationnel => 'Réseau opérationnel';
+
+  @override
+  String requetesEnAttente(int count) {
+    return '$count requête(s) en attente';
+  }
+
+  @override
+  String get kpiOk => '200 OK';
+
+  @override
+  String get kpiErreur => '5xx Erreur';
+
+  @override
+  String get kpiEnFile => 'En file';
+
+  @override
+  String get kpiTauxReussite => 'Taux réussite';
+
+  @override
+  String syncResultat(int synced, int failed) {
+    return '✓ $synced synchronisés   ✗ $failed échoués';
+  }
+
+  @override
+  String get tabFileAttente => 'File d\'attente';
+
+  @override
+  String get tabRequetesHttp => 'Requêtes HTTP';
+
+  @override
+  String get tabConsole => 'Console';
+
+  @override
+  String get fileAttenteVide => 'File d\'attente vide';
+
+  @override
+  String get tousTicketsSynchronises => 'Tous les tickets sont synchronisés';
+
+  @override
+  String get aucuneRequete => 'Aucune requête enregistrée';
+
+  @override
+  String syncConsoleTitle(int count) {
+    return 'sync_log — $count entrées';
+  }
+
+  @override
+  String get aucunLogDisponible => 'Aucun log disponible';
+
+  @override
+  String ticketsLocaux(int count) {
+    return 'Tickets locaux — $count entrées';
+  }
+
+  @override
+  String get aucunTicketLocal => 'Aucun ticket local';
+
+  @override
+  String retryLabel(int count) {
+    return '$count× retry';
+  }
+
+  @override
+  String get statusSynced => 'synced';
+
+  @override
+  String get statusFailed => 'failed';
+
+  @override
+  String get statusPending => 'pending';
+
+  @override
+  String get finDuVoyage => 'Fin du Voyage';
+
+  @override
+  String get voyageEnCours => 'Voyage en cours';
+
+  @override
+  String get attentionTitre => 'Attention';
+
+  @override
+  String get clotureIrreversible => 'Cette action est irréversible';
+
+  @override
+  String get clotureAucuneVente =>
+      'Aucune vente ne sera possible après clôture';
+
+  @override
+  String get clotureVoyageMarque => 'Le voyage sera marqué comme terminé';
+
+  @override
+  String get confirmerCloture => 'Confirmer la clôture';
+
+  @override
+  String get clotureEnCours => 'Clôture en cours...';
+
+  @override
+  String get voyageCloture => 'Voyage clôturé !';
+
+  @override
+  String get retourEnCours => 'Retour en cours...';
+
+  @override
+  String get erreurInattendue => 'Erreur inattendue';
+
+  @override
+  String get horsLigneCloturePending =>
+      'Hors ligne — clôture enregistrée, sera envoyée à la reconnexion';
+
+  @override
+  String get scanReadMode => 'Mode de lecture';
+
+  @override
+  String get scanModeNfc => 'NFC';
+
+  @override
+  String get scanNfcSublabel => 'Approcher la carte';
+
+  @override
+  String get scanModeQr => 'Code-barres';
+
+  @override
+  String get scanQrSublabel => 'Scanner le QR / code';
+
+  @override
+  String get scanNfcUnavailable => 'NFC non disponible sur cet appareil';
+
+  @override
+  String get scanNfcApproach => 'Approchez votre carte de transport';
+
+  @override
+  String get scanNfcUnreadable => 'Carte NFC illisible ou invalide';
+
+  @override
+  String get scanNfcReadError => 'Erreur de lecture';
+
+  @override
+  String scanNfcError(String error) {
+    return 'Erreur NFC : $error';
+  }
+
+  @override
+  String get scanNfcSheetTitle => 'Approchez la carte NFC';
+
+  @override
+  String get scanNfcSheetSubtitle =>
+      'Maintenez la carte contre\nle dos de votre téléphone';
+
+  @override
+  String get scanCameraTitle => 'Scanner le code-barres / QR';
+
+  @override
+  String get scanCameraHint => 'Centrez le code dans le cadre';
+
+  @override
+  String get scanUnknown => 'Inconnu';
+
+  @override
+  String get scanIncompleteData =>
+      'Données du titre incomplètes (id, type ou expire manquant)';
+
+  @override
+  String scanCardNotFound(String cardId) {
+    return 'Carte non reconnue\n$cardId';
+  }
+
+  @override
+  String scanLookupError(String error) {
+    return 'Erreur lors de la recherche : $error';
+  }
+
+  @override
+  String get scanPrefix => 'Scan';
+
+  @override
+  String get scanValidatedToast => 'Titre validé et enregistré ✓';
+
+  @override
+  String scanSaveError(String error) {
+    return 'Erreur : $error';
+  }
+
+  @override
+  String scanSessionCount(int count) {
+    return '$count titre(s) validé(s) cette session';
+  }
+
+  @override
+  String get scanFieldSubscriptionType => 'Type d\'abonnement';
+
+  @override
+  String get scanFieldOrganisme => 'Organisme';
+
+  @override
+  String get scanFieldAuthorisedLine => 'Ligne autorisée';
+
+  @override
+  String get scanFieldExpiry => 'Expire le';
+
+  @override
+  String get scanFieldStatus => 'Statut';
+
+  @override
+  String get scanStatusExpired => 'Expiré';
+
+  @override
+  String get scanStatusValid => 'Valide';
+
+  @override
+  String get scanExpiredWarning =>
+      'Ce titre est expiré et ne peut pas être validé.';
+
+  @override
+  String get scanSaving => 'Enregistrement...';
+
+  @override
+  String get scanBtnExpired => 'Titre expiré';
+
+  @override
+  String get scanBtnValidate => 'Valider & Enregistrer';
+
+  @override
+  String get scanIdleTitle => 'Prêt à scanner';
+
+  @override
+  String get scanIdleSubtitle =>
+      'Choisissez NFC ou Code-barres\npour lancer la lecture';
+
+  @override
+  String get scanSearching => 'Recherche du titre…';
+
+  @override
+  String get scanInvalidTitle => 'Titre invalide';
+
+  @override
+  String get scanErrorSubtitle =>
+      'Ce titre de transport ne peut pas être accepté.';
 }

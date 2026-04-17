@@ -254,10 +254,13 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
                   ),
                 ),
               ),
-              const Spacer(),
-              // ── Sync badge icon ──
-              GestureDetector(
-                onTap: () => Navigator.push(
+             const Spacer(),
+// ── Language switcher ──
+const LanguageSwitcher(),
+const SizedBox(width: 8),
+// ── Sync badge icon ──
+GestureDetector(
+  onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (_) => SyncLogPage(agent: widget.voyage),
@@ -305,9 +308,7 @@ class _VenteTicketsPageState extends State<VenteTicketsPage> {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              // ── Language switcher — same as login_page.dart ──
-              const LanguageSwitcher(),
+             
             ],
           ),
           const SizedBox(height: 16),

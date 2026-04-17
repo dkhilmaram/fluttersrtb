@@ -377,4 +377,483 @@ class AppLocalizationsAr extends AppLocalizations {
   String pourcentageApplique(int pct) {
     return '−$pct% مطبّق';
   }
+
+  @override
+  String get institutionAgence => 'المؤسسة / الوكالة';
+
+  @override
+  String get typeSpecial => 'نوع خاص';
+
+  @override
+  String get nombreDePersonnes => 'عدد الأشخاص';
+
+  @override
+  String get personne => 'شخص';
+
+  @override
+  String get personnes => 'أشخاص';
+
+  @override
+  String get enregistrerLePassage => 'تسجيل العبور';
+
+  @override
+  String get enregistrementEnCours => 'جارٍ التسجيل...';
+
+  @override
+  String passagesSession(int count) {
+    return 'تم تسجيل $count عبور(ات) في هذه الجلسة';
+  }
+
+  @override
+  String passagesToast(int count) {
+    return 'تم تسجيل $count عبور(ات)';
+  }
+
+  @override
+  String get erreurInconnue => 'غير معروف';
+
+  @override
+  String get passagesGratuitsSpeciaux => 'العبورات المجانية والخاصة';
+
+  @override
+  String resumePassage(int count, String typeTarif) {
+    return '$count شخص(أشخاص) · $typeTarif';
+  }
+
+  @override
+  String erreurPassage(String message) {
+    return 'خطأ: $message';
+  }
+
+  @override
+  String get categorieArmeeNationale => 'الجيش الوطني';
+
+  @override
+  String get categorieGardeNationale => 'الحرس الوطني';
+
+  @override
+  String get categoriePoliceNationale => 'الأمن الوطني';
+
+  @override
+  String get categorieDouane => 'الديوانة';
+
+  @override
+  String get categorieMinistere => 'وزارة';
+
+  @override
+  String get categorieMunicipalite => 'بلدية';
+
+  @override
+  String get categorieEtablissementScolaire => 'مؤسسة تعليمية';
+
+  @override
+  String get categorieAutreInstitution => 'مؤسسة أخرى';
+
+  @override
+  String get categorieAbonnement => 'اشتراك';
+
+  @override
+  String get categorieAgent => 'عون';
+
+  @override
+  String get historiqueVoyage => 'سجل الرحلة';
+
+  @override
+  String get tickets => 'التذاكر';
+
+  @override
+  String get finance => 'المالية';
+
+  @override
+  String get liste => 'القائمة';
+
+  @override
+  String get parSegment => 'حسب القطعة';
+
+  @override
+  String get apercu => 'نظرة عامة';
+
+  @override
+  String get parTarif => 'حسب التعريفة';
+
+  @override
+  String get bilan => 'الملخص';
+
+  @override
+  String get aucunTicketAujourdhui => 'لا توجد تذاكر اليوم';
+
+  @override
+  String get ticketsAujourdhuiApparaitront => 'ستظهر تذاكر اليوم هنا';
+
+  @override
+  String get aucunSegmentDisponible => 'لا توجد قطاعات متاحة';
+
+  @override
+  String get segmentInfoIndisponible => 'معلومات القطعة غير متاحة';
+
+  @override
+  String get aucunTarif => 'لا توجد تعريفة';
+
+  @override
+  String get donneesApparaitrontIci => 'ستظهر البيانات هنا';
+
+  @override
+  String get recetteTotale => 'إجمالي الإيرادات';
+
+  @override
+  String get ticketsVendus => 'التذاكر المباعة';
+
+  @override
+  String get aujourdhui => 'اليوم';
+
+  @override
+  String get prixMoyen => 'متوسط السعر';
+
+  @override
+  String get ticketPayant => 'تذكرة مدفوعة';
+
+  @override
+  String get repartitionRecettes => 'توزيع الإيرادات';
+
+  @override
+  String get recetteParTarif => 'الإيرادات حسب التعريفة';
+
+  @override
+  String get detailFinancierParTarif => 'التفاصيل المالية حسب التعريفة';
+
+  @override
+  String get recetteTotaleVoyage => 'إجمالي إيرادات الرحلة — اليوم';
+
+  @override
+  String equivalentDT(String dt) {
+    return '≈ $dt د.ت';
+  }
+
+  @override
+  String get ticketsPayants => 'التذاكر المدفوعة';
+
+  @override
+  String get totalVoyageurs => 'إجمالي المسافرين';
+
+  @override
+  String get prixMoyenPayants => 'متوسط السعر (مدفوع)';
+
+  @override
+  String get analyseGratuites => 'تحليل التذاكر المجانية';
+
+  @override
+  String get manqueAGagnerEstime => 'الخسارة المقدرة';
+
+  @override
+  String get tauxGratuite => 'نسبة المجانية';
+
+  @override
+  String get payants => 'مدفوعون';
+
+  @override
+  String get typesTarifUtilises => 'أنواع التعريفات المستخدمة';
+
+  @override
+  String segmentsPluralLabel(int count) {
+    return '$count قطعة (قطاعات)';
+  }
+
+  @override
+  String get recetteParSegment => 'الإيرادات حسب القطعة';
+
+  @override
+  String segmentLePlusRentable(String seg) {
+    return 'أكثر القطاعات ربحًا: القطعة $seg';
+  }
+
+  @override
+  String get nonClasse => 'غير مصنف';
+
+  @override
+  String get enAttenteSyncLabel => 'في انتظار المزامنة';
+
+  @override
+  String get echecSyncLabel => 'فشل المزامنة';
+
+  @override
+  String prixUnitaireParTicket(int prix) {
+    return '$prix م/تذكرة';
+  }
+
+  @override
+  String segLabel(String seg) {
+    return 'قطعة $seg';
+  }
+
+  @override
+  String ticketsAujourdhuiCount(int count) {
+    return '$count تذكرة (تذاكر) اليوم';
+  }
+
+  @override
+  String ticketsCountAvecSync(int count, int pending, int failed) {
+    return '$count تذكرة (تذاكر) اليوم · $pending في الانتظار · $failed فشل';
+  }
+
+  @override
+  String get horsLigneAucunTicketLocal =>
+      'غير متصل — لا توجد تذاكر محلية اليوم';
+
+  @override
+  String horsLigneTicketsEnAttente(int count) {
+    return 'غير متصل — $count تذكرة (تذاكر) في الانتظار اليوم';
+  }
+
+  @override
+  String horsLigneTicketsCache(int count) {
+    return 'غير متصل — $count تذكرة (تذاكر) مؤقتة (اليوم)';
+  }
+
+  @override
+  String get idVoyageManquantError => 'معرّف الرحلة مفقود';
+
+  @override
+  String get msRecette => 'م إيرادات';
+
+  @override
+  String get prixUnitaireMs => 'سعر الوحدة (م)';
+
+  @override
+  String get journauxSyncTitle => 'سجلات المزامنة';
+
+  @override
+  String get reseauOperationnel => 'الشبكة تعمل';
+
+  @override
+  String requetesEnAttente(int count) {
+    return '$count طلب (طلبات) في الانتظار';
+  }
+
+  @override
+  String get kpiOk => '200 OK';
+
+  @override
+  String get kpiErreur => '5xx خطأ';
+
+  @override
+  String get kpiEnFile => 'في الانتظار';
+
+  @override
+  String get kpiTauxReussite => 'نسبة النجاح';
+
+  @override
+  String syncResultat(int synced, int failed) {
+    return '✓ $synced تمت مزامنتها   ✗ $failed فشلت';
+  }
+
+  @override
+  String get tabFileAttente => 'قائمة الانتظار';
+
+  @override
+  String get tabRequetesHttp => 'طلبات HTTP';
+
+  @override
+  String get tabConsole => 'وحدة التحكم';
+
+  @override
+  String get fileAttenteVide => 'قائمة الانتظار فارغة';
+
+  @override
+  String get tousTicketsSynchronises => 'جميع التذاكر متزامنة';
+
+  @override
+  String get aucuneRequete => 'لا توجد طلبات مسجّلة';
+
+  @override
+  String syncConsoleTitle(int count) {
+    return 'sync_log — $count سجل';
+  }
+
+  @override
+  String get aucunLogDisponible => 'لا توجد سجلات متاحة';
+
+  @override
+  String ticketsLocaux(int count) {
+    return 'التذاكر المحلية — $count سجل';
+  }
+
+  @override
+  String get aucunTicketLocal => 'لا توجد تذاكر محلية';
+
+  @override
+  String retryLabel(int count) {
+    return '$count× إعادة محاولة';
+  }
+
+  @override
+  String get statusSynced => 'متزامن';
+
+  @override
+  String get statusFailed => 'فشل';
+
+  @override
+  String get statusPending => 'في الانتظار';
+
+  @override
+  String get finDuVoyage => 'نهاية الرحلة';
+
+  @override
+  String get voyageEnCours => 'الرحلة الجارية';
+
+  @override
+  String get attentionTitre => 'تنبيه';
+
+  @override
+  String get clotureIrreversible => 'هذا الإجراء لا يمكن التراجع عنه';
+
+  @override
+  String get clotureAucuneVente => 'لن يكون البيع ممكناً بعد الإغلاق';
+
+  @override
+  String get clotureVoyageMarque => 'سيتم وضع علامة على الرحلة كمنتهية';
+
+  @override
+  String get confirmerCloture => 'تأكيد الإغلاق';
+
+  @override
+  String get clotureEnCours => 'جارٍ الإغلاق...';
+
+  @override
+  String get voyageCloture => 'تم إغلاق الرحلة !';
+
+  @override
+  String get retourEnCours => 'جارٍ العودة...';
+
+  @override
+  String get erreurInattendue => 'خطأ غير متوقع';
+
+  @override
+  String get horsLigneCloturePending =>
+      'غير متصل — تم تسجيل الإغلاق، سيُرسل عند إعادة الاتصال';
+
+  @override
+  String get scanReadMode => 'وضع القراءة';
+
+  @override
+  String get scanModeNfc => 'NFC';
+
+  @override
+  String get scanNfcSublabel => 'أقرّب البطاقة';
+
+  @override
+  String get scanModeQr => 'باركود';
+
+  @override
+  String get scanQrSublabel => 'امسح رمز QR / الباركود';
+
+  @override
+  String get scanNfcUnavailable => 'NFC غير متوفر على هذا الجهاز';
+
+  @override
+  String get scanNfcApproach => 'أقرّب بطاقة النقل';
+
+  @override
+  String get scanNfcUnreadable => 'بطاقة NFC غير قابلة للقراءة أو غير صالحة';
+
+  @override
+  String get scanNfcReadError => 'خطأ في القراءة';
+
+  @override
+  String scanNfcError(String error) {
+    return 'خطأ NFC: $error';
+  }
+
+  @override
+  String get scanNfcSheetTitle => 'أقرّب بطاقة NFC';
+
+  @override
+  String get scanNfcSheetSubtitle => 'أمسك البطاقة بالقرب من\nظهر هاتفك';
+
+  @override
+  String get scanCameraTitle => 'مسح الباركود / رمز QR';
+
+  @override
+  String get scanCameraHint => 'ضع الرمز في منتصف الإطار';
+
+  @override
+  String get scanUnknown => 'غير معروف';
+
+  @override
+  String get scanIncompleteData =>
+      'بيانات التذكرة غير مكتملة (id أو type أو expire مفقود)';
+
+  @override
+  String scanCardNotFound(String cardId) {
+    return 'البطاقة غير معروفة\n$cardId';
+  }
+
+  @override
+  String scanLookupError(String error) {
+    return 'خطأ أثناء البحث: $error';
+  }
+
+  @override
+  String get scanPrefix => 'مسح';
+
+  @override
+  String get scanValidatedToast => 'تم التحقق من التذكرة وحفظها ✓';
+
+  @override
+  String scanSaveError(String error) {
+    return 'خطأ: $error';
+  }
+
+  @override
+  String scanSessionCount(int count) {
+    return 'تم التحقق من $count تذكرة (تذاكر) في هذه الجلسة';
+  }
+
+  @override
+  String get scanFieldSubscriptionType => 'نوع الاشتراك';
+
+  @override
+  String get scanFieldOrganisme => 'الجهة';
+
+  @override
+  String get scanFieldAuthorisedLine => 'الخط المرخّص';
+
+  @override
+  String get scanFieldExpiry => 'تاريخ الانتهاء';
+
+  @override
+  String get scanFieldStatus => 'الحالة';
+
+  @override
+  String get scanStatusExpired => 'منتهي الصلاحية';
+
+  @override
+  String get scanStatusValid => 'صالح';
+
+  @override
+  String get scanExpiredWarning =>
+      'هذه التذكرة منتهية الصلاحية ولا يمكن التحقق منها.';
+
+  @override
+  String get scanSaving => 'جارٍ الحفظ...';
+
+  @override
+  String get scanBtnExpired => 'التذكرة منتهية';
+
+  @override
+  String get scanBtnValidate => 'تحقق وحفظ';
+
+  @override
+  String get scanIdleTitle => 'جاهز للمسح';
+
+  @override
+  String get scanIdleSubtitle => 'اختر NFC أو الباركود\nلبدء القراءة';
+
+  @override
+  String get scanSearching => 'جارٍ البحث عن التذكرة…';
+
+  @override
+  String get scanInvalidTitle => 'تذكرة غير صالحة';
+
+  @override
+  String get scanErrorSubtitle => 'لا يمكن قبول هذه التذكرة.';
 }
