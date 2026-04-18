@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/repositories/ticket_repository.dart';
 import '../../../l10n/app_localizations.dart';
+// Add import
+import '../../widgets/offline_toast_notification.dart';
 
 // ── Local palette aliases ─────────────────────────────────────
 const _navyDark  = AppTheme.navyDark;
@@ -130,44 +132,49 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
   // ── Save ──────────────────────────────────────────────────
 
   Future<void> _enregistrer() async {
-    if (selectedKey == null) return;
-    final t = AppLocalizations.of(context)!;
-    setState(() => isSaving = true);
+  if (selectedKey == null) return;
+  final t = AppLocalizations.of(context)!;
+  setState(() => isSaving = true);
 
-    final result = await TicketRepository.saveTicket({
-      'id_voyage':     widget.voyage['id'] as int? ?? 0,
-      'id_segment':    widget.segment['id_segment'] as int? ?? 0,
-      'point_depart':  widget.segment['point_depart'] ?? widget.voyage['depart'] ?? '',
-      'point_arrivee': widget.segment['point_arrivee'] ?? widget.voyage['arrivee'] ?? '',
-      'type_tarif':    buildTypeTarif(selectedKey!),
-      'quantite':      quantite,
-      'prix_unitaire': 0,
-      'montant_total': 0,
-      'matricule_agent': widget.voyage['matricule_agent'] ?? 0,
+  final result = await TicketRepository.saveTicket({
+    'id_voyage':       widget.voyage['id'] as int? ?? 0,
+    'id_segment':      widget.segment['id_segment'] as int? ?? 0,
+    'point_depart':    widget.segment['point_depart'] ?? widget.voyage['depart'] ?? '',
+    'point_arrivee':   widget.segment['point_arrivee'] ?? widget.voyage['arrivee'] ?? '',
+    'type_tarif':      buildTypeTarif(selectedKey!),
+    'quantite':        quantite,
+    'prix_unitaire':   0,
+    'montant_total':   0,
+    'matricule_agent': widget.voyage['matricule_agent'] ?? 0,
+  });
+
+  if (result.success) {
+    final saved = quantite;
+    setState(() {
+      totalEnregistres += saved;
+      selectedKey = null;
+      quantite    = 1;
     });
 
-    if (result.success) {
-      final saved = quantite;
-      setState(() {
-        totalEnregistres += saved;
-        selectedKey = null;
-        quantite    = 1;
-      });
-      _showToast(t.passagesToast(saved));
-
-      if (widget.embeddedMode && widget.onPassageSaved != null) {
-        await Future.delayed(const Duration(milliseconds: 600));
-        if (mounted) widget.onPassageSaved!.call();
-      }
+    if (result.wasOffline) {
+      OfflineToastNotification.show(context);
     } else {
-      _showToast(
-        t.erreurPassage(result.error ?? t.erreurInconnue),
-        isError: true,
-      );
+      _showToast(t.passagesToast(saved));
     }
 
-    if (mounted) setState(() => isSaving = false);
+    if (widget.embeddedMode && widget.onPassageSaved != null) {
+      await Future.delayed(const Duration(milliseconds: 600));
+      if (mounted) widget.onPassageSaved!.call();
+    }
+  } else {
+    _showToast(
+      t.erreurPassage(result.error ?? t.erreurInconnue),
+      isError: true,
+    );
   }
+
+  if (mounted) setState(() => isSaving = false);
+}
 
   // ── Build ─────────────────────────────────────────────────
 

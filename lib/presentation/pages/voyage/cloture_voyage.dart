@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/database/daos/voyage_dao.dart';
 import '../../../services/connectivity_service.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../widgets/offline_toast_notification.dart';
 
 // ════════════════════════════════════════════════════
 // TOAST WIDGET
@@ -247,22 +248,22 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
   }
 
   Future<void> _cloturerOffline(AppLocalizations t) async {
-    final id = widget.voyage['id'] as int;
-    final lastKnownServerStatut =
-        widget.voyage['statut'] as String? ?? 'actif';
+  final id = widget.voyage['id'] as int;
+  final lastKnownServerStatut =
+      widget.voyage['statut'] as String? ?? 'actif';
 
-    await VoyageDao.saveVoyageStatut(
-      id,
-      'cloture_pending',
-      serverStatut: lastKnownServerStatut,
-    );
-    await VoyageDao.saveCloturePending(id);
+  await VoyageDao.saveVoyageStatut(
+    id,
+    'cloture_pending',
+    serverStatut: lastKnownServerStatut,
+  );
+  await VoyageDao.saveCloturePending(id);
 
-    if (mounted) {
-      _showToast(t.horsLigneCloturePending);
-    }
-    _onClotureDone();
+  if (mounted) {
+    OfflineToastNotification.show(context); // ← replaces _showToast(t.horsLigneCloturePending)
   }
+  _onClotureDone();
+}
 
   void _onClotureDone() {
     setState(() {

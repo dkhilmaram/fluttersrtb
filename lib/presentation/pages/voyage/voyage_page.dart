@@ -16,6 +16,8 @@ import '../../../data/database/daos/ticket_dao.dart';
 import '../ticketing/vente_tickets.dart';
 import '../../widgets/language_switcher.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../widgets/offline_toast_notification.dart';
+
 
 // ─────────────────────────────────────────────────────────────
 // ⚠️  CONFIGURE THIS before shipping
@@ -124,70 +126,44 @@ class _VoyageProgrammePageState
   // ─────────────────────────────────────────────────────────────
   // Toast
   // ─────────────────────────────────────────────────────────────
+void _showToast(
+  String msg, {
+  bool isError = false,
+  bool isWarning = false,
+}) {
+  _toastTimer?.cancel();
+  _toastEntry?.remove();
+  _toastEntry = null;
 
-  void _showToast(
-    String msg, {
-    bool isError = false,
-    bool isWarning = false,
-    bool isOffline = false,
-  }) {
-    _toastTimer?.cancel();
-    _toastEntry?.remove();
-    _toastEntry = null;
+  final Color color;
+  final IconData icon;
 
-    final Color color;
-    final IconData icon;
-
-    if (isOffline) {
-      color = const Color(
-        0xFF8B1A1A,
-      );
-      icon = Icons.wifi_off_rounded;
-    } else if (isError) {
-      color = const Color(
-        0xFF8B1A1A,
-      );
-      icon = Icons.error_outline;
-    } else if (isWarning) {
-      color = Colors.orange.shade700;
-      icon = Icons.offline_bolt;
-    } else {
-      color = const Color(
-        0xFF16A34A,
-      );
-      icon = Icons.check_circle_outline;
-    }
-
-    final entry = OverlayEntry(
-      builder:
-          (
-            _,
-          ) => _ToastWidget(
-            msg: msg,
-            color: color,
-            icon: icon,
-          ),
-    );
-
-    _toastEntry = entry;
-    Overlay.of(
-      context,
-    ).insert(
-      entry,
-    );
-
-    _toastTimer = Timer(
-      const Duration(
-        milliseconds: 2800,
-      ),
-      () {
-        entry.remove();
-        if (_toastEntry ==
-            entry)
-          _toastEntry = null;
-      },
-    );
+  if (isError) {
+    color = const Color(0xFF8B1A1A);
+    icon = Icons.error_outline;
+  } else if (isWarning) {
+    color = Colors.orange.shade700;
+    icon = Icons.offline_bolt;
+  } else {
+    color = const Color(0xFF16A34A);
+    icon = Icons.check_circle_outline;
   }
+
+  final entry = OverlayEntry(
+    builder: (_) => _ToastWidget(msg: msg, color: color, icon: icon),
+  );
+
+  _toastEntry = entry;
+  Overlay.of(context).insert(entry);
+
+  _toastTimer = Timer(
+    const Duration(milliseconds: 2800),
+    () {
+      entry.remove();
+      if (_toastEntry == entry) _toastEntry = null;
+    },
+  );
+}
 
   // ─────────────────────────────────────────────────────────────
   // Getters
@@ -556,19 +532,11 @@ class _VoyageProgrammePageState
     }
   }
 
-  void _maybeShowOfflineToast() {
-    if (_toastEntry ==
-        null) {
-      final t = AppLocalizations.of(
-        context,
-      )!;
-      _showToast(
-        t.modeHorsLigne,
-        isOffline: true,
-      );
-    }
+ void _maybeShowOfflineToast() {
+  if (_toastEntry == null) {
+    OfflineToastNotification.show(context);
   }
-
+}
   // ─────────────────────────────────────────────────────────────
   // Clôture Journée
   // ─────────────────────────────────────────────────────────────

@@ -8,6 +8,9 @@ import '../../../data/database/daos/voyage_dao.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../widgets/language_switcher.dart';
+// Add import
+import '../../widgets/offline_toast_notification.dart';
+
 
 // ── Brand colours ───────────────────────────────────────────────────────────
 const Color navyDark  = Color(0xFF0D1B3E);
@@ -240,10 +243,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
 
     if (fromCache && mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _showToast(
-          AppLocalizations.of(context)!.horsLigneDonneesCache,
-          isWarning: true,
-        );
+        OfflineToastNotification.show(context);
       });
     }
   }
@@ -648,10 +648,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     final matricule = widget.voyage['matricule_agent'] as int?;
 
     if (idVente == null) {
-      _showToast(
-        AppLocalizations.of(context)!.idVoyageManquant,
-        isError: true,
-      );
+      OfflineToastNotification.show(context);
       return;
     }
 
