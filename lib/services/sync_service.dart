@@ -134,83 +134,46 @@ class SyncService {
       // ── 2. Sync pending voyage clôtures ──────────────────────
       // Only attempt after all tickets are synced — the server may reject
       // a clôture if it detects unsynced ticket rows for that voyage.
-      if (failed >
-          0) {
-        print(
-          '⚠️ Skipping voyage clôtures — $failed ticket(s) still unsynced',
-        );
-      } else {
-        final pendingClotures = await VoyageDao.getPendingClotures();
-        print(
-          '🔄 Syncing ${pendingClotures.length} pending voyage clôtures...',
-        );
+      // ── 2. Sync pending voyage clôtures ──────────────────────
+if (failed > 0) {
+  print('⚠️ Skipping voyage clôtures — $failed ticket(s) still unsynced');
+} else {
+  final pendingClotures = await VoyageDao.getPendingClotures();
+  print('🔄 Syncing ${pendingClotures.length} pending voyage clôtures...');
 
-        for (final cloture in pendingClotures) {
-          final idVente =
-              cloture['id_voyage']
-                  as int;
-          try {
-            await _ensureAllSegmentsCloturedOnServer(
-              idVente,
-            );
+  for (final cloture in pendingClotures) {
+    final idVente = cloture['id_voyage'] as int;
+    try {
+      final response = await http
+          .put(
+            Uri.parse(ApiConstants.cloturerVoyage(idVente)),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(ApiConstants.defaultTimeout);
 
-            final response = await http
-                .put(
-                  Uri.parse(
-                    ApiConstants.cloturerVoyage(
-                      idVente,
-                    ),
-                  ),
-                  headers: {
-                    'Content-Type': 'application/json',
-                  },
-                )
-                .timeout(
-                  ApiConstants.defaultTimeout,
-                );
-
-            if (response.statusCode ==
-                200) {
-              final data = jsonDecode(
-                response.body,
-              );
-              if (data['success'] ==
-                  true) {
-                await VoyageDao.markClotureSynced(
-                  idVente,
-                );
-                // Stamp the now-confirmed server statut so the cache row
-                // survives future clearStaleVoyageStatuts calls.
-                await VoyageDao.saveVoyageStatut(
-                  idVente,
-                  'cloture',
-                  serverStatut: 'cloture',
-                );
-                print(
-                  '✅ Voyage clôture synced for vente $idVente',
-                );
-              } else {
-                print(
-                  '⚠️ Voyage clôture rejected by server for vente '
-                  '$idVente: ${data['message']}',
-                );
-              }
-            } else {
-              print(
-                '⚠️ Voyage clôture HTTP error for vente $idVente: '
-                '${response.statusCode}',
-              );
-            }
-          } catch (
-            e
-          ) {
-            print(
-              '❌ Voyage clôture sync failed for vente $idVente: $e',
-            );
-          }
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          await VoyageDao.markClotureSynced(idVente);
+          await VoyageDao.saveVoyageStatut(
+            idVente,
+            'cloture',
+            serverStatut: 'cloture',
+          );
+          print('✅ Voyage clôture synced for vente $idVente');
+        } else {
+          print('⚠️ Voyage clôture rejected by server for vente '
+              '$idVente: ${data['message']}');
         }
+      } else {
+        print('⚠️ Voyage clôture HTTP error for vente $idVente: '
+            '${response.statusCode}');
       }
-
+    } catch (e) {
+      print('❌ Voyage clôture sync failed for vente $idVente: $e');
+    }
+  }
+}
       // ── 3. Sync pending reopens ───────────────────────────────
       // Reopens are independent of ticket failures — no ticket data is
       // involved, so we always attempt them regardless of [failed] count.

@@ -34,8 +34,6 @@ class _TicketingPageState extends State<TicketingPage>
   bool _gratuitUnlocked = false;
   int  _gratuitKey      = 0;
 
-  // GlobalKey lets us call resetAfterGratuit() directly on the
-  // NouveauTicketPage state after a gratuit passage is saved.
   final GlobalKey<NouveauTicketPageState> _nouveauKey =
       GlobalKey<NouveauTicketPageState>();
 
@@ -45,7 +43,6 @@ class _TicketingPageState extends State<TicketingPage>
     _tabCtrl = TabController(length: 3, vsync: this);
     _tabCtrl.addListener(() {
       if (_tabCtrl.indexIsChanging) return;
-      // Block direct swipe/tap to the gratuit tab (index 2) if not unlocked
       if (_tabCtrl.index == 2 && !_gratuitUnlocked) {
         _tabCtrl.animateTo(_activeTab);
         return;
@@ -60,7 +57,6 @@ class _TicketingPageState extends State<TicketingPage>
     super.dispose();
   }
 
-  // Called by NouveauTicketPage when the user taps "Passage Gratuit / Spécial"
   void _switchToGratuitTab() {
     setState(() {
       _gratuitUnlocked = true;
@@ -69,7 +65,6 @@ class _TicketingPageState extends State<TicketingPage>
     _tabCtrl.animateTo(2);
   }
 
-  // Called by NouveauTicketPage after a normal ticket is sold
   void _onTicketSold() {
     setState(() {
       _gratuitUnlocked = false;
@@ -79,7 +74,6 @@ class _TicketingPageState extends State<TicketingPage>
     _tabCtrl.animateTo(0);
   }
 
-  // Called by PassageSpecialPage after a gratuit passage is saved
   void _onPassageSaved() {
     _nouveauKey.currentState?.resetAfterGratuit();
     setState(() {
@@ -101,46 +95,56 @@ class _TicketingPageState extends State<TicketingPage>
 
     return Scaffold(
       backgroundColor: _surface,
-      body: Column(children: [
-        _buildHeader(t),
+      // ── NestedScrollView allows the header to scroll away while
+      //    the pinned tab bar and tab content remain independently scrollable.
+      body: NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) => [
+          SliverToBoxAdapter(child: _buildHeader(t)),
 
-        // Pinned tab bar
-        Container(
-          color: Colors.white,
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: TabBar(
-            controller: _tabCtrl,
-            labelPadding: EdgeInsets.zero,
-            indicatorSize: TabBarIndicatorSize.tab,
-            indicator: BoxDecoration(
-              gradient: const LinearGradient(
-                  colors: [_navyDark, _navyLight]),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            dividerColor: Colors.transparent,
-            tabs: [
-              _buildTab(Icons.confirmation_number_rounded,
-                  t.billetterie, 0),
-              _buildTab(Icons.qr_code_scanner_rounded, 'NFC / Scan', 1),
-              _buildTab(
-                _gratuitUnlocked
-                    ? Icons.card_membership_rounded
-                    : Icons.lock_rounded,
-                t.passageGratuit, 2,
-                locked: !_gratuitUnlocked,
+          // Pinned tab bar — sticks at top when header scrolls out of view
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _TabBarDelegate(
+              child: Container(
+                color: Colors.white,
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: TabBar(
+                  controller: _tabCtrl,
+                  labelPadding: EdgeInsets.zero,
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  indicator: BoxDecoration(
+                    gradient: const LinearGradient(
+                        colors: [_navyDark, _navyLight]),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  dividerColor: Colors.transparent,
+                  tabs: [
+                    _buildTab(Icons.confirmation_number_rounded,
+                        t.billetterie, 0),
+                    _buildTab(Icons.qr_code_scanner_rounded, 'NFC / Scan', 1),
+                    _buildTab(
+                      _gratuitUnlocked
+                          ? Icons.card_membership_rounded
+                          : Icons.lock_rounded,
+                      t.passageGratuit, 2,
+                      locked: !_gratuitUnlocked,
+                    ),
+                  ],
+                ),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
 
-        // Tab views
-        Expanded(
-          child: TabBarView(
-            controller: _tabCtrl,
-            physics: const NeverScrollableScrollPhysics(),
-            children: [
-              // Tab 0 — Nouveau Ticket
-              NouveauTicketPage(
+        // ── The tab views live here; each child is wrapped in a
+        //    SingleChildScrollView so it participates in the NestedScrollView.
+        body: TabBarView(
+          controller: _tabCtrl,
+          physics: const NeverScrollableScrollPhysics(),
+          children: [
+            // Tab 0 — Nouveau Ticket
+            _ScrollableTabBody(
+              child: NouveauTicketPage(
                 key:    _nouveauKey,
                 voyage: {
                   ...widget.voyage,
@@ -152,15 +156,19 @@ class _TicketingPageState extends State<TicketingPage>
                 onOpenGratuit: _switchToGratuitTab,
                 onTicketSold:  _onTicketSold,
               ),
+            ),
 
-              // Tab 1 — NFC / Scan
-              ScanTabPage(
+            // Tab 1 — NFC / Scan
+            _ScrollableTabBody(
+              child: ScanTabPage(
                 voyage:  widget.voyage,
                 segment: widget.segment,
               ),
+            ),
 
-              // Tab 2 — Passage Gratuit / Spécial
-              _gratuitUnlocked
+            // Tab 2 — Passage Gratuit / Spécial
+            _ScrollableTabBody(
+              child: _gratuitUnlocked
                   ? PassageSpecialPage(
                       key:            ValueKey(_gratuitKey),
                       voyage:         widget.voyage,
@@ -169,10 +177,10 @@ class _TicketingPageState extends State<TicketingPage>
                       onPassageSaved: _onPassageSaved,
                     )
                   : _LockedTabPlaceholder(t: t),
-            ],
-          ),
+            ),
+          ],
         ),
-      ]),
+      ),
     );
   }
 
@@ -361,6 +369,55 @@ class _TicketingPageState extends State<TicketingPage>
   }
 }
 
+// ── Scrollable wrapper for each tab body ──────────────────────
+//
+// NestedScrollView requires each tab's body to use a scroll view
+// that registers with the outer coordinator. Using
+// BouncingScrollPhysics + AlwaysScrollableScrollPhysics ensures
+// the overscroll event bubbles up to collapse/expand the header.
+
+class _ScrollableTabBody extends StatelessWidget {
+  final Widget child;
+  const _ScrollableTabBody({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      // Key makes Flutter keep each tab's scroll position independently
+      key: PageStorageKey(child.runtimeType),
+      physics: const BouncingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      ),
+      child: child,
+    );
+  }
+}
+
+// ── Pinned tab-bar delegate ───────────────────────────────────
+
+class _TabBarDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+  // 52 px tab height + 8 px top padding + 0 bottom = 60 px total
+  static const double _height = 60.0;
+
+  const _TabBarDelegate({required this.child});
+
+  @override
+  double get minExtent => _height;
+
+  @override
+  double get maxExtent => _height;
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return child;
+  }
+
+  @override
+  bool shouldRebuild(_TabBarDelegate old) => old.child != child;
+}
+
 // ── Locked placeholder ────────────────────────────────────────
 
 class _LockedTabPlaceholder extends StatelessWidget {
@@ -370,37 +427,40 @@ class _LockedTabPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 72, height: 72,
-            decoration: BoxDecoration(
-                color: Colors.grey.shade100, shape: BoxShape.circle),
-            child: Icon(Icons.lock_rounded,
-                size: 34, color: Colors.grey.shade300),
-          ),
-          const SizedBox(height: 18),
-          Text(
-            t.passageGratuit,
-            style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade400),
-          ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 48),
-            child: Text(
-              t.passagesGratuitsSpeciaux,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade400,
-                  height: 1.6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 80),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72, height: 72,
+              decoration: BoxDecoration(
+                  color: Colors.grey.shade100, shape: BoxShape.circle),
+              child: Icon(Icons.lock_rounded,
+                  size: 34, color: Colors.grey.shade300),
             ),
-          ),
-        ],
+            const SizedBox(height: 18),
+            Text(
+              t.passageGratuit,
+              style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade400),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 48),
+              child: Text(
+                t.passagesGratuitsSpeciaux,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade400,
+                    height: 1.6),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
