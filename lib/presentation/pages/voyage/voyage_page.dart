@@ -4167,26 +4167,28 @@ Fichier joint : ${file.path.split('/').last}
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(
-                Icons.warning_amber_rounded,
-                color: Colors.red.shade300,
-                size: 17,
-              ),
-              const SizedBox(
-                width: 7,
-              ),
-              Text(
-                t.cloturerJourneeQuestion,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                  color: Colors.red.shade300,
-                ),
-              ),
-            ],
-          ),
+         Row(
+  children: [
+    Icon(
+      Icons.warning_amber_rounded,
+      color: Colors.red.shade300,
+      size: 17,
+    ),
+    const SizedBox(width: 7),
+    Flexible(
+      child: Text(
+        t.cloturerJourneeQuestion,
+        overflow: TextOverflow.ellipsis,
+        maxLines: 2,
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 13,
+          color: Colors.red.shade300,
+        ),
+      ),
+    ),
+  ],
+),
           const SizedBox(
             height: 5,
           ),

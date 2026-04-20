@@ -7,6 +7,7 @@ import '../../../data/database/daos/voyage_dao.dart';
 import '../../../services/connectivity_service.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../widgets/offline_toast_notification.dart';
+import '../../widgets/language_switcher.dart';
 
 // ════════════════════════════════════════════════════
 // TOAST WIDGET
@@ -315,7 +316,7 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
       width: double.infinity,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF7F1D1D), Color(0xFFB91C1C), Color(0xFFDC2626)],
+          colors: [Color(0xFF0D1B3E), Color(0xFF1A3260), Color(0xFF1E4080)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -323,21 +324,24 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
       padding: const EdgeInsets.fromLTRB(20, 52, 20, 28),
       child: Column(
         children: [
-          Align(
-            alignment: Alignment.topLeft,
-            child: GestureDetector(
-              onTap: isCloturing ? null : () => Navigator.pop(context),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.arrow_back_ios_new,
-                    color: Colors.white, size: 17),
-              ),
-            ),
-          ),
+         Row(
+  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  children: [
+    GestureDetector(
+      onTap: isCloturing ? null : () => Navigator.pop(context),
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: const Icon(Icons.arrow_back_ios_new,
+            color: Colors.white, size: 17),
+      ),
+    ),
+    const LanguageSwitcher(),
+  ],
+),
           const SizedBox(height: 18),
           Container(
             width: 72,
@@ -588,7 +592,7 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
           icon: isCloturing ? null : Icons.flag_rounded,
           isLoading: isCloturing,
           enabled: !isCloturing,
-          colors: const [Color(0xFF7F1D1D), Color(0xFFDC2626)],
+          colors: const [Color.fromARGB(255, 175, 48, 48),Color.fromARGB(255, 175, 48, 48)],
           onTap: _cloturerVoyage,
         ),
 
