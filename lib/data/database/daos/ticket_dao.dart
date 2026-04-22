@@ -28,12 +28,7 @@ class TicketDao {
   }
 
   /// Update only the id_segment of a cached ticket.
-  /// Called after server sync reveals the correct segment for a row
-  /// that was cached with id_segment = 0 while offline.
-  static Future<void> updateTicketSegment(
-    int localId,
-    int idSegment,
-  ) async {
+  static Future<void> updateTicketSegment(int localId, int idSegment) async {
     try {
       await (await LocalDatabase.db).update(
         'ticket_vendu_local',
@@ -41,10 +36,7 @@ class TicketDao {
         where: 'id = ?',
         whereArgs: [localId],
       );
-      print(
-        '✓ TicketDao.updateTicketSegment: '
-        'id=$localId → id_segment=$idSegment',
-      );
+      print('✓ TicketDao.updateTicketSegment: id=$localId → id_segment=$idSegment');
     } catch (e) {
       print('❌ TicketDao.updateTicketSegment: $e');
     }
@@ -54,7 +46,6 @@ class TicketDao {
   // ── QUERIES
   // ═══════════════════════════════════════════════════════════
 
-  /// All tickets with statut_sync = 'pending'.
   static Future<List<Map<String, dynamic>>> getPendingTickets() async {
     try {
       return await (await LocalDatabase.db).query(
@@ -68,9 +59,6 @@ class TicketDao {
     }
   }
 
-  /// All tickets that still need to be pushed to the server
-  /// (pending OR previously failed).
-  /// Used by SyncService on reconnect.
   static Future<List<Map<String, dynamic>>> getUnsyncedTickets() async {
     try {
       return await (await LocalDatabase.db).query(
@@ -84,10 +72,6 @@ class TicketDao {
     }
   }
 
-  /// Pending tickets scoped to ONE voyage.
-  /// Used by SyncService to decide whether a voyage clôture can be
-  /// pushed — we only block clôture for THIS voyage's unsynced rows,
-  /// not for unrelated voyages (fixes the global-block bug).
   static Future<List<Map<String, dynamic>>> getUnsyncedTicketsForVente(
     int idVente,
   ) async {
@@ -105,7 +89,6 @@ class TicketDao {
     }
   }
 
-  /// Every ticket row, newest first.
   static Future<List<Map<String, dynamic>>> getAllTickets() async {
     try {
       return await (await LocalDatabase.db).query(
@@ -118,8 +101,6 @@ class TicketDao {
     }
   }
 
-  /// All tickets for a given voyage, newest first.
-  /// Used by the export / rapport feature.
   static Future<List<Map<String, dynamic>>> getTicketsByVoyage(
     int idVente,
   ) async {
@@ -136,40 +117,201 @@ class TicketDao {
     }
   }
 
-  /// Looks up a transport pass by its NFC UID or QR plain-text ID.
-  ///
-  /// Queries the `tickets` table (adjust name/columns to match your schema)
-  /// and returns the five fields expected by ScanTabPage, or null if the
-  /// card ID is not found in the local database.
-  ///
-  /// Schema assumptions:
-  ///   table   : tickets
-  ///   columns : card_id | nom | type | expire | ligne | organisme
-  ///
-  /// If your column names differ, remap them in the return statement below.
+  // ═══════════════════════════════════════════════════════════
+  // ── NFC CARD REGISTRY
+  // ═══════════════════════════════════════════════════════════
+
+  /// Look up an NFC card by its hardware UID.
+  /// Returns the card data if the UID exists in the registry,
+  /// or null if the card is not registered → scan is rejected.
   static Future<Map<String, dynamic>?> findByCardId(String cardId) async {
     try {
       final rows = await (await LocalDatabase.db).query(
-        'tickets',          // ← update to your actual table name if different
+        'tickets',
         columns: ['nom', 'type', 'expire', 'ligne', 'organisme'],
-        where: 'card_id = ?',   // ← update column name if different
-        whereArgs: [cardId],
+        where: 'card_id = ?',
+        whereArgs: [cardId.toUpperCase().trim()],
         limit: 1,
       );
-
       if (rows.isEmpty) return null;
-
-      // Return a mutable copy with the exact keys ScanTabPage expects.
-      // If your DB columns have different names, remap them here, e.g.:
-      //   'nom': row['nom_titulaire'],
-      //   'type': row['type_abonnement'],
-      //   'expire': row['date_expiration'],
-      //   'ligne': row['ligne_autorisee'],
-      //   'organisme': row['organisme_emetteur'],
       return Map<String, dynamic>.from(rows.first);
     } catch (e) {
       print('❌ TicketDao.findByCardId: $e');
       return null;
+    }
+  }
+  /// Returns true if [numeroTitre] has already been validated today
+/// for the given [idVoyage] — prevents double-scanning.
+static Future<bool> isAlreadyScannedToday({
+  required String numeroTitre,
+  required int idVoyage,
+}) async {
+  try {
+    final todayStart = DateTime.now();
+    final datePrefix =
+        '${todayStart.year}-${todayStart.month.toString().padLeft(2, '0')}-${todayStart.day.toString().padLeft(2, '0')}';
+
+    final rows = await (await LocalDatabase.db).query(
+      'scan_validation_log',
+      columns: ['id'],
+      where:
+          "numero_titre = ? AND id_voyage = ? AND date_scan LIKE ? AND statut_sync != 'failed'",
+      whereArgs: [numeroTitre, idVoyage, '$datePrefix%'],
+      limit: 1,
+    );
+
+    return rows.isNotEmpty;
+  } catch (e) {
+    print('❌ TicketDao.isAlreadyScannedToday: $e');
+    return false; // fail open — don't block scan on DB error
+  }
+}
+
+  /// Register a new NFC card in the local registry.
+  /// Uses REPLACE so re-registering updates the existing card data.
+  /// Call this when syncing subscriber cards from your server.
+  static Future<void> registerCard({
+    required String cardId,
+    required String nom,
+    required String type,      // 'mensuel' | 'annuel' | 'étudiant' | etc.
+    required String expire,    // ISO date: '2025-12-31'
+    required String ligne,
+    required String organisme,
+  }) async {
+    try {
+      await (await LocalDatabase.db).insert(
+        'tickets',
+        {
+          'card_id':   cardId.toUpperCase().trim(),
+          'nom':       nom,
+          'type':      type,
+          'expire':    expire,
+          'ligne':     ligne,
+          'organisme': organisme,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      print('✓ TicketDao.registerCard: $cardId → $nom');
+    } catch (e) {
+      print('❌ TicketDao.registerCard: $e');
+      rethrow;
+    }
+  }
+
+  /// Remove a card from the registry.
+  static Future<void> deleteCard(String cardId) async {
+    try {
+      await (await LocalDatabase.db).delete(
+        'tickets',
+        where: 'card_id = ?',
+        whereArgs: [cardId.toUpperCase().trim()],
+      );
+      print('✓ TicketDao.deleteCard: $cardId');
+    } catch (e) {
+      print('❌ TicketDao.deleteCard: $e');
+    }
+  }
+
+  /// All registered NFC cards — useful for an admin management screen.
+  static Future<List<Map<String, dynamic>>> getAllCards() async {
+    try {
+      return await (await LocalDatabase.db).query(
+        'tickets',
+        orderBy: 'nom ASC',
+      );
+    } catch (e) {
+      print('❌ TicketDao.getAllCards: $e');
+      return [];
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ── SCAN VALIDATION LOG  (v10)
+  // One row per validated QR / NFC scan — synced later by SyncService.
+  // ═══════════════════════════════════════════════════════════
+
+  /// Insert a new scan validation record (offline-first).
+  /// Returns the local row id, or -1 on error.
+  static Future<int> insertScanLog({
+    required int idVoyage,
+    required int idSegment,
+    required String scanMode,        // 'NFC' | 'QR'
+    required String numeroTitre,
+    required String nomTitulaire,
+    required String typeAbonnement,
+    required String organisme,
+    required String ligneTitre,
+    required String expire,
+    required String dateScan,        // ISO 8601 datetime
+    required int matriculeAgent,
+  }) async {
+    try {
+      final id = await (await LocalDatabase.db).insert(
+        'scan_validation_log',
+        {
+          'id_voyage':       idVoyage,
+          'id_segment':      idSegment,
+          'scan_mode':       scanMode,
+          'numero_titre':    numeroTitre,
+          'nom_titulaire':   nomTitulaire,
+          'type_abonnement': typeAbonnement,
+          'organisme':       organisme,
+          'ligne_titre':     ligneTitre,
+          'expire':          expire,
+          'date_scan':       dateScan,
+          'matricule_agent': matriculeAgent,
+          'statut_sync':     'pending',
+        },
+      );
+      print('✓ TicketDao.insertScanLog: id=$id mode=$scanMode titre=$numeroTitre');
+      return id;
+    } catch (e) {
+      print('❌ TicketDao.insertScanLog: $e');
+      return -1;
+    }
+  }
+
+  /// All scan logs not yet successfully synced to the server.
+  static Future<List<Map<String, dynamic>>> getUnsyncedScanLogs() async {
+    try {
+      return await (await LocalDatabase.db).query(
+        'scan_validation_log',
+        where: "statut_sync = 'pending' OR statut_sync = 'failed'",
+        orderBy: 'date_scan ASC',
+      );
+    } catch (e) {
+      print('❌ TicketDao.getUnsyncedScanLogs: $e');
+      return [];
+    }
+  }
+
+  /// Mark a scan log row as successfully synced.
+  static Future<void> markScanLogSynced(int id) async {
+    try {
+      await (await LocalDatabase.db).update(
+        'scan_validation_log',
+        {'statut_sync': 'synced'},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      print('✓ TicketDao.markScanLogSynced: id=$id');
+    } catch (e) {
+      print('❌ TicketDao.markScanLogSynced: $e');
+    }
+  }
+
+  /// Mark a scan log row as failed (will retry on next sync).
+  static Future<void> markScanLogFailed(int id, String erreur) async {
+    try {
+      await (await LocalDatabase.db).update(
+        'scan_validation_log',
+        {'statut_sync': 'failed'},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      print('❌ TicketDao.markScanLogFailed: id=$id err=$erreur');
+    } catch (e) {
+      print('❌ TicketDao.markScanLogFailed (outer): $e');
     }
   }
 
@@ -194,15 +336,11 @@ class TicketDao {
   // ── SYNC STATUS UPDATES
   // ═══════════════════════════════════════════════════════════
 
-  /// Mark a ticket as successfully synced and store the server-assigned id.
   static Future<void> markSynced(int id, int idServeur) async {
     try {
       await (await LocalDatabase.db).update(
         'ticket_vendu_local',
-        {
-          'statut_sync': 'synced',
-          'id_serveur': idServeur,
-        },
+        {'statut_sync': 'synced', 'id_serveur': idServeur},
         where: 'id = ?',
         whereArgs: [id],
       );
@@ -212,17 +350,16 @@ class TicketDao {
     }
   }
 
-  /// Mark a ticket as failed and increment the attempt counter.
   static Future<void> markFailed(int id, String erreur) async {
     try {
       await (await LocalDatabase.db).rawUpdate(
         '''
         UPDATE ticket_vendu_local
-        SET statut_sync  = 'failed',
-            tentatives   = tentatives + 1,
-            erreur       = ?
+        SET statut_sync = 'failed',
+            tentatives  = tentatives + 1,
+            erreur      = ?
         WHERE id = ?
-      ''',
+        ''',
         [erreur, id],
       );
       print('✓ TicketDao.markFailed: id=$id');

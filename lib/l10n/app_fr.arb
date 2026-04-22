@@ -392,5 +392,29 @@
   "scanIdleSubtitle": "Choisissez NFC ou Code-barres\npour lancer la lecture",
   "scanSearching": "Recherche du titre…",
   "scanInvalidTitle": "Titre invalide",
-  "scanErrorSubtitle": "Ce titre de transport ne peut pas être accepté."
+  "scanErrorSubtitle": "Ce titre de transport ne peut pas être accepté.",
+  "scanTitreDetecte": "Titre détecté",
+"scanAssignInstruction": "Complétez les informations avant de valider",
+"scanAssignMissing": "Veuillez sélectionner la ligne, le type et le trajet",
+"scanFieldLigne": "Ligne",
+"scanFieldTrajet": "Trajet",
+"scanSelectLigne": "Choisir une ligne",
+"scanSelectType": "Choisir un type",
+"scanSelectTrajet": "Choisir un trajet",
+"scanValidatedTitle": "Titre validé",
+"scanNextTitle": "Scanner un autre titre",
+"scanNfcDetectedTitle": "Carte NFC Détectée !",
+"scanQrDetectedTitle": "QR Code Détecté !",
+"scanDetectedSubtitle": "Titre de transport lu avec succès",
+"scanDetectedInfo": "Veuillez compléter les informations ci-dessous avant de valider.",
+"scanBtnAssign": "Compléter les infos",
+"scanSavedOfflineToast": "Enregistré hors ligne, synchronisation dès reconnexion",
+
+  "scanAlreadyValidated": "Déjà validé aujourd'hui ({nom})",
+  "@scanAlreadyValidated": {
+    "placeholders": {
+      "nom": { "type": "String" }
+    }
+  }
 }
+

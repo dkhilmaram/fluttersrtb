@@ -403,5 +403,27 @@
   "scanIdleSubtitle": "اختر NFC أو الباركود\nلبدء القراءة",
   "scanSearching": "جارٍ البحث عن التذكرة…",
   "scanInvalidTitle": "تذكرة غير صالحة",
-  "scanErrorSubtitle": "لا يمكن قبول هذه التذكرة."
+  "scanErrorSubtitle": "لا يمكن قبول هذه التذكرة.",
+  "scanTitreDetecte": "تذكرة مكتشفة",
+"scanAssignInstruction": "أكمل المعلومات قبل التحقق",
+"scanAssignMissing": "يرجى اختيار الخط والنوع والرحلة",
+"scanFieldLigne": "الخط",
+"scanFieldTrajet": "الرحلة",
+"scanSelectLigne": "اختر خطًا",
+"scanSelectType": "اختر النوع",
+"scanSelectTrajet": "اختر الرحلة",
+"scanValidatedTitle": "تم التحقق",
+"scanNextTitle": "مسح تذكرة أخرى",
+"scanNfcDetectedTitle": "تم اكتشاف بطاقة NFC !",
+"scanQrDetectedTitle": "تم اكتشاف رمز QR !",
+"scanDetectedSubtitle": "تمت قراءة تذكرة النقل بنجاح",
+"scanDetectedInfo": "يرجى إكمال المعلومات أدناه قبل التحقق.",
+"scanBtnAssign": "إكمال المعلومات",
+"scanSavedOfflineToast": "تم الحفظ محلياً، ستتم المزامنة عند استعادة الاتصال",
+"scanAlreadyValidated": "Already validated today ({nom})",
+"@scanAlreadyValidated": {
+  "placeholders": { "nom": { "type": "String" } }
 }
+  } 
+
+

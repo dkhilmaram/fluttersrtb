@@ -1621,6 +1621,108 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Ce titre de transport ne peut pas être accepté.'**
   String get scanErrorSubtitle;
+
+  /// No description provided for @scanTitreDetecte.
+  ///
+  /// In fr, this message translates to:
+  /// **'Titre détecté'**
+  String get scanTitreDetecte;
+
+  /// No description provided for @scanAssignInstruction.
+  ///
+  /// In fr, this message translates to:
+  /// **'Complétez les informations avant de valider'**
+  String get scanAssignInstruction;
+
+  /// No description provided for @scanAssignMissing.
+  ///
+  /// In fr, this message translates to:
+  /// **'Veuillez sélectionner la ligne, le type et le trajet'**
+  String get scanAssignMissing;
+
+  /// No description provided for @scanFieldLigne.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ligne'**
+  String get scanFieldLigne;
+
+  /// No description provided for @scanFieldTrajet.
+  ///
+  /// In fr, this message translates to:
+  /// **'Trajet'**
+  String get scanFieldTrajet;
+
+  /// No description provided for @scanSelectLigne.
+  ///
+  /// In fr, this message translates to:
+  /// **'Choisir une ligne'**
+  String get scanSelectLigne;
+
+  /// No description provided for @scanSelectType.
+  ///
+  /// In fr, this message translates to:
+  /// **'Choisir un type'**
+  String get scanSelectType;
+
+  /// No description provided for @scanSelectTrajet.
+  ///
+  /// In fr, this message translates to:
+  /// **'Choisir un trajet'**
+  String get scanSelectTrajet;
+
+  /// No description provided for @scanValidatedTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Titre validé'**
+  String get scanValidatedTitle;
+
+  /// No description provided for @scanNextTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Scanner un autre titre'**
+  String get scanNextTitle;
+
+  /// No description provided for @scanNfcDetectedTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Carte NFC Détectée !'**
+  String get scanNfcDetectedTitle;
+
+  /// No description provided for @scanQrDetectedTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'QR Code Détecté !'**
+  String get scanQrDetectedTitle;
+
+  /// No description provided for @scanDetectedSubtitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Titre de transport lu avec succès'**
+  String get scanDetectedSubtitle;
+
+  /// No description provided for @scanDetectedInfo.
+  ///
+  /// In fr, this message translates to:
+  /// **'Veuillez compléter les informations ci-dessous avant de valider.'**
+  String get scanDetectedInfo;
+
+  /// No description provided for @scanBtnAssign.
+  ///
+  /// In fr, this message translates to:
+  /// **'Compléter les infos'**
+  String get scanBtnAssign;
+
+  /// No description provided for @scanSavedOfflineToast.
+  ///
+  /// In fr, this message translates to:
+  /// **'Enregistré hors ligne, synchronisation dès reconnexion'**
+  String get scanSavedOfflineToast;
+
+  /// No description provided for @scanAlreadyValidated.
+  ///
+  /// In fr, this message translates to:
+  /// **'Déjà validé aujourd\'hui ({nom})'**
+  String scanAlreadyValidated(String nom);
 }
 
 class _AppLocalizationsDelegate

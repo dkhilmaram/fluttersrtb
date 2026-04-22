@@ -856,4 +856,58 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get scanErrorSubtitle => 'لا يمكن قبول هذه التذكرة.';
+
+  @override
+  String get scanTitreDetecte => 'تذكرة مكتشفة';
+
+  @override
+  String get scanAssignInstruction => 'أكمل المعلومات قبل التحقق';
+
+  @override
+  String get scanAssignMissing => 'يرجى اختيار الخط والنوع والرحلة';
+
+  @override
+  String get scanFieldLigne => 'الخط';
+
+  @override
+  String get scanFieldTrajet => 'الرحلة';
+
+  @override
+  String get scanSelectLigne => 'اختر خطًا';
+
+  @override
+  String get scanSelectType => 'اختر النوع';
+
+  @override
+  String get scanSelectTrajet => 'اختر الرحلة';
+
+  @override
+  String get scanValidatedTitle => 'تم التحقق';
+
+  @override
+  String get scanNextTitle => 'مسح تذكرة أخرى';
+
+  @override
+  String get scanNfcDetectedTitle => 'تم اكتشاف بطاقة NFC !';
+
+  @override
+  String get scanQrDetectedTitle => 'تم اكتشاف رمز QR !';
+
+  @override
+  String get scanDetectedSubtitle => 'تمت قراءة تذكرة النقل بنجاح';
+
+  @override
+  String get scanDetectedInfo => 'يرجى إكمال المعلومات أدناه قبل التحقق.';
+
+  @override
+  String get scanBtnAssign => 'إكمال المعلومات';
+
+  @override
+  String get scanSavedOfflineToast =>
+      'تم الحفظ محلياً، ستتم المزامنة عند استعادة الاتصال';
+
+  @override
+  String scanAlreadyValidated(String nom) {
+    return 'Already validated today ($nom)';
+  }
 }

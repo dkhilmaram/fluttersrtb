@@ -866,4 +866,61 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get scanErrorSubtitle =>
       'Ce titre de transport ne peut pas être accepté.';
+
+  @override
+  String get scanTitreDetecte => 'Titre détecté';
+
+  @override
+  String get scanAssignInstruction =>
+      'Complétez les informations avant de valider';
+
+  @override
+  String get scanAssignMissing =>
+      'Veuillez sélectionner la ligne, le type et le trajet';
+
+  @override
+  String get scanFieldLigne => 'Ligne';
+
+  @override
+  String get scanFieldTrajet => 'Trajet';
+
+  @override
+  String get scanSelectLigne => 'Choisir une ligne';
+
+  @override
+  String get scanSelectType => 'Choisir un type';
+
+  @override
+  String get scanSelectTrajet => 'Choisir un trajet';
+
+  @override
+  String get scanValidatedTitle => 'Titre validé';
+
+  @override
+  String get scanNextTitle => 'Scanner un autre titre';
+
+  @override
+  String get scanNfcDetectedTitle => 'Carte NFC Détectée !';
+
+  @override
+  String get scanQrDetectedTitle => 'QR Code Détecté !';
+
+  @override
+  String get scanDetectedSubtitle => 'Titre de transport lu avec succès';
+
+  @override
+  String get scanDetectedInfo =>
+      'Veuillez compléter les informations ci-dessous avant de valider.';
+
+  @override
+  String get scanBtnAssign => 'Compléter les infos';
+
+  @override
+  String get scanSavedOfflineToast =>
+      'Enregistré hors ligne, synchronisation dès reconnexion';
+
+  @override
+  String scanAlreadyValidated(String nom) {
+    return 'Déjà validé aujourd\'hui ($nom)';
+  }
 }

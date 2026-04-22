@@ -3,6 +3,10 @@
     <!-- Internet permission for API calls -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- NFC permissions -->
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
+
     <application
         android:label="srtb_app"
         android:name="${applicationName}"
