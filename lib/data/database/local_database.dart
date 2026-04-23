@@ -29,9 +29,7 @@ class LocalDatabase {
     final path = join(await getDatabasesPath(), 'srtb_offline.db');
     return openDatabase(
       path,
-      // ⬆️ Bumped to 10 — adds scan columns to ticket_vendu_local
-      //    + scan_validation_log table for QR/NFC audit trail
-      version: 10,
+      version: 12,
       onCreate: (db, version) async {
         print('📦 Creating database v$version...');
         await _createAllTables(db);
@@ -40,6 +38,7 @@ class LocalDatabase {
       onUpgrade: (db, oldVersion, newVersion) async {
         print('⬆️ Upgrading database v$oldVersion → v$newVersion...');
 
+        // v7 — server_statut column on voyage_cache
         if (oldVersion < 7) {
           try {
             await db.execute(
@@ -51,7 +50,7 @@ class LocalDatabase {
           }
         }
 
-        // v8 — reopen_pending
+        // v8 — reopen_pending table
         if (oldVersion < 8) {
           try {
             await db.execute('''
@@ -69,7 +68,7 @@ class LocalDatabase {
           }
         }
 
-        // v9 — tickets table for NFC UID lookup
+        // v9 — NFC subscriber card registry
         if (oldVersion < 9) {
           try {
             await db.execute('''
@@ -91,8 +90,6 @@ class LocalDatabase {
 
         // v10 — scan columns on ticket_vendu_local + scan_validation_log
         if (oldVersion < 10) {
-          // Add scan-specific columns to ticket_vendu_local.
-          // These are written by _validerNfc() but were missing from the schema.
           for (final col in [
             'ALTER TABLE ticket_vendu_local ADD COLUMN numero_titre  TEXT',
             'ALTER TABLE ticket_vendu_local ADD COLUMN nom_titulaire TEXT',
@@ -107,28 +104,59 @@ class LocalDatabase {
             }
           }
 
-          // Audit log — one row per validated scan (QR or NFC)
           try {
             await db.execute('''
               CREATE TABLE IF NOT EXISTS scan_validation_log (
-                id             INTEGER PRIMARY KEY AUTOINCREMENT,
-                id_voyage      INTEGER NOT NULL,
-                id_segment     INTEGER NOT NULL DEFAULT 0,
-                scan_mode      TEXT    NOT NULL,          -- 'NFC' | 'QR'
-                numero_titre   TEXT    NOT NULL,
-                nom_titulaire  TEXT    NOT NULL,
-                type_abonnement TEXT   NOT NULL,
-                organisme      TEXT    NOT NULL DEFAULT '—',
-                ligne_titre    TEXT    NOT NULL DEFAULT '—',
-                expire         TEXT    NOT NULL,
-                date_scan      TEXT    NOT NULL,
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                id_voyage       INTEGER NOT NULL,
+                id_segment      INTEGER NOT NULL DEFAULT 0,
+                scan_mode       TEXT    NOT NULL,
+                numero_titre    TEXT    NOT NULL,
+                nom_titulaire   TEXT    NOT NULL,
+                type_abonnement TEXT    NOT NULL,
+                organisme       TEXT    NOT NULL DEFAULT '—',
+                ligne_titre     TEXT    NOT NULL DEFAULT '—',
+                expire          TEXT    NOT NULL,
+                date_scan       TEXT    NOT NULL,
                 matricule_agent INTEGER NOT NULL,
-                statut_sync    TEXT    NOT NULL DEFAULT 'pending'
+                statut_sync     TEXT    NOT NULL DEFAULT 'pending'
               )
             ''');
             print('✓ Created scan_validation_log table');
           } catch (e) {
             print('⚠️ scan_validation_log migration skipped: $e');
+          }
+        }
+
+        // v11 — persistent heartbeat history (online + offline)
+        if (oldVersion < 11) {
+          try {
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS heartbeat_log (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                payload    TEXT    NOT NULL,
+                created_at TEXT    NOT NULL
+              )
+            ''');
+            print('✓ Created heartbeat_log table');
+          } catch (e) {
+            print('⚠️ heartbeat_log migration skipped: $e');
+          }
+        }
+
+        // v12 — offline heartbeat queue (replayed on reconnect)
+        if (oldVersion < 12) {
+          try {
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS heartbeat_queue (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                payload    TEXT    NOT NULL,
+                created_at TEXT    NOT NULL
+              )
+            ''');
+            print('✓ Created heartbeat_queue table');
+          } catch (e) {
+            print('⚠️ heartbeat_queue migration skipped: $e');
           }
         }
 
@@ -141,8 +169,7 @@ class LocalDatabase {
 
   static Future<void> _createAllTables(Database db) async {
     const tables = [
-      // ── Core ticket sales (offline-first) ─────────────────
-      // num_titre / nom_titulaire / organisme / ligne_titre added in v10
+      // ── Core ticketing ───────────────────────────────────────────────────
       '''CREATE TABLE IF NOT EXISTS ticket_vendu_local (
         id               INTEGER PRIMARY KEY AUTOINCREMENT,
         id_voyage        INTEGER NOT NULL,
@@ -165,6 +192,7 @@ class LocalDatabase {
         ligne_titre      TEXT
       )''',
 
+      // ── Sync audit log ───────────────────────────────────────────────────
       '''CREATE TABLE IF NOT EXISTS sync_log (
         id               INTEGER PRIMARY KEY AUTOINCREMENT,
         id_ticket_local  INTEGER NOT NULL,
@@ -172,6 +200,8 @@ class LocalDatabase {
         statut           TEXT    NOT NULL,
         message          TEXT
       )''',
+
+      // ── Tarif / voyage caches ────────────────────────────────────────────
       '''CREATE TABLE IF NOT EXISTS tarif_cache (
         id_ligne     INTEGER PRIMARY KEY,
         arrets       TEXT    NOT NULL,
@@ -179,17 +209,20 @@ class LocalDatabase {
         tarif_types  TEXT    NOT NULL,
         cached_at    TEXT    NOT NULL
       )''',
+
       '''CREATE TABLE IF NOT EXISTS voyage_cache (
         id_voyage      INTEGER PRIMARY KEY,
         statut         TEXT    NOT NULL,
         server_statut  TEXT,
         cached_at      TEXT    NOT NULL
       )''',
+
       '''CREATE TABLE IF NOT EXISTS voyages_cache (
         matricule  INTEGER PRIMARY KEY,
         data       TEXT    NOT NULL,
         cached_at  TEXT    NOT NULL
       )''',
+
       '''CREATE TABLE IF NOT EXISTS segment_cache (
         id_voyage        INTEGER PRIMARY KEY,
         actif_segment    TEXT,
@@ -198,18 +231,23 @@ class LocalDatabase {
         tous_clotures    INTEGER NOT NULL DEFAULT 0,
         cached_at        TEXT    NOT NULL
       )''',
+
+      // ── Agent cache ──────────────────────────────────────────────────────
       '''CREATE TABLE IF NOT EXISTS agent_cache (
         matricule    INTEGER PRIMARY KEY,
         mot_de_passe TEXT    NOT NULL,
         employe_data TEXT    NOT NULL,
         cached_at    TEXT    NOT NULL
       )''',
+
+      // ── Pending operations ───────────────────────────────────────────────
       '''CREATE TABLE IF NOT EXISTS cloture_pending (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         id_voyage   INTEGER NOT NULL UNIQUE,
         created_at  TEXT    NOT NULL,
         statut_sync TEXT    NOT NULL DEFAULT 'pending'
       )''',
+
       '''CREATE TABLE IF NOT EXISTS segment_cloture_pending (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         id_voyage   INTEGER NOT NULL,
@@ -219,6 +257,7 @@ class LocalDatabase {
         statut_sync TEXT    NOT NULL DEFAULT 'pending',
         UNIQUE(id_voyage, id_segment)
       )''',
+
       '''CREATE TABLE IF NOT EXISTS reopen_pending (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         id_voyage   INTEGER NOT NULL UNIQUE,
@@ -226,7 +265,8 @@ class LocalDatabase {
         created_at  TEXT    NOT NULL,
         statut_sync TEXT    NOT NULL DEFAULT 'pending'
       )''',
-      // ── v9 — NFC subscriber card registry ─────────────────
+
+      // ── v9 — NFC subscriber card registry ───────────────────────────────
       '''CREATE TABLE IF NOT EXISTS tickets (
         id        INTEGER PRIMARY KEY AUTOINCREMENT,
         card_id   TEXT    NOT NULL UNIQUE,
@@ -236,8 +276,8 @@ class LocalDatabase {
         ligne     TEXT    NOT NULL DEFAULT '—',
         organisme TEXT    NOT NULL DEFAULT '—'
       )''',
-      // ── v10 — QR/NFC scan audit log ───────────────────────
-      // One row per validated scan; synced to server when online.
+
+      // ── v10 — QR/NFC scan audit log ──────────────────────────────────────
       '''CREATE TABLE IF NOT EXISTS scan_validation_log (
         id              INTEGER PRIMARY KEY AUTOINCREMENT,
         id_voyage       INTEGER NOT NULL,
@@ -252,6 +292,20 @@ class LocalDatabase {
         date_scan       TEXT    NOT NULL,
         matricule_agent INTEGER NOT NULL,
         statut_sync     TEXT    NOT NULL DEFAULT 'pending'
+      )''',
+
+      // ── v11 — persistent heartbeat history (online + offline) ────────────
+      '''CREATE TABLE IF NOT EXISTS heartbeat_log (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        payload    TEXT    NOT NULL,
+        created_at TEXT    NOT NULL
+      )''',
+
+      // ── v12 — offline heartbeat queue (replayed on reconnect) ─────────────
+      '''CREATE TABLE IF NOT EXISTS heartbeat_queue (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        payload    TEXT    NOT NULL,
+        created_at TEXT    NOT NULL
       )''',
     ];
 

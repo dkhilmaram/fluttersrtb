@@ -6,6 +6,11 @@ _svc = TicketService()
 
 @router.post("/tickets/vendre")
 def vendre_ticket(data: dict):
+    # Guard: enforce valid sync_status before it reaches the service
+    # Flutter sends 'online' (real-time sale) or 'synced' (was offline, now pushing)
+    if data.get("sync_status") not in ("online", "synced"):
+        data["sync_status"] = "online"
+
     id_ticket = _svc.vendre(data)
     return {"success": True, "id_ticket": id_ticket}
 

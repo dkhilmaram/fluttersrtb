@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../../l10n/app_localizations.dart';   // in login_page.dart
+import '../../../l10n/app_localizations.dart';
 
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -9,6 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/database/daos/agent_dao.dart';
 import '../voyage/voyage_page.dart';
 import '../../widgets/language_switcher.dart';
+import '../../../services/sync_service.dart';
 
 const _navyDark  = AppTheme.navyDark;
 const _navyMid   = AppTheme.navyMid;
@@ -94,12 +95,18 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
 
       if (data['success'] == true) {
-        final employe = data['employe'] as Map<String, dynamic>;
+        final employe   = data['employe'] as Map<String, dynamic>;
+        final matricule = int.parse(_matriculeController.text);
+
         await AgentDao.saveAgent(
-          matricule:   int.parse(_matriculeController.text),
+          matricule:   matricule,
           motDePasse:  _motDePasseController.text,
           employeData: employe,
         );
+
+        // ── Set matricule so the heartbeat timer fires immediately ──
+        SyncService.setMatricule(matricule);
+
         _showToast(t.bienvenue(employe['prenom'], employe['nom']));
         if (!mounted) return;
         Navigator.push(
@@ -127,6 +134,9 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted) return;
 
     if (cached != null) {
+      // ── Set matricule even for offline login ──
+      SyncService.setMatricule(matricule);
+
       _showToast(t.bienvenueOffline(cached['prenom']), isWarning: true);
       Navigator.push(
         context,
@@ -149,85 +159,85 @@ class _LoginPageState extends State<LoginPage> {
         child: Column(
           children: [
             // ── Header gradient ──────────────────────────────
-           Container(
-  width: double.infinity,
-  decoration: const BoxDecoration(
-    gradient: LinearGradient(
-      colors: [_navyDark, _navyMid, _navyLight],
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-    ),
-  ),
-  padding: const EdgeInsets.fromLTRB(20, 50, 20, 36),
-  child: Column(
-    children: [
-      // ── Top row: spacer + language switcher ──
-      Row(
-        children: const [
-          Spacer(),
-          LanguageSwitcher(),
-        ],
-      ),
-      const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [_navyDark, _navyMid, _navyLight],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              padding: const EdgeInsets.fromLTRB(20, 50, 20, 36),
+              child: Column(
+                children: [
+                  // ── Top row: spacer + language switcher ──
+                  Row(
+                    children: const [
+                      Spacer(),
+                      LanguageSwitcher(),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
 
-      // ── Centered logo ─────────────────────────
-      Container(
-        width: 88,
-        height: 88,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(22),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
+                  // ── Centered logo ─────────────────────────
+                  Container(
+                    width: 88,
+                    height: 88,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(22),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(10),
+                    child: Image.asset(
+                      'assets/images/logo_srtb.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Icons.directions_bus,
+                        size: 50,
+                        color: _navyMid,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'S R T B',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 8,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    t.srtbFullName,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.65),
+                      fontSize: 12,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: _goldLight.withOpacity(0.6),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
-        padding: const EdgeInsets.all(10),
-        child: Image.asset(
-          'assets/images/logo_srtb.png',
-          fit: BoxFit.contain,
-          errorBuilder: (_, __, ___) => const Icon(
-            Icons.directions_bus,
-            size: 50,
-            color: _navyMid,
-          ),
-        ),
-      ),
-      const SizedBox(height: 16),
-      const Text(
-        'S R T B',
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 24,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 8,
-        ),
-      ),
-      const SizedBox(height: 6),
-      Text(
-        t.srtbFullName,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: Colors.white.withOpacity(0.65),
-          fontSize: 12,
-          letterSpacing: 0.3,
-        ),
-      ),
-      const SizedBox(height: 20),
-      Container(
-        width: 40,
-        height: 4,
-        decoration: BoxDecoration(
-          color: _goldLight.withOpacity(0.6),
-          borderRadius: BorderRadius.circular(2),
-        ),
-      ),
-    ],
-  ),
-),
 
             // ── Form card ─────────────────────────────────────
             Padding(

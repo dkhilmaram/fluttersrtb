@@ -1,36 +1,68 @@
 import 'package:http/http.dart' as http;
+import 'dart:async';
 import 'dart:convert';
 import '../core/constants/api_constants.dart';
 import '../data/database/daos/ticket_dao.dart';
 import '../data/database/daos/voyage_dao.dart';
 import '../data/database/daos/log_dao.dart';
+import '../data/database/local_database.dart';
 import 'connectivity_service.dart';
 
 class SyncService {
+  SyncService._();
+
   static bool _isSyncing = false;
+  static Timer? _heartbeatTimer;
+  static int? _cachedMatricule;
+
+  // ── Initialisation ─────────────────────────────────────────────────────────
 
   static void startListening() {
     ConnectivityService.startListening(
-      onReconnect: () => Future.delayed(
-        const Duration(seconds: 2),
-        () => syncPending(),
-      ),
+      onReconnect: () async {
+        await Future.delayed(const Duration(seconds: 2));
+        await flushHeartbeatQueue();
+        await syncPending();
+      },
+      onDisconnect: () async {
+        final pending = await TicketDao.getUnsyncedTickets();
+        final failed  = await _countFailed();
+        await _pushHeartbeat(pending: pending.length, failed: failed);
+      },
     );
+
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+      final pending = await TicketDao.getUnsyncedTickets();
+      final failed  = await _countFailed();
+      await _pushHeartbeat(pending: pending.length, failed: failed);
+    });
   }
 
+  static void setMatricule(int matricule) {
+    _cachedMatricule = matricule;
+  }
+
+  // ── Main sync entry point ──────────────────────────────────────────────────
+
   static Future<SyncResult> syncPending() async {
-    if (_isSyncing) return SyncResult(synced: 0, failed: 0);
+    if (_isSyncing) return const SyncResult(synced: 0, failed: 0);
     _isSyncing = true;
 
     int synced = 0, failed = 0;
 
     try {
-      // ── 1. Sync pending tickets ──────────────────────────────
+      // ── 1. Sync pending tickets ──────────────────────────────────────────
       final toSync = await TicketDao.getUnsyncedTickets();
       print('🔄 Syncing ${toSync.length} unsynced tickets...');
 
       for (final ticket in toSync) {
         final localId = ticket['id'] as int;
+
+        if (_cachedMatricule == null && ticket['matricule_agent'] != null) {
+          _cachedMatricule = (ticket['matricule_agent'] as num).toInt();
+        }
+
         try {
           final response = await http
               .post(
@@ -46,11 +78,11 @@ class SyncService {
                   'prix_unitaire':   (ticket['prix_unitaire'] as num).toInt(),
                   'montant_total':   (ticket['montant_total'] as num).toInt(),
                   'matricule_agent': ticket['matricule_agent'],
-                  // scan-specific fields (null for regular tickets — server ignores them)
                   'numero_titre':    ticket['numero_titre'],
                   'nom_titulaire':   ticket['nom_titulaire'],
                   'organisme':       ticket['organisme'],
                   'ligne_titre':     ticket['ligne_titre'],
+                  'sync_status':     'synced',
                 }),
               )
               .timeout(ApiConstants.defaultTimeout);
@@ -84,7 +116,7 @@ class SyncService {
         }
       }
 
-      // ── 2. Sync pending voyage clôtures ──────────────────────
+      // ── 2. Sync pending voyage clôtures ───────────────────────────────────
       if (failed > 0) {
         print('⚠️ Skipping voyage clôtures — $failed ticket(s) still unsynced');
       } else {
@@ -125,7 +157,7 @@ class SyncService {
         }
       }
 
-      // ── 3. Sync pending reopens ───────────────────────────────
+      // ── 3. Sync pending reopens ───────────────────────────────────────────
       final pendingReopens = await VoyageDao.getPendingReopens();
       print('🔄 Syncing ${pendingReopens.length} pending reopens...');
 
@@ -161,18 +193,20 @@ class SyncService {
         }
       }
 
-      // ── 4. Sync pending scan validation logs ─────────────────
-      // Independent of ticket failures — scan logs are audit records and
-      // do not block other sync steps.
+      // ── 4. Sync pending scan validation logs ──────────────────────────────
       final pendingScans = await TicketDao.getUnsyncedScanLogs();
       print('🔄 Syncing ${pendingScans.length} pending scan logs...');
 
       for (final scan in pendingScans) {
         final localId = scan['id'] as int;
+
+        if (_cachedMatricule == null && scan['matricule_agent'] != null) {
+          _cachedMatricule = (scan['matricule_agent'] as num).toInt();
+        }
+
         try {
           final response = await http
               .post(
-                // Replace with your actual endpoint — e.g. ApiConstants.logScan
                 Uri.parse(ApiConstants.logScan),
                 headers: {'Content-Type': 'application/json'},
                 body: jsonEncode({
@@ -205,22 +239,136 @@ class SyncService {
         } catch (e) {
           print('❌ Scan log $localId failed: $e');
           await TicketDao.markScanLogFailed(localId, e.toString());
-          // Not counted in [failed] — scan log failures don't block clôtures
         }
       }
 
       print('✅ Sync done: $synced synced, $failed failed');
+
     } finally {
       _isSyncing = false;
     }
 
+    // ── 5. Push heartbeat after every sync attempt ─────────────────────────
+    await _pushHeartbeat(pending: failed, failed: failed);
+
     return SyncResult(synced: synced, failed: failed);
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Cascade: ensure every segment of [idVente] is clôturé on the
-  // server before we send the voyage-level clôture request.
-  // ─────────────────────────────────────────────────────────────
+  // ── Heartbeat ──────────────────────────────────────────────────────────────
+
+  /// Always saves locally, then sends to server if online or queues if offline.
+  static Future<void> _pushHeartbeat({
+    required int pending,
+    required int failed,
+  }) async {
+    final matricule = _cachedMatricule;
+    if (matricule == null) return;
+
+    final now = DateTime.now().toIso8601String();
+    final payload = jsonEncode({
+      'matricule_agent': matricule,
+      'pending_count':   pending,
+      'failed_count':    failed,
+      'last_sync_at':    now,
+      'app_version':     '1.0.0',
+    });
+
+    // ── 1. Always persist locally first ────────────────────────────────────
+    await _saveHeartbeatLocally(payload);
+
+    // ── 2. Send or queue depending on connectivity ──────────────────────────
+    if (ConnectivityService.isConnected) {
+      await _sendHeartbeatPayload(payload);
+    } else {
+      await _queueHeartbeat(payload);
+    }
+  }
+
+  /// Persists every heartbeat to local history (online or offline).
+  static Future<void> _saveHeartbeatLocally(String payload) async {
+    try {
+      final db = await LocalDatabase.db;
+      await db.insert('heartbeat_log', {
+        'payload':    payload,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      print('💾 Heartbeat saved locally');
+    } catch (e) {
+      print('⚠️ Failed to save heartbeat locally: $e');
+    }
+  }
+
+  /// Fire-and-forget HTTP send — never throws.
+  static Future<void> _sendHeartbeatPayload(String payload) async {
+    try {
+      await http
+          .post(
+            Uri.parse(ApiConstants.agentHeartbeat),
+            headers: {'Content-Type': 'application/json'},
+            body: payload,
+          )
+          .timeout(const Duration(seconds: 5));
+      print('📡 Heartbeat sent to server');
+    } catch (e) {
+      print('⚠️ Heartbeat send failed (ignored): $e');
+    }
+  }
+
+  /// Persists a heartbeat payload to local DB for later replay (offline only).
+  static Future<void> _queueHeartbeat(String payload) async {
+    try {
+      final db = await LocalDatabase.db;
+      await db.insert('heartbeat_queue', {
+        'payload':    payload,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+      print('📦 Heartbeat queued for replay on reconnect');
+    } catch (e) {
+      print('⚠️ Failed to queue heartbeat: $e');
+    }
+  }
+
+  /// Replays all queued heartbeats in chronological order, then clears them.
+  static Future<void> flushHeartbeatQueue() async {
+    try {
+      final db     = await LocalDatabase.db;
+      final queued = await db.query(
+        'heartbeat_queue',
+        orderBy: 'created_at ASC',
+      );
+
+      if (queued.isEmpty) return;
+
+      print('📤 Flushing ${queued.length} queued heartbeat(s)...');
+
+      for (final row in queued) {
+        await _sendHeartbeatPayload(row['payload'] as String);
+        await db.delete(
+          'heartbeat_queue',
+          where:     'id = ?',
+          whereArgs: [row['id']],
+        );
+      }
+
+      print('✅ Heartbeat queue flushed');
+    } catch (e) {
+      print('⚠️ Failed to flush heartbeat queue: $e');
+    }
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  static Future<int> _countFailed() async {
+    try {
+      final db     = await LocalDatabase.db;
+      final result = await db.rawQuery(
+        "SELECT COUNT(*) AS cnt FROM ticket_vendu_local WHERE statut_sync = 'failed'",
+      );
+      return (result.first['cnt'] as int?) ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
 
   static Future<void> _ensureAllSegmentsCloturedOnServer(int idVente) async {
     try {

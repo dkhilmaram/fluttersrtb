@@ -1,32 +1,30 @@
 import 'dart:async';
 import 'dart:io';
 
-/// Watches internet connectivity and notifies listeners when the device
-/// comes back online.
-///
-/// SyncService calls [ConnectivityService.onReconnect] to trigger a sync
-/// whenever connectivity is restored.
 class ConnectivityService {
   ConnectivityService._();
 
   static StreamSubscription<bool>? _subscription;
+  static bool _isCurrentlyOnline = true;
 
-  /// Starts polling for connectivity changes.
-  /// [onReconnect] is called each time the device goes from offline → online.
-  static void startListening({required void Function() onReconnect}) {
-    if (_subscription != null) return; // already running
-
-    bool _wasOnline = true; // optimistic start
+  static void startListening({
+    required void Function() onReconnect,
+    void Function()? onDisconnect,
+  }) {
+    if (_subscription != null) return;
 
     _subscription = Stream.periodic(const Duration(seconds: 5))
         .asyncMap((_) => _checkConnectivity())
         .distinct()
         .listen((isOnline) {
-      if (isOnline && !_wasOnline) {
+      if (isOnline && !_isCurrentlyOnline) {
         print('📶 ConnectivityService: back online — triggering sync');
         onReconnect();
+      } else if (!isOnline && _isCurrentlyOnline) {
+        print('📵 ConnectivityService: went offline');
+        onDisconnect?.call();
       }
-      _wasOnline = isOnline;
+      _isCurrentlyOnline = isOnline;
     });
 
     print('✓ ConnectivityService: started');
@@ -48,6 +46,8 @@ class ConnectivityService {
     }
   }
 
-  /// One-shot check — useful for UI state.
   static Future<bool> isOnline() => _checkConnectivity();
+
+  /// Synchronous snapshot — safe to call from anywhere without awaiting.
+  static bool get isConnected => _isCurrentlyOnline;
 }

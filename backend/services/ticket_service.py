@@ -12,17 +12,23 @@ _SPECIAL_KEYWORDS = [
 def is_special_passage(type_tarif: str) -> bool:
     return any(kw.lower() in type_tarif.lower() for kw in _SPECIAL_KEYWORDS)
 
+
 class TicketService:
     def __init__(self):
-        self.repo    = TicketRepository()
+        self.repo     = TicketRepository()
         self.seg_repo = SegmentRepository()
 
     def vendre(self, data: dict) -> int:
         type_tarif    = data.get("type_tarif", "")
         prix_unitaire = float(data.get("prix_unitaire", 0))
         montant_total = float(data.get("montant_total", 0))
-        id_voyage      = data.get("id_voyage")
+        id_voyage     = data.get("id_voyage")
         id_segment    = data.get("id_segment", 0)
+
+        # Flutter sends 'online' (real-time) or 'synced' (was offline, now pushing)
+        # Reject any other value and default to 'online' for safety
+        raw_sync    = data.get("sync_status", "online")
+        sync_status = raw_sync if raw_sync in ("online", "synced") else "online"
 
         # Validate special passage pricing
         if is_special_passage(type_tarif) and (prix_unitaire != 0 or montant_total != 0):
@@ -41,15 +47,16 @@ class TicketService:
                     raise SegmentIntrouvable()
 
         return self.repo.create(
-            id_voyage      = id_voyage,
-            id_segment    = id_segment,
-            point_depart  = data.get("point_depart"),
-            point_arrivee = data.get("point_arrivee"),
-            type_tarif    = type_tarif,
-            quantite      = int(data.get("quantite", 1)),
-            prix_unitaire = prix_unitaire,
-            montant_total = montant_total,
+            id_voyage       = id_voyage,
+            id_segment      = id_segment,
+            point_depart    = data.get("point_depart"),
+            point_arrivee   = data.get("point_arrivee"),
+            type_tarif      = type_tarif,
+            quantite        = int(data.get("quantite", 1)),
+            prix_unitaire   = prix_unitaire,
+            montant_total   = montant_total,
             matricule_agent = data.get("matricule_agent"),
+            sync_status     = sync_status,  # ← passed through to repo INSERT
         )
 
     def get_by_voyage(self, id_voyage: int):
