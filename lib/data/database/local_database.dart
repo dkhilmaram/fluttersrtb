@@ -29,7 +29,7 @@ class LocalDatabase {
     final path = join(await getDatabasesPath(), 'srtb_offline.db');
     return openDatabase(
       path,
-      version: 12,
+      version: 13,
       onCreate: (db, version) async {
         print('📦 Creating database v$version...');
         await _createAllTables(db);
@@ -38,19 +38,14 @@ class LocalDatabase {
       onUpgrade: (db, oldVersion, newVersion) async {
         print('⬆️ Upgrading database v$oldVersion → v$newVersion...');
 
-        // v7 — server_statut column on voyage_cache
         if (oldVersion < 7) {
           try {
             await db.execute(
               'ALTER TABLE voyage_cache ADD COLUMN server_statut TEXT',
             );
-            print('✓ Added server_statut to voyage_cache');
-          } catch (e) {
-            print('⚠️ server_statut migration skipped: $e');
-          }
+          } catch (e) { print('⚠️ v7 skipped: $e'); }
         }
 
-        // v8 — reopen_pending table
         if (oldVersion < 8) {
           try {
             await db.execute('''
@@ -62,13 +57,9 @@ class LocalDatabase {
                 statut_sync TEXT    NOT NULL DEFAULT 'pending'
               )
             ''');
-            print('✓ Created reopen_pending table');
-          } catch (e) {
-            print('⚠️ reopen_pending migration skipped: $e');
-          }
+          } catch (e) { print('⚠️ v8 skipped: $e'); }
         }
 
-        // v9 — NFC subscriber card registry
         if (oldVersion < 9) {
           try {
             await db.execute('''
@@ -82,13 +73,9 @@ class LocalDatabase {
                 organisme TEXT    NOT NULL DEFAULT '—'
               )
             ''');
-            print('✓ Created tickets table');
-          } catch (e) {
-            print('⚠️ tickets migration skipped: $e');
-          }
+          } catch (e) { print('⚠️ v9 skipped: $e'); }
         }
 
-        // v10 — scan columns on ticket_vendu_local + scan_validation_log
         if (oldVersion < 10) {
           for (final col in [
             'ALTER TABLE ticket_vendu_local ADD COLUMN numero_titre  TEXT',
@@ -96,14 +83,8 @@ class LocalDatabase {
             'ALTER TABLE ticket_vendu_local ADD COLUMN organisme     TEXT',
             'ALTER TABLE ticket_vendu_local ADD COLUMN ligne_titre   TEXT',
           ]) {
-            try {
-              await db.execute(col);
-              print('✓ $col');
-            } catch (e) {
-              print('⚠️ Migration skipped: $e');
-            }
+            try { await db.execute(col); } catch (e) { print('⚠️ v10 col skipped: $e'); }
           }
-
           try {
             await db.execute('''
               CREATE TABLE IF NOT EXISTS scan_validation_log (
@@ -122,13 +103,9 @@ class LocalDatabase {
                 statut_sync     TEXT    NOT NULL DEFAULT 'pending'
               )
             ''');
-            print('✓ Created scan_validation_log table');
-          } catch (e) {
-            print('⚠️ scan_validation_log migration skipped: $e');
-          }
+          } catch (e) { print('⚠️ v10 scan_log skipped: $e'); }
         }
 
-        // v11 — persistent heartbeat history (online + offline)
         if (oldVersion < 11) {
           try {
             await db.execute('''
@@ -138,13 +115,9 @@ class LocalDatabase {
                 created_at TEXT    NOT NULL
               )
             ''');
-            print('✓ Created heartbeat_log table');
-          } catch (e) {
-            print('⚠️ heartbeat_log migration skipped: $e');
-          }
+          } catch (e) { print('⚠️ v11 skipped: $e'); }
         }
 
-        // v12 — offline heartbeat queue (replayed on reconnect)
         if (oldVersion < 12) {
           try {
             await db.execute('''
@@ -154,10 +127,26 @@ class LocalDatabase {
                 created_at TEXT    NOT NULL
               )
             ''');
-            print('✓ Created heartbeat_queue table');
-          } catch (e) {
-            print('⚠️ heartbeat_queue migration skipped: $e');
-          }
+          } catch (e) { print('⚠️ v12 skipped: $e'); }
+        }
+
+        // v13 — control_log for Contrôleur scan history
+        if (oldVersion < 13) {
+          try {
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS control_log (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_id        TEXT    NOT NULL,
+                ticket_type      TEXT    NOT NULL,
+                resultat         TEXT    NOT NULL,
+                matricule_agent  INTEGER NOT NULL,
+                date_controle    TEXT    NOT NULL,
+                info_json        TEXT    NOT NULL DEFAULT '{}',
+                statut_sync      TEXT    NOT NULL DEFAULT 'pending'
+              )
+            ''');
+            print('✓ Created control_log table');
+          } catch (e) { print('⚠️ v13 skipped: $e'); }
         }
 
         await _createAllTables(db);
@@ -169,7 +158,6 @@ class LocalDatabase {
 
   static Future<void> _createAllTables(Database db) async {
     const tables = [
-      // ── Core ticketing ───────────────────────────────────────────────────
       '''CREATE TABLE IF NOT EXISTS ticket_vendu_local (
         id               INTEGER PRIMARY KEY AUTOINCREMENT,
         id_voyage        INTEGER NOT NULL,
@@ -192,7 +180,6 @@ class LocalDatabase {
         ligne_titre      TEXT
       )''',
 
-      // ── Sync audit log ───────────────────────────────────────────────────
       '''CREATE TABLE IF NOT EXISTS sync_log (
         id               INTEGER PRIMARY KEY AUTOINCREMENT,
         id_ticket_local  INTEGER NOT NULL,
@@ -201,7 +188,6 @@ class LocalDatabase {
         message          TEXT
       )''',
 
-      // ── Tarif / voyage caches ────────────────────────────────────────────
       '''CREATE TABLE IF NOT EXISTS tarif_cache (
         id_ligne     INTEGER PRIMARY KEY,
         arrets       TEXT    NOT NULL,
@@ -232,7 +218,6 @@ class LocalDatabase {
         cached_at        TEXT    NOT NULL
       )''',
 
-      // ── Agent cache ──────────────────────────────────────────────────────
       '''CREATE TABLE IF NOT EXISTS agent_cache (
         matricule    INTEGER PRIMARY KEY,
         mot_de_passe TEXT    NOT NULL,
@@ -240,7 +225,6 @@ class LocalDatabase {
         cached_at    TEXT    NOT NULL
       )''',
 
-      // ── Pending operations ───────────────────────────────────────────────
       '''CREATE TABLE IF NOT EXISTS cloture_pending (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         id_voyage   INTEGER NOT NULL UNIQUE,
@@ -266,7 +250,6 @@ class LocalDatabase {
         statut_sync TEXT    NOT NULL DEFAULT 'pending'
       )''',
 
-      // ── v9 — NFC subscriber card registry ───────────────────────────────
       '''CREATE TABLE IF NOT EXISTS tickets (
         id        INTEGER PRIMARY KEY AUTOINCREMENT,
         card_id   TEXT    NOT NULL UNIQUE,
@@ -277,7 +260,6 @@ class LocalDatabase {
         organisme TEXT    NOT NULL DEFAULT '—'
       )''',
 
-      // ── v10 — QR/NFC scan audit log ──────────────────────────────────────
       '''CREATE TABLE IF NOT EXISTS scan_validation_log (
         id              INTEGER PRIMARY KEY AUTOINCREMENT,
         id_voyage       INTEGER NOT NULL,
@@ -294,18 +276,28 @@ class LocalDatabase {
         statut_sync     TEXT    NOT NULL DEFAULT 'pending'
       )''',
 
-      // ── v11 — persistent heartbeat history (online + offline) ────────────
       '''CREATE TABLE IF NOT EXISTS heartbeat_log (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
         payload    TEXT    NOT NULL,
         created_at TEXT    NOT NULL
       )''',
 
-      // ── v12 — offline heartbeat queue (replayed on reconnect) ─────────────
       '''CREATE TABLE IF NOT EXISTS heartbeat_queue (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
         payload    TEXT    NOT NULL,
         created_at TEXT    NOT NULL
+      )''',
+
+      // v13
+      '''CREATE TABLE IF NOT EXISTS control_log (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticket_id        TEXT    NOT NULL,
+        ticket_type      TEXT    NOT NULL,
+        resultat         TEXT    NOT NULL,
+        matricule_agent  INTEGER NOT NULL,
+        date_controle    TEXT    NOT NULL,
+        info_json        TEXT    NOT NULL DEFAULT '{}',
+        statut_sync      TEXT    NOT NULL DEFAULT 'pending'
       )''',
     ];
 

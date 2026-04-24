@@ -8,6 +8,7 @@ import '../../../core/constants/api_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/database/daos/agent_dao.dart';
 import '../voyage/voyage_page.dart';
+import '../login/Controleur_page.dart';
 import '../../widgets/language_switcher.dart';
 import '../../../services/sync_service.dart';
 
@@ -34,6 +35,20 @@ class _LoginPageState extends State<LoginPage> {
 
   OverlayEntry? _toastEntry;
   Timer?        _toastTimer;
+
+  // ── Navigation helper ──────────────────────────────────────────────────────
+  void _navigateByRole(Map<String, dynamic> employe) {
+    // ✅ fixed: toLowerCase() so "controleur" / "Controleur" / "CONTROLEUR" all match
+    final role = employe['role']?.toString().toLowerCase() ?? '';
+    final page = role == 'controleur'
+        ? ControleurPage(agent: employe)
+        : VoyageProgrammePage(agent: employe);
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => page),
+    );
+  }
 
   void _showToast(String msg,
       {bool isError = false, bool isWarning = false}) {
@@ -104,17 +119,12 @@ class _LoginPageState extends State<LoginPage> {
           employeData: employe,
         );
 
-        // ── Set matricule so the heartbeat timer fires immediately ──
         SyncService.setMatricule(matricule);
 
         _showToast(t.bienvenue(employe['prenom'], employe['nom']));
         if (!mounted) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => VoyageProgrammePage(agent: employe),
-          ),
-        );
+
+        _navigateByRole(employe);  // ← role-aware routing
       } else {
         _showToast(t.loginError, isError: true);
       }
@@ -134,16 +144,10 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted) return;
 
     if (cached != null) {
-      // ── Set matricule even for offline login ──
       SyncService.setMatricule(matricule);
 
       _showToast(t.bienvenueOffline(cached['prenom']), isWarning: true);
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => VoyageProgrammePage(agent: cached),
-        ),
-      );
+      _navigateByRole(cached);  // ← role-aware routing
     } else {
       _showToast(t.offlineNoAccount, isError: true);
     }
@@ -171,7 +175,6 @@ class _LoginPageState extends State<LoginPage> {
               padding: const EdgeInsets.fromLTRB(20, 50, 20, 36),
               child: Column(
                 children: [
-                  // ── Top row: spacer + language switcher ──
                   Row(
                     children: const [
                       Spacer(),
@@ -179,8 +182,6 @@ class _LoginPageState extends State<LoginPage> {
                     ],
                   ),
                   const SizedBox(height: 16),
-
-                  // ── Centered logo ─────────────────────────
                   Container(
                     width: 88,
                     height: 88,
@@ -260,7 +261,6 @@ class _LoginPageState extends State<LoginPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Title
                       Row(
                         children: [
                           Container(
@@ -325,7 +325,6 @@ class _LoginPageState extends State<LoginPage> {
 
                       const SizedBox(height: 32),
 
-                      // Submit button
                       SizedBox(
                         width: double.infinity,
                         height: 54,

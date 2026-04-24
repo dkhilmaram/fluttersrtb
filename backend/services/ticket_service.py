@@ -9,6 +9,7 @@ _SPECIAL_KEYWORDS = [
     "Agent", "NFC", "Barcode", "Scan",
 ]
 
+
 def is_special_passage(type_tarif: str) -> bool:
     return any(kw.lower() in type_tarif.lower() for kw in _SPECIAL_KEYWORDS)
 
@@ -25,16 +26,15 @@ class TicketService:
         id_voyage     = data.get("id_voyage")
         id_segment    = data.get("id_segment", 0)
 
-        # Flutter sends 'online' (real-time) or 'synced' (was offline, now pushing)
-        # Reject any other value and default to 'online' for safety
         raw_sync    = data.get("sync_status", "online")
         sync_status = raw_sync if raw_sync in ("online", "synced") else "online"
 
-        # Validate special passage pricing
+        numero_titre  = data.get("numero_titre") or data.get("ticket_id") or None
+        nom_titulaire = data.get("nom_titulaire") or None
+
         if is_special_passage(type_tarif) and (prix_unitaire != 0 or montant_total != 0):
             raise PrixInvalide(type_tarif)
 
-        # Resolve segment if not provided
         if id_segment == 0:
             seg = self.seg_repo.get_actif(id_voyage)
             if seg:
@@ -56,7 +56,9 @@ class TicketService:
             prix_unitaire   = prix_unitaire,
             montant_total   = montant_total,
             matricule_agent = data.get("matricule_agent"),
-            sync_status     = sync_status,  # ← passed through to repo INSERT
+            sync_status     = sync_status,
+            numero_titre    = numero_titre,
+            nom_titulaire   = nom_titulaire,
         )
 
     def get_by_voyage(self, id_voyage: int):
@@ -73,3 +75,6 @@ class TicketService:
 
     def get_special_stats(self, id_voyage: int):
         return self.repo.get_special_stats(id_voyage)
+
+    def get_by_numero(self, numero_titre: str):
+        return self.repo.get_by_numero(numero_titre)

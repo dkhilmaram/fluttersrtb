@@ -1,18 +1,24 @@
 from fastapi import APIRouter
 from services.ticket_service import TicketService
+import logging
 
 router = APIRouter(tags=["Tickets"])
 _svc = TicketService()
+logger = logging.getLogger(__name__)
 
 @router.post("/tickets/vendre")
 def vendre_ticket(data: dict):
-    # Guard: enforce valid sync_status before it reaches the service
-    # Flutter sends 'online' (real-time sale) or 'synced' (was offline, now pushing)
     if data.get("sync_status") not in ("online", "synced"):
         data["sync_status"] = "online"
-
     id_ticket = _svc.vendre(data)
     return {"success": True, "id_ticket": id_ticket}
+
+@router.get("/tickets/by-numero/{numero_titre}")
+def get_ticket_by_numero(numero_titre: str):
+    ticket = _svc.get_by_numero(numero_titre)
+    if ticket is None:
+        return {"success": False, "ticket": None}
+    return {"success": True, "ticket": ticket}
 
 @router.get("/voyages/{id_voyage}/tickets")
 def get_tickets(id_voyage: int):

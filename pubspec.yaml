@@ -27,6 +27,8 @@ environment:
 # dependencies can be manually updated by changing the version numbers below to
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
+
+
 dependencies:
   flutter:
     sdk: flutter
@@ -34,12 +36,17 @@ dependencies:
     sdk: flutter
   intl: ^0.20.2
 
+  # Printing & PDF
+  printing: ^5.13.1
+  pdf: ^3.10.8
+
   # Database
   sqflite: ^2.3.2
   path: ^1.9.0
   sqflite_common_ffi: ^2.3.3
 
   # Network
+  http: ^1.6.0
   connectivity_plus: ^6.0.3
 
   # Hardware / scanning
@@ -50,36 +57,20 @@ dependencies:
   path_provider: ^2.1.2
   excel: ^4.0.3
   mailer: ^6.1.0
-  pdf: ^3.10.8
 
-  # QR display
+  # QR display (in-app)
   qr_flutter: ^4.1.0
 
   cupertino_icons: ^1.0.8
-  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
-  # The "flutter_lints" package below contains a set of recommended lints to
-  # encourage good coding practices. The lint set provided by the package is
-  # activated in the `analysis_options.yaml` file located at the root of your
-  # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
   flutter_lints: ^5.0.0
 
-# For information on the generic Dart part of this file, see the
-# following page: https://dart.dev/tools/pub/pubspec
-
-# The following section is specific to Flutter packages.
 flutter:
-  # The following line ensures that the Material Icons font is
-  # included with your application, so that you can use the icons in
-  # the material Icons class.
-  generate: true   # ← this must be here
+  generate: true   # required for l10n / AppLocalizations
   uses-material-design: true
-
 
   assets:
     - assets/images/logo_srtb.png
