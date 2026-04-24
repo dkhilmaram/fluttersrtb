@@ -15,7 +15,6 @@ class AgentService:
                 "matricule_agent": agent["matricule_agent"],
                 "nom":             agent["nom"],
                 "prenom":          agent["prenom"],
-                "role":            agent["role"],   # ✅ added: required for role-based routing
             }
         return None
 

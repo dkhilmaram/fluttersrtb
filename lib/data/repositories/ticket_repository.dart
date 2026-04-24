@@ -16,19 +16,18 @@ class TicketRepository {
           .post(
             Uri.parse(ApiConstants.vendreTicket),
             headers: {'Content-Type': 'application/json'},
-           body: jsonEncode({
-  'id_voyage':       ticketData['id_voyage'],
-  'id_segment':      ticketData['id_segment'],
-  'point_depart':    ticketData['point_depart'],
-  'point_arrivee':   ticketData['point_arrivee'],
-  'type_tarif':      ticketData['type_tarif'],
-  'quantite':        (ticketData['quantite'] as num).toInt(),
-  'prix_unitaire':   (ticketData['prix_unitaire'] as num).toInt(),
-  'montant_total':   (ticketData['montant_total'] as num).toInt(),
-  'matricule_agent': ticketData['matricule_agent'],
-  'numero_titre':    ticketData['numero_titre'],  // ← added
-  'sync_status':     'online',
-}),
+            body: jsonEncode({
+              'id_voyage':       ticketData['id_voyage'],
+              'id_segment':      ticketData['id_segment'],
+              'point_depart':    ticketData['point_depart'],
+              'point_arrivee':   ticketData['point_arrivee'],
+              'type_tarif':      ticketData['type_tarif'],
+              'quantite':        (ticketData['quantite'] as num).toInt(),
+              'prix_unitaire':   (ticketData['prix_unitaire'] as num).toInt(),
+              'montant_total':   (ticketData['montant_total'] as num).toInt(),
+              'matricule_agent': ticketData['matricule_agent'],
+              'sync_status':     'online', // ← only in HTTP body, not in SQLite
+            }),
           )
           .timeout(ApiConstants.defaultTimeout);
 
