@@ -9,6 +9,7 @@ _SPECIAL_KEYWORDS = [
     "Agent", "NFC", "Barcode", "Scan",
 ]
 
+
 def is_special_passage(type_tarif: str) -> bool:
     return any(kw.lower() in type_tarif.lower() for kw in _SPECIAL_KEYWORDS)
 
@@ -56,7 +57,7 @@ class TicketService:
             prix_unitaire   = prix_unitaire,
             montant_total   = montant_total,
             matricule_agent = data.get("matricule_agent"),
-            sync_status     = sync_status,  # ← passed through to repo INSERT
+            sync_status     = sync_status,
         )
 
     def get_by_voyage(self, id_voyage: int):
@@ -65,8 +66,9 @@ class TicketService:
             {
                 **r,
                 "date_heure": str(r["date_heure"]),
-                "agent":      f"{r['prenom']} {r['nom']}" if r["nom"] else None,
-                "is_free":    is_special_passage(r["type_tarif"] or ""),
+                # repo returns CONCAT(a.prenom, ' ', a.nom) AS agent_nom — never r['nom']/r['prenom']
+                "agent":   r.get("agent_nom"),
+                "is_free": is_special_passage(r.get("type_tarif") or ""),
             }
             for r in rows
         ]

@@ -1,41 +1,18 @@
 import 'dart:convert';
-import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-
-// ── Lexmark Printer Service ──────────────────────────────────────────────────
-//
-// Dependencies (pubspec.yaml):
-//   printing: ^5.13.1
-//   pdf: ^3.10.8
-//
-// Ticket layout (both printed PDF and in-app dialog):
-//   • Header:       SRTB / BILLETTERIE
-//   • Route box:    Départ > Arrivée
-//   • Detail rows:  Tarif | <value>
-//                   Prix unitaire | <value> millimes   ← replaces big total
-//   • Agent + Date rows
-//   • Unique ticket ID badge
-//   • QR code (unique per unit)
-//   • Footer: "Merci pour votre voyage"
-//
-// When quantite > 1:
-//   PDF  → one continuous page, height = quantite × 120 mm, stacked units
-//   App  → dialog scrolls through stacked _PrintedTicketWidget instances
-// ─────────────────────────────────────────────────────────────────────────────
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PrinterService {
-  // ── Singleton ──────────────────────────────────────────────────────────────
   PrinterService._();
   static final instance = PrinterService._();
 
-  // ── Discover printers on the local network ─────────────────────────────────
   Future<List<Printer>> discoverPrinters() => Printing.listPrinters();
 
-  // ── Test connection by printing a test page ────────────────────────────────
   Future<bool> testPrint({Printer? printer}) async {
     final pdf = await _buildTestPage();
     try {
@@ -55,13 +32,15 @@ class PrinterService {
     }
   }
 
-  // ── Print a ticket (handles qty > 1 internally) ────────────────────────────
+  /// [ticketUnits] must be the SAME list already generated in _saveTicket
+  /// (keys: 'id' and 'qr'). We reuse them here — no new generateId() calls.
   Future<bool> printTicket({
     required TicketData ticket,
+    required List<Map<String, String>> ticketUnits,
     Printer? printer,
     PaperFormat format = PaperFormat.ticket58mm,
   }) async {
-    final pdf = await _buildTicketPdf(ticket, format);
+    final pdf = await _buildTicketPdf(ticket, ticketUnits, format);
     try {
       if (printer != null) {
         return await Printing.directPrintPdf(
@@ -71,8 +50,7 @@ class PrinterService {
       } else {
         return await Printing.layoutPdf(
           onLayout: (_) async => pdf,
-          name:
-              'Ticket SRTB - ${ticket.pointDepart} > ${ticket.pointArrivee}',
+          name: 'Ticket SRTB - ${ticket.pointDepart} > ${ticket.pointArrivee}',
         );
       }
     } catch (_) {
@@ -80,7 +58,6 @@ class PrinterService {
     }
   }
 
-  // ── Build test page PDF ────────────────────────────────────────────────────
   Future<Uint8List> _buildTestPage() async {
     final doc      = pw.Document();
     final font     = await PdfGoogleFonts.nunitoRegular();
@@ -97,31 +74,48 @@ class PrinterService {
               pw.Container(
                 padding: const pw.EdgeInsets.all(24),
                 decoration: pw.BoxDecoration(
-                  border: pw.Border.all(
-                      color: PdfColors.blueGrey800, width: 2),
-                  borderRadius: pw.BorderRadius.circular(12),
+                  border: pw.Border.all(color: PdfColors.black, width: 1.5),
+                  borderRadius: pw.BorderRadius.circular(8),
                 ),
                 child: pw.Column(
                   children: [
-                    pw.Text(
-                      'SRTB - Test Imprimante',
-                      style: pw.TextStyle(
-                        fontSize: 22,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.blueGrey800,
-                      ),
-                    ),
-                    pw.SizedBox(height: 10),
+                   pw.Row(
+  mainAxisSize: pw.MainAxisSize.min,
+  children: [
+    pw.Text(
+      'S R T B',
+      style: pw.TextStyle(
+        color: PdfColors.black,
+        fontSize: 8,
+        fontWeight: pw.FontWeight.bold,
+        letterSpacing: 2,
+      ),
+    ),
+    pw.Container(
+      margin: const pw.EdgeInsets.symmetric(horizontal: 4),
+      width: 0.5,
+      height: 10,
+      color: PdfColors.grey600,
+    ),
+    pw.Text(
+      'BILLETTERIE',
+      style: pw.TextStyle(
+        color: PdfColors.grey700,
+        fontSize: 6,
+        letterSpacing: 1,
+      ),
+    ),
+  ],
+),
+                    pw.SizedBox(height: 8),
                     pw.Text(
                       'Connexion Lexmark reussie OK',
-                      style: pw.TextStyle(
-                          fontSize: 14, color: PdfColors.green700),
+                      style: pw.TextStyle(fontSize: 12, color: PdfColors.black),
                     ),
                     pw.SizedBox(height: 6),
                     pw.Text(
                       'Date: ${DateTime.now().toLocal()}',
-                      style: pw.TextStyle(
-                          fontSize: 10, color: PdfColors.grey600),
+                      style: pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
                     ),
                   ],
                 ),
@@ -134,47 +128,38 @@ class PrinterService {
     return doc.save();
   }
 
-  // ── Build ticket PDF ───────────────────────────────────────────────────────
-  //
-  // qty = 1  → single 120 mm ticket page.
-  // qty > 1  → one continuous page, height = qty × 120 mm, each unit stacked
-  //            vertically with its own unique ID and QR code.
-  // ─────────────────────────────────────────────────────────────────────────
   Future<Uint8List> _buildTicketPdf(
-      TicketData t, PaperFormat format) async {
+    TicketData t,
+    List<Map<String, String>> ticketUnits,
+    PaperFormat format,
+  ) async {
     final doc        = pw.Document();
     final font       = await PdfGoogleFonts.nunitoRegular();
     final fontBold   = await PdfGoogleFonts.nunitoBold();
     final fontItalic = await PdfGoogleFonts.nunitoItalic();
 
-    // One entry per physical ticket unit
-    final List<_SingleTicket> tickets = List.generate(t.quantite, (i) {
-      final id = TicketData.generateId();
-      final qrPayload = jsonEncode({
-        'id':    id,
-        'vente': t.venteId,
-        'seg':   t.segmentId,
-        'dep':   t.pointDepart,
-        'arr':   t.pointArrivee,
-        'tarif': t.typeTarif,
-        'pu':    t.prixUnitaire,
-        'agent': t.matriculeAgent,
-        'date':  t.date.toIso8601String(),
-        'idx':   i + 1,
-        'total': t.quantite,
-      });
-      return _SingleTicket(ticketId: id, qrPayload: qrPayload);
-    });
+    // Try to load the SRTB logo from assets
+    pw.MemoryImage? logoImage;
+    try {
+      final byteData = await rootBundle.load('assets/images/logo_srtb.png');
+      logoImage = pw.MemoryImage(byteData.buffer.asUint8List());
+    } catch (_) {
+      logoImage = null;
+    }
 
-    const double ticketHeightMm = 120;
+    // Reuse the pre-generated IDs — do NOT call generateId() again
+    final tickets = ticketUnits
+        .map((u) => _SingleTicket(ticketId: u['id']!, qrPayload: u['qr']!))
+        .toList();
+
+    const double ticketHeightMm = 90.0;
 
     if (format == PaperFormat.ticket58mm) {
       final pageHeight = ticketHeightMm * t.quantite * PdfPageFormat.mm;
-
       final pdfFormat = PdfPageFormat(
         58 * PdfPageFormat.mm,
         pageHeight,
-        marginAll: 3 * PdfPageFormat.mm,
+        marginAll: 0,
       );
 
       doc.addPage(
@@ -186,26 +171,15 @@ class PrinterService {
             italic: fontItalic,
           ),
           build: (_) => pw.Column(
+            mainAxisSize: pw.MainAxisSize.min,
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
             children: [
-              for (int i = 0; i < tickets.length; i++) ...[
-                _ticketLayout(t, tickets[i]),
-                if (i < tickets.length - 1)
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(vertical: 4),
-                    child: pw.Text(
-                      '- - - - - - - - - - - - - - - - - -',
-                      style: pw.TextStyle(
-                          color: PdfColors.grey400, fontSize: 6),
-                      textAlign: pw.TextAlign.center,
-                    ),
-                  ),
-              ],
+              for (final st in tickets) _ticketLayout(t, st, logoImage),
             ],
           ),
         ),
       );
     } else {
-      // A4: one ticket per page
       for (final st in tickets) {
         doc.addPage(
           pw.Page(
@@ -218,7 +192,7 @@ class PrinterService {
             build: (_) => pw.Center(
               child: pw.SizedBox(
                 width: 58 * PdfPageFormat.mm,
-                child: _ticketLayout(t, st),
+                child: _ticketLayout(t, st, logoImage),
               ),
             ),
           ),
@@ -229,214 +203,207 @@ class PrinterService {
     return doc.save();
   }
 
-  // ── Single ticket layout ───────────────────────────────────────────────────
-  //
-  // Rows:
-  //   Tarif          | <value>
-  //   Prix unitaire  | <value> millimes   ← compact detail row, no big number
-  //   Agent          | <value>
-  //   Date           | <value>
-  // ─────────────────────────────────────────────────────────────────────────
-  pw.Widget _ticketLayout(TicketData t, _SingleTicket st) {
-    final navy   = PdfColor.fromHex('#0D1B3E');
-    final gold   = PdfColor.fromHex('#D4A017');
+  pw.Widget _ticketLayout(TicketData t, _SingleTicket st, pw.MemoryImage? logo) {
     final isFree = t.montantTotal == 0;
-
     final String prixDisplay =
         isFree ? 'Gratuit' : '${t.prixUnitaire} millimes';
-    final PdfColor prixColor =
-        isFree ? PdfColors.green700 : navy;
 
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.center,
-      children: [
-        // ── Header ──────────────────────────────────────────────────────────
-        pw.Container(
-          width: double.infinity,
-          color: navy,
-          padding:
-              const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 6),
-          child: pw.Column(
-            children: [
-              pw.Text(
-                'S R T B',
-                style: pw.TextStyle(
-                  color: PdfColors.white,
-                  fontSize: 11,
-                  fontWeight: pw.FontWeight.bold,
-                  letterSpacing: 4,
-                ),
-              ),
-              pw.SizedBox(height: 1),
-              pw.Text(
-                'BILLETTERIE',
-                style:
-                    pw.TextStyle(color: gold, fontSize: 6, letterSpacing: 2),
-              ),
-            ],
-          ),
+    final dateStr =
+        '${t.date.day.toString().padLeft(2, '0')}/'
+        '${t.date.month.toString().padLeft(2, '0')}/'
+        '${t.date.year}  '
+        '${t.date.hour.toString().padLeft(2, '0')}:'
+        '${t.date.minute.toString().padLeft(2, '0')}';
+
+    const double hPad = 6.0;
+
+    return pw.SizedBox(
+      width: 58 * PdfPageFormat.mm,
+      height: 90 * PdfPageFormat.mm,
+      child: pw.Padding(
+        padding: pw.EdgeInsets.symmetric(
+          horizontal: hPad * PdfPageFormat.mm,
+          vertical: 4 * PdfPageFormat.mm,
         ),
-        pw.SizedBox(height: 5),
-
-        // ── Route ────────────────────────────────────────────────────────────
-        pw.Container(
-          padding:
-              const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 4),
-          decoration: pw.BoxDecoration(
-            border: pw.Border.all(color: navy, width: 0.8),
-            borderRadius: pw.BorderRadius.circular(4),
-          ),
-          child: pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.center,
-            children: [
-              pw.Text(
-                t.pointDepart,
-                style: pw.TextStyle(
-                  fontWeight: pw.FontWeight.bold,
-                  fontSize: 8,
-                  color: navy,
-                ),
-              ),
-              pw.Padding(
-                padding: const pw.EdgeInsets.symmetric(horizontal: 5),
-                child: pw.Text(
-                  '>',
-                  style:
-                      pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
-                ),
-              ),
-              pw.Text(
-                t.pointArrivee,
-                style: pw.TextStyle(
-                  fontWeight: pw.FontWeight.bold,
-                  fontSize: 8,
-                  color: navy,
-                ),
-              ),
-            ],
-          ),
-        ),
-        pw.SizedBox(height: 5),
-
-        // ── Detail rows ───────────────────────────────────────────────────────
-        pw.Divider(color: PdfColors.grey300),
-        _detailRow('Tarif', t.typeTarif, navy),
-        pw.Divider(color: PdfColors.grey300),
-        _detailRowColored('Prix unitaire', prixDisplay, navy, prixColor),
-        pw.Divider(color: PdfColors.grey300),
-
-        pw.SizedBox(height: 3),
-
-        // ── Agent + date ───────────────────────────────────────────────────────
-        _detailRow('Agent', '${t.matriculeAgent}', navy),
-        _detailRow(
-          'Date',
-          '${t.date.day.toString().padLeft(2, '0')}/'
-          '${t.date.month.toString().padLeft(2, '0')}/'
-          '${t.date.year}  '
-          '${t.date.hour.toString().padLeft(2, '0')}:'
-          '${t.date.minute.toString().padLeft(2, '0')}',
-          navy,
-        ),
-        pw.SizedBox(height: 5),
-
-        // ── Unique ticket ID ───────────────────────────────────────────────────
-        pw.Divider(color: PdfColors.grey300),
-        pw.SizedBox(height: 3),
-        pw.Container(
-          padding:
-              const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-          decoration: pw.BoxDecoration(
-            color: PdfColor.fromHex('#EFF3FF'),
-            borderRadius: pw.BorderRadius.circular(4),
-          ),
-          child: pw.Text(
-            st.ticketId,
-            style: pw.TextStyle(
-              fontSize: 6,
-              fontWeight: pw.FontWeight.bold,
-              color: navy,
-              letterSpacing: 0.8,
-            ),
-          ),
-        ),
-        pw.SizedBox(height: 5),
-
-        // ── QR Code (unique per ticket unit) ───────────────────────────────────
-        pw.Center(
-          child: pw.BarcodeWidget(
-            barcode: pw.Barcode.qrCode(),
-            data: st.qrPayload,
-            width: 60,
-            height: 60,
-            color: navy,
-            drawText: false,
-          ),
-        ),
-        pw.SizedBox(height: 5),
-
-        // ── Footer ─────────────────────────────────────────────────────────────
-        pw.Text(
-          '- - - - - - - - - - - -',
-          style: pw.TextStyle(color: PdfColors.grey400),
-        ),
-        pw.SizedBox(height: 3),
-        pw.Text(
-          'Merci pour votre voyage',
-          style: pw.TextStyle(
-            fontSize: 6,
-            color: PdfColors.grey500,
-            fontStyle: pw.FontStyle.italic,
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ── Detail row helpers ─────────────────────────────────────────────────────
-
-  pw.Widget _detailRow(String label, String value, PdfColor navy) =>
-      pw.Padding(
-        padding:
-            const pw.EdgeInsets.symmetric(vertical: 1.5, horizontal: 3),
-        child: pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          mainAxisSize: pw.MainAxisSize.min,
           children: [
-            pw.Text(
-              label,
-              style: pw.TextStyle(fontSize: 7, color: PdfColors.grey600),
+
+            // ── Header: logo LEFT, "S R T B" RIGHT ──────────────────────
+            pw.Row(
+  mainAxisAlignment: pw.MainAxisAlignment.center,
+  children: [
+    logo != null
+        ? pw.Image(logo, width: 28, height: 28, fit: pw.BoxFit.contain)
+        : pw.Text(
+            'SRTB',
+            style: pw.TextStyle(
+              color: PdfColors.black,
+              fontSize: 8,
+              fontWeight: pw.FontWeight.bold,
             ),
-            pw.Text(
-              value,
-              style: pw.TextStyle(
-                fontSize: 8,
-                fontWeight: pw.FontWeight.bold,
-                color: navy,
+          ),
+    pw.SizedBox(width: 6),
+    pw.Text(
+      'S R T B',
+      style: pw.TextStyle(
+        color: PdfColors.black,
+        fontSize: 8,
+        fontWeight: pw.FontWeight.bold,
+        letterSpacing: 2,
+      ),
+    ),
+    pw.Container(
+      margin: const pw.EdgeInsets.symmetric(horizontal: 4),
+      width: 0.5,
+      height: 10,
+      color: PdfColors.grey600,
+    ),
+    pw.Text(
+      'BILLETTERIE',
+      style: pw.TextStyle(
+        color: PdfColors.grey700,
+        fontSize: 6,
+        letterSpacing: 1,
+      ),
+    ),
+  ],
+),
+            pw.SizedBox(height: 4),
+            _fullDivider(),
+            pw.SizedBox(height: 4),
+
+            // ── Route box ────────────────────────────────────────────────
+            pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.black, width: 0.7),
+                borderRadius: pw.BorderRadius.circular(3),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.center,
+                children: [
+                  pw.Text(
+                    t.pointDepart,
+                    style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold,
+                      fontSize: 8,
+                      color: PdfColors.black,
+                    ),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 5),
+                    child: pw.Text(
+                      '>',
+                      style: pw.TextStyle(fontSize: 7, color: PdfColors.grey600),
+                    ),
+                  ),
+                  pw.Text(
+                    t.pointArrivee,
+                    style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold,
+                      fontSize: 8,
+                      color: PdfColors.black,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 4),
+            _fullDivider(),
+            pw.SizedBox(height: 2),
+
+            // ── Detail rows ──────────────────────────────────────────────
+            _detailRow('Tarif',         t.typeTarif),
+            _detailRow('Prix unitaire', prixDisplay),
+            pw.SizedBox(height: 4),
+            _detailRow('Agent', '${t.matriculeAgent}'),
+            _detailRow('Date',  dateStr),
+            pw.SizedBox(height: 4),
+            _fullDivider(),
+            pw.SizedBox(height: 4),
+
+            // ── Ticket ID ────────────────────────────────────────────────
+            pw.Center(
+              child: pw.Container(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey500, width: 0.5),
+                  borderRadius: pw.BorderRadius.circular(3),
+                ),
+                child: pw.Text(
+                  st.ticketId,
+                  style: pw.TextStyle(
+                    fontSize: 5.5,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.black,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ),
+            pw.SizedBox(height: 4),
+
+            // ── QR code ──────────────────────────────────────────────────
+            pw.Center(
+              child: pw.BarcodeWidget(
+                barcode: pw.Barcode.qrCode(),
+                data: st.qrPayload,
+                width: 46,
+                height: 46,
+                color: PdfColors.black,
+                drawText: false,
+              ),
+            ),
+            pw.SizedBox(height: 4),
+
+            // ── Footer ───────────────────────────────────────────────────
+            pw.Center(
+              child: pw.Text(
+                'Merci pour votre voyage',
+                style: pw.TextStyle(
+                  fontSize: 6,
+                  color: PdfColors.grey600,
+                  fontStyle: pw.FontStyle.italic,
+                ),
+              ),
+            ),
+            pw.SizedBox(height: 3),
+            pw.Center(
+              child: pw.Text(
+                '- - - - - - - - - - - - - - - - - -',
+                style: pw.TextStyle(color: PdfColors.grey500, fontSize: 5),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  pw.Widget _fullDivider() => pw.Container(
+        width: double.infinity,
+        height: 0.5,
+        color: PdfColors.grey400,
       );
 
-  /// Same layout as [_detailRow] but value uses a custom [valueColor].
-  pw.Widget _detailRowColored(
-          String label, String value, PdfColor navy, PdfColor valueColor) =>
-      pw.Padding(
-        padding:
-            const pw.EdgeInsets.symmetric(vertical: 1.5, horizontal: 3),
+  pw.Widget _detailRow(String label, String value) => pw.Padding(
+        padding: const pw.EdgeInsets.symmetric(vertical: 2, horizontal: 0),
         child: pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
             pw.Text(
               label,
-              style: pw.TextStyle(fontSize: 7, color: PdfColors.grey600),
+              style: pw.TextStyle(fontSize: 6.5, color: PdfColors.grey700),
             ),
             pw.Text(
               value,
               style: pw.TextStyle(
-                fontSize: 8,
+                fontSize: 6.5,
                 fontWeight: pw.FontWeight.bold,
-                color: valueColor,
+                color: PdfColors.black,
               ),
             ),
           ],
@@ -444,17 +411,15 @@ class PrinterService {
       );
 }
 
-// ── Internal helper: per-unit ticket identity ─────────────────────────────────
+
 class _SingleTicket {
   final String ticketId;
   final String qrPayload;
   const _SingleTicket({required this.ticketId, required this.qrPayload});
 }
 
-// ── Paper format enum ─────────────────────────────────────────────────────────
 enum PaperFormat { ticket58mm, a4 }
 
-// ── Ticket data model ─────────────────────────────────────────────────────────
 class TicketData {
   final String pointDepart;
   final String pointArrivee;
@@ -464,11 +429,7 @@ class TicketData {
   final int montantTotal;
   final int matriculeAgent;
   final DateTime date;
-
-  /// Used only by the in-app confirmation dialog QR widget.
-  /// The printer generates per-ticket QR codes internally.
   final String qrData;
-
   final int venteId;
   final int segmentId;
 
@@ -486,19 +447,18 @@ class TicketData {
     this.segmentId = 0,
   });
 
-  // ── Unique ticket ID generator ─────────────────────────────────────────────
-  //
-  // Format: SRTB-YYYYMMDD-XXXXXX
-  // ~1 M distinct values per day via 6-digit random suffix.
-  // ─────────────────────────────────────────────────────────────────────────
-  static String generateId() {
-    final now    = DateTime.now();
-    final rand   = math.Random();
-    final y      = now.year.toString();
-    final m      = now.month.toString().padLeft(2, '0');
-    final d      = now.day.toString().padLeft(2, '0');
-    final suffix = rand.nextInt(999999).toString().padLeft(6, '0');
-    return 'SRTB-$y$m$d-$suffix';
+  /// Sequence is GLOBAL — never resets across days.
+  /// Date in the ID reflects today for readability only.
+  static Future<String> generateId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final now   = DateTime.now();
+    final today = '${now.year}'
+                  '${now.month.toString().padLeft(2, '0')}'
+                  '${now.day.toString().padLeft(2, '0')}';
+    final seq = (prefs.getInt('srtb_ticket_seq') ?? 0) + 1;
+    await prefs.setInt('srtb_ticket_seq', seq);
+    final seqStr = seq.toString().padLeft(6, '0');
+    return 'SRTB-$today-$seqStr';
   }
 
   factory TicketData.fromVoyageMap({

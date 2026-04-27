@@ -1,39 +1,37 @@
 class ApiConstants {
   ApiConstants._();
 
-  static const String baseUrl      = 'http://192.168.1.13:8000';
+  static const String baseUrl      = 'http://10.19.204.100:8000';
   static const String billetterie  = '$baseUrl/billetterie';
 
-  // ── Web backend (Node.js) ──────────────────────────────────────────────────
-  // The heartbeat goes to the Node.js backend so the web dashboard
-  // (same server) can expose the SSE stream directly.
-  static const String webBaseUrl       = 'http://192.168.1.13:5000';
+  // ── Web backend (Node.js)
+  static const String webBaseUrl       = 'http://10.19.204.100:5000';
   static const String agentHeartbeat   = '$webBaseUrl/api/sync/heartbeat';
 
-  // ── Tickets ────────────────────────────────────────────────────────────────
+  // ── Tickets 
   static const String vendreTicket = '$billetterie/tickets/vendre';
   static const String logScan      = '$billetterie/scan/log';
 
-  // ── Voyages ────────────────────────────────────────────────────────────────
+  // ── Voyages
   static const String voyagesProgrammesBase    = '$billetterie/ventes/programmees';
   static const String voyagesNonProgrammesBase = '$billetterie/ventes/agent';
 
   static String voyagesProgrammes(int matricule)    => '$voyagesProgrammesBase/$matricule';
   static String voyagesNonProgrammes(int matricule) => '$voyagesNonProgrammesBase/$matricule';
 
-  // ── Clôture / Réouverture ──────────────────────────────────────────────────
+  // ── Clôture / Réouverture 
   static const String clotureJournee = '$billetterie/ventes/cloturer-journee';
   static const String reopenJournee  = '$billetterie/ventes/reopen-journee';
 
   static String cloturerVoyage(int idVente) => '$billetterie/vente/$idVente/cloturer';
   static String reopenVoyage(int idVente)   => '$billetterie/vente/$idVente/reopen';
 
-  // ── Segments ───────────────────────────────────────────────────────────────
+  // ── Segments
   static String voyageSegments(int idVente)                    => '$billetterie/voyages/$idVente/segments';
   static String ouvrirSegment(int idVente)                     => '$billetterie/voyages/$idVente/segment/ouvrir';
   static String cloturerSegment(int idVente, int idSegment)    => '$billetterie/voyages/$idVente/segments/$idSegment/cloturer';
 
-  // ── Timeouts ───────────────────────────────────────────────────────────────
+  // ── Timeouts
   static const Duration defaultTimeout = Duration(seconds: 6);
   static const Duration actionTimeout  = Duration(seconds: 10);
   static const Duration reopenTimeout  = Duration(seconds: 8);

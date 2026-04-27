@@ -41,7 +41,6 @@ class NouveauTicketPage extends StatefulWidget {
   State<NouveauTicketPage> createState() => NouveauTicketPageState();
 }
 
-/// Public state so TicketingPage can call resetAfterGratuit() via GlobalKey.
 class NouveauTicketPageState extends State<NouveauTicketPage> {
   String? pointDepart;
   String? pointArrivee;
@@ -64,8 +63,6 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
   OverlayEntry? _toastEntry;
   Timer?        _toastTimer;
 
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
-
   @override
   void initState() {
     super.initState();
@@ -80,8 +77,6 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     _toastEntry = null;
     super.dispose();
   }
-
-  // ── Public reset (called by parent after gratuit save) ─────────────────────
 
   void resetAfterGratuit() {
     if (!mounted) return;
@@ -142,8 +137,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     if (idVente != null) {
       try {
         final r = await http
-            .get(Uri.parse(
-                '${ApiConstants.billetterie}/voyages/$idVente/arrets'))
+            .get(Uri.parse('${ApiConstants.billetterie}/voyages/$idVente/arrets'))
             .timeout(ApiConstants.defaultTimeout);
         if (r.statusCode == 200) {
           final d = jsonDecode(r.body) as Map<String, dynamic>;
@@ -156,8 +150,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
 
     try {
       final r = await http
-          .get(Uri.parse(
-              '${ApiConstants.billetterie}/ligne/$idLigne/tarifs'))
+          .get(Uri.parse('${ApiConstants.billetterie}/ligne/$idLigne/tarifs'))
           .timeout(ApiConstants.defaultTimeout);
       if (r.statusCode == 200) {
         final d = jsonDecode(r.body) as Map<String, dynamic>;
@@ -181,8 +174,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
           if (segs.isNotEmpty) {
             final sorted = List<Map<String, dynamic>>.from(
                 segs.map((s) => s as Map<String, dynamic>))
-              ..sort((a, b) =>
-                  (a['ordre'] as int).compareTo(b['ordre'] as int));
+              ..sort((a, b) => (a['ordre'] as int).compareTo(b['ordre'] as int));
             segmentArrets = [
               for (final s in sorted) s['point_depart'] as String,
               sorted.last['point_arrivee'] as String,
@@ -197,8 +189,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     } else {
       if (mounted) {
         setState(() {
-          errorMessage =
-              AppLocalizations.of(context)!.horsLignePasDeCacheErreur;
+          errorMessage = AppLocalizations.of(context)!.horsLignePasDeCacheErreur;
           isLoading = false;
         });
       }
@@ -209,26 +200,22 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     final rawArrets     = List<String>.from(data['arrets'] as List);
     final orderedArrets = _orderArretsByDirection(rawArrets);
     final defaultDepart = orderedArrets.isNotEmpty ? orderedArrets.first : null;
-
-    final allTarifTypes =
-        List<Map<String, dynamic>>.from(data['tarif_types'] as List);
+    final allTarifTypes = List<Map<String, dynamic>>.from(data['tarif_types'] as List);
 
     setState(() {
-      isOffline           = fromCache;
-      arrets              = orderedArrets;
-      prixMap             = Map<String, int>.from(
-        (data['prix_map'] as Map)
-            .map((k, v) => MapEntry(k.toString(), v as int)),
+      isOffline          = fromCache;
+      arrets             = orderedArrets;
+      prixMap            = Map<String, int>.from(
+        (data['prix_map'] as Map).map((k, v) => MapEntry(k.toString(), v as int)),
       );
-      tarifTypes          = allTarifTypes;
-      isLoading           = false;
-      pointDepart         = defaultDepart;
-      pointArrivee        = null;
-      _minDepartureIndex  = 0;
+      tarifTypes         = allTarifTypes;
+      isLoading          = false;
+      pointDepart        = defaultDepart;
+      pointArrivee       = null;
+      _minDepartureIndex = 0;
 
       final normalTarif = tarifTypes.firstWhere(
-        (tarif) =>
-            (tarif['type_tarif'] as String).toLowerCase() == 'normal',
+        (tarif) => (tarif['type_tarif'] as String).toLowerCase() == 'normal',
         orElse: () => tarifTypes.isNotEmpty ? tarifTypes.first : {},
       );
       if (normalTarif.isNotEmpty) {
@@ -246,8 +233,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
   List<String> _orderArretsByDirection(List<String> raw) {
     if (raw.isEmpty) return raw;
     final voyageArrivee = widget.voyage['arrivee'] as String? ?? '';
-    if (raw.last.trim().toLowerCase() !=
-        voyageArrivee.trim().toLowerCase()) {
+    if (raw.last.trim().toLowerCase() != voyageArrivee.trim().toLowerCase()) {
       return raw.reversed.toList();
     }
     return raw;
@@ -270,9 +256,8 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
   }
 
   int? get _prixNormal {
-    if (pointDepart == null ||
-        pointArrivee == null ||
-        pointDepart == pointArrivee) return null;
+    if (pointDepart == null || pointArrivee == null || pointDepart == pointArrivee)
+      return null;
     return prixMap['$pointDepart|$pointArrivee'] ??
         prixMap['$pointArrivee|$pointDepart'];
   }
@@ -288,8 +273,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     return (base * (tarif['pourcentage'] as int) / 100).round();
   }
 
-  int? get _prixTotal =>
-      _prixUnitaire != null ? _prixUnitaire! * quantite : null;
+  int? get _prixTotal => _prixUnitaire != null ? _prixUnitaire! * quantite : null;
 
   int get _discountPct {
     if (typeTarif == null) return 0;
@@ -313,7 +297,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
       pointArrivee != null &&
       pointDepart != pointArrivee;
 
-  // ── Print after save ───────────────────────────────────────────────────────
+  // ── Print after save — reuses the SAME ticketUnits list ───────────────────
 
   Future<void> _printAfterSave({
     required String dep,
@@ -322,6 +306,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     required int qte,
     required int prixU,
     required int total,
+    required List<Map<String, String>> ticketUnits,
   }) async {
     final ticket = TicketData.fromVoyageMap(
       voyage: widget.voyage,
@@ -337,9 +322,10 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     final printer  = printers.isNotEmpty ? printers.first : null;
 
     final ok = await PrinterService.instance.printTicket(
-      ticket:  ticket,
-      printer: printer,
-      format:  PaperFormat.ticket58mm,
+      ticket:      ticket,
+      ticketUnits: ticketUnits,
+      printer:     printer,
+      format:      PaperFormat.ticket58mm,
     );
 
     if (mounted && !ok) {
@@ -354,6 +340,9 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     widget.onOpenGratuit?.call();
   }
 
+  // ── _vendreTicket: opens preview dialog with PLACEHOLDER IDs only.
+  // Real IDs are generated in _saveTicket AFTER the user taps Valider.
+  // This ensures cancelling never wastes sequence numbers.
   void _vendreTicket() {
     if (!_canValidate) return;
     final t = AppLocalizations.of(context)!;
@@ -365,8 +354,6 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     final snapPrixU = _prixUnitaire!;
     final snapPrixT = _prixTotal!;
     final snapAgent = widget.voyage['matricule_agent'] ?? 0;
-    final snapVente = widget.voyage['id'] ?? 0;
-    final snapSeg   = widget.voyage['id_segment'] ?? 0;
     final snapDate  = DateTime.now();
     final isFree    = snapPrixT == 0;
 
@@ -377,45 +364,37 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
         '${snapDate.hour.toString().padLeft(2, '0')}:'
         '${snapDate.minute.toString().padLeft(2, '0')}';
 
-    // One unique ID + QR payload per physical ticket unit
-    final List<Map<String, String>> ticketUnits =
-        List.generate(snapQte, (i) {
-      final id = TicketData.generateId();
-      final payload = jsonEncode({
-        'id':    id,
-        'vente': snapVente,
-        'seg':   snapSeg,
-        'dep':   snapDep,
-        'arr':   snapArr,
-        'tarif': snapTarif,
-        'pu':    snapPrixU,
-        'agent': snapAgent,
-        'date':  snapDate.toIso8601String(),
-        'idx':   i + 1,
-        'total': snapQte,
-      });
-      return {'id': id, 'qr': payload};
-    });
+    // ── Preview uses placeholder IDs — no counter increment yet ──────────────
+    // Real IDs (and the counter increment) happen only inside _saveTicket,
+    // so cancelling this dialog never wastes a sequence number.
+    final List<Map<String, String>> previewUnits = List.generate(
+      snapQte,
+      (i) => {
+        'id': '————————————————',          // shown in preview only
+        'qr': jsonEncode({
+          'preview': true,
+          'dep':  snapDep,
+          'arr':  snapArr,
+          'idx':  i + 1,
+        }),
+      },
+    );
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => Dialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20)),
-        insetPadding:
-            const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ── Scrollable stacked tickets ──────────────────────────────
             Flexible(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                 child: Column(
                   children: [
-                    for (int i = 0; i < ticketUnits.length; i++) ...[
-                      if (i > 0) _ticketSeparator(),
+                    for (int i = 0; i < previewUnits.length; i++)
                       _PrintedTicketWidget(
                         dep:       snapDep,
                         arr:       snapArr,
@@ -424,35 +403,27 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                         isFree:    isFree,
                         agent:     '$snapAgent',
                         dateStr:   dateStr,
-                        ticketId:  ticketUnits[i]['id']!,
-                        qrPayload: ticketUnits[i]['qr']!,
+                        ticketId:  previewUnits[i]['id']!,
+                        qrPayload: previewUnits[i]['qr']!,
                       ),
-                    ],
 
-                    // Offline notice
                     if (isOffline) ...[
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 7),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                         decoration: BoxDecoration(
                           color: Colors.orange.shade50,
                           borderRadius: BorderRadius.circular(10),
-                          border:
-                              Border.all(color: Colors.orange.shade200),
+                          border: Border.all(color: Colors.orange.shade200),
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.offline_bolt,
-                                size: 13,
-                                color: Colors.orange.shade700),
+                            Icon(Icons.offline_bolt, size: 13, color: Colors.orange.shade700),
                             const SizedBox(width: 6),
                             Flexible(
                               child: Text(
                                 t.horsLigneSynchronise,
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.orange.shade700),
+                                style: TextStyle(fontSize: 11, color: Colors.orange.shade700),
                               ),
                             ),
                           ],
@@ -466,25 +437,22 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
 
             // ── Action buttons ──────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               child: Row(
                 children: [
                   Expanded(
                     child: OutlinedButton(
+                      // Cancelling here does NOT increment the ticket counter
                       onPressed: () => Navigator.pop(context),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.grey.shade500,
                         side: BorderSide(color: Colors.grey.shade300),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 13),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: Text(
-                        t.annuler,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600),
-                      ),
+                      child: Text(t.annuler,
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -492,29 +460,27 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                     child: ElevatedButton(
                       onPressed: () {
                         Navigator.pop(context);
+                        // Pass null for ticketUnits → _saveTicket generates
+                        // real IDs (and increments counter) right here.
                         _saveTicket(
-                          snapDep:   snapDep,
-                          snapArr:   snapArr,
-                          snapTarif: snapTarif,
-                          snapQte:   snapQte,
-                          snapPrixU: snapPrixU,
-                          snapPrixT: snapPrixT,
+                          snapDep:     snapDep,
+                          snapArr:     snapArr,
+                          snapTarif:   snapTarif,
+                          snapQte:     snapQte,
+                          snapPrixU:   snapPrixU,
+                          snapPrixT:   snapPrixT,
                         );
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: navyMid,
                         foregroundColor: Colors.white,
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 13),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: Text(
-                        t.valider,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold),
-                      ),
+                      child: Text(t.valider,
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
@@ -526,25 +492,9 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     );
   }
 
-  // ── Dashed separator between stacked tickets ───────────────────────────────
-
-  Widget _ticketSeparator() => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          children: List.generate(
-            24,
-            (_) => Expanded(
-              child: Container(
-                height: 1,
-                margin: const EdgeInsets.symmetric(horizontal: 2),
-                color: Colors.grey.shade300,
-              ),
-            ),
-          ),
-        ),
-      );
-
   // ── Save ticket ────────────────────────────────────────────────────────────
+  // IDs are generated HERE (after the user confirms), so cancelling the
+  // preview dialog never wastes a sequence number.
 
   Future<void> _saveTicket({
     required String snapDep,
@@ -565,6 +515,31 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
 
     if (!mounted) return;
     setState(() => isSaving = true);
+
+    // ── Generate real IDs NOW — only on confirmed save ────────────────────
+    final snapDate  = DateTime.now();
+    final snapAgent = matricule ?? 0;
+    final snapVente = idVente;
+    final snapSeg   = idSegment ?? 0;
+
+    final List<Map<String, String>> ticketUnits = [];
+    for (int i = 0; i < snapQte; i++) {
+      final id = await TicketData.generateId();
+      final payload = jsonEncode({
+        'id':    id,
+        'vente': snapVente,
+        'seg':   snapSeg,
+        'dep':   snapDep,
+        'arr':   snapArr,
+        'tarif': snapTarif,
+        'pu':    snapPrixU,
+        'agent': snapAgent,
+        'date':  snapDate.toIso8601String(),
+        'idx':   i + 1,
+        'total': snapQte,
+      });
+      ticketUnits.add({'id': id, 'qr': payload});
+    }
 
     final result = await TicketRepository.saveTicket({
       'id_voyage':       idVente,
@@ -604,19 +579,18 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
 
       widget.onTicketSold?.call();
 
+      // Pass the real IDs to the printer — no new generateId() calls
       unawaited(_printAfterSave(
-        dep:   snapDep,
-        arr:   snapArr,
-        tarif: snapTarif,
-        qte:   snapQte,
-        prixU: snapPrixU,
-        total: snapPrixT,
+        dep:         snapDep,
+        arr:         snapArr,
+        tarif:       snapTarif,
+        qte:         snapQte,
+        prixU:       snapPrixU,
+        total:       snapPrixT,
+        ticketUnits: ticketUnits,
       ));
     } else {
-      _showToast(
-        t.ticketErreur(result.error ?? t.inconnu),
-        isError: true,
-      );
+      _showToast(t.ticketErreur(result.error ?? t.inconnu), isError: true);
     }
 
     if (mounted) setState(() => isSaving = false);
@@ -633,7 +607,6 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     final body = SingleChildScrollView(
       child: Column(
         children: [
-          // ── Standalone header ──────────────────────────────────────────
           if (!widget.embeddedMode)
             Container(
               width: double.infinity,
@@ -657,11 +630,8 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                             color: Colors.white.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(
-                            Icons.arrow_back_ios_new,
-                            color: Colors.white,
-                            size: 17,
-                          ),
+                          child: const Icon(Icons.arrow_back_ios_new,
+                              color: Colors.white, size: 17),
                         ),
                       ),
                       const Spacer(),
@@ -748,13 +718,12 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                   ),
                   const SizedBox(height: 14),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 7),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(30),
-                      border: Border.all(
-                          color: Colors.white.withOpacity(0.2)),
+                      border: Border.all(color: Colors.white.withOpacity(0.2)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -763,26 +732,19 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                           width: 7,
                           height: 7,
                           decoration: const BoxDecoration(
-                              color: goldLight,
-                              shape: BoxShape.circle),
+                              color: goldLight, shape: BoxShape.circle),
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          voyageDepart,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        Text(voyageDepart,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600)),
                         Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10),
-                          child: Icon(
-                            Icons.arrow_forward,
-                            color: Colors.white.withOpacity(0.4),
-                            size: 13,
-                          ),
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 10),
+                          child: Icon(Icons.arrow_forward,
+                              color: Colors.white.withOpacity(0.4), size: 13),
                         ),
                         Container(
                           width: 7,
@@ -790,19 +752,15 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                           decoration: BoxDecoration(
                             color: Colors.transparent,
                             shape: BoxShape.circle,
-                            border: Border.all(
-                                color: goldLight, width: 2),
+                            border: Border.all(color: goldLight, width: 2),
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          voyageArrivee,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        Text(voyageArrivee,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ),
@@ -836,8 +794,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                     navyMid,
                   ),
                 ),
-                Container(
-                    width: 1, height: 36, color: Colors.grey.shade100),
+                Container(width: 1, height: 36, color: Colors.grey.shade100),
                 Expanded(
                   child: _counterTile(
                     Icons.account_balance_wallet_outlined,
@@ -872,16 +829,13 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     return Scaffold(backgroundColor: surface, body: body);
   }
 
-  // ── Error state ────────────────────────────────────────────────────────────
-
   Widget _buildErrorState(AppLocalizations t) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.only(top: 60),
         child: Column(
           children: [
-            Icon(Icons.wifi_off_rounded,
-                size: 52, color: Colors.orange.shade200),
+            Icon(Icons.wifi_off_rounded, size: 52, color: Colors.orange.shade200),
             const SizedBox(height: 16),
             Text(
               errorMessage!,
@@ -892,10 +846,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
             const SizedBox(height: 20),
             TextButton.icon(
               onPressed: () {
-                setState(() {
-                  isLoading    = true;
-                  errorMessage = null;
-                });
+                setState(() { isLoading = true; errorMessage = null; });
                 _fetchData();
               },
               icon: const Icon(Icons.refresh, size: 16),
@@ -908,8 +859,6 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     );
   }
 
-  // ── Form ───────────────────────────────────────────────────────────────────
-
   Widget _buildForm(AppLocalizations t) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -918,8 +867,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
           Container(
             width: double.infinity,
             margin: const EdgeInsets.only(bottom: 16),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
               color: Colors.orange.shade50,
               borderRadius: BorderRadius.circular(12),
@@ -932,8 +880,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                 Flexible(
                   child: Text(
                     t.horsLigneActionsSync,
-                    style: TextStyle(
-                        fontSize: 12, color: Colors.orange.shade700),
+                    style: TextStyle(fontSize: 12, color: Colors.orange.shade700),
                   ),
                 ),
               ],
@@ -965,14 +912,9 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
               ),
               Padding(
                 padding: const EdgeInsets.only(left: 14),
-                child: Row(
-                  children: [
-                    Container(
-                        width: 1.5,
-                        height: 22,
-                        color: Colors.grey.shade200),
-                  ],
-                ),
+                child: Row(children: [
+                  Container(width: 1.5, height: 22, color: Colors.grey.shade200),
+                ]),
               ),
               _dropdownRow(
                 icon: Icons.location_on,
@@ -999,34 +941,28 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
         _card(
           child: Row(
             children: [
-              _qtyBtn(Icons.remove, quantite > 1,
-                  () => setState(() => quantite--)),
+              _qtyBtn(Icons.remove, quantite > 1, () => setState(() => quantite--)),
               Expanded(
                 child: Column(
                   children: [
                     Text(
                       '$quantite',
                       style: const TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.bold,
-                        color: navyDark,
-                      ),
+                          fontSize: 30,
+                          fontWeight: FontWeight.bold,
+                          color: navyDark),
                     ),
                     Text(
-                      quantite == 1
-                          ? t.ticketSingulier
-                          : t.ticketPluriel,
+                      quantite == 1 ? t.ticketSingulier : t.ticketPluriel,
                       style: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 11,
-                        letterSpacing: 0.8,
-                      ),
+                          color: Colors.grey.shade400,
+                          fontSize: 11,
+                          letterSpacing: 0.8),
                     ),
                   ],
                 ),
               ),
-              _qtyBtn(
-                  Icons.add, true, () => setState(() => quantite++)),
+              _qtyBtn(Icons.add, true, () => setState(() => quantite++)),
             ],
           ),
         ),
@@ -1058,8 +994,6 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
       ],
     );
   }
-
-  // ── Tarif grid ─────────────────────────────────────────────────────────────
 
   Widget _buildTarifGrid(AppLocalizations t) {
     final filtered = tarifTypes
@@ -1103,28 +1037,20 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                 width: 1.5,
               ),
               boxShadow: isSel
-                  ? [
-                      BoxShadow(
-                        color: accent.withOpacity(0.25),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ]
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
-                        blurRadius: 4,
-                      ),
-                    ],
+                  ? [BoxShadow(
+                      color: accent.withOpacity(0.25),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3))]
+                  : [BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 4)],
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10),
               child: Row(
                 children: [
                   Icon(
-                    discount > 0
-                        ? Icons.discount_rounded
-                        : Icons.person_rounded,
+                    discount > 0 ? Icons.discount_rounded : Icons.person_rounded,
                     color: isSel ? Colors.white : accent,
                     size: 16,
                   ),
@@ -1135,16 +1061,12 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: isSel
-                            ? Colors.white
-                            : Colors.grey.shade700,
-                      ),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: isSel ? Colors.white : Colors.grey.shade700),
                     ),
                   ),
-                  if (discount > 0)
-                    _tarifBadge('−$discount%', accent, isSel),
+                  if (discount > 0) _tarifBadge('−$discount%', accent, isSel),
                 ],
               ),
             ),
@@ -1153,8 +1075,6 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
       },
     );
   }
-
-  // ── Passage Gratuit chip ───────────────────────────────────────────────────
 
   Widget _buildGratuitChip(AppLocalizations t) {
     const Color accentGreen = Color(0xFF059669);
@@ -1169,8 +1089,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
               ? const LinearGradient(
                   colors: [Color(0xFF065F46), Color(0xFF059669)],
                   begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                )
+                  end: Alignment.bottomRight)
               : null,
           color: enabled ? null : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(10),
@@ -1179,13 +1098,10 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
             width: 1.5,
           ),
           boxShadow: enabled
-              ? [
-                  BoxShadow(
-                    color: accentGreen.withOpacity(0.30),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
-                  ),
-                ]
+              ? [BoxShadow(
+                  color: accentGreen.withOpacity(0.30),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3))]
               : [],
         ),
         child: Padding(
@@ -1193,9 +1109,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
           child: Row(
             children: [
               Icon(
-                enabled
-                    ? Icons.card_membership_rounded
-                    : Icons.lock_rounded,
+                enabled ? Icons.card_membership_rounded : Icons.lock_rounded,
                 color: enabled ? Colors.white : Colors.grey.shade400,
                 size: 16,
               ),
@@ -1206,17 +1120,13 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: enabled
-                        ? Colors.white
-                        : Colors.grey.shade400,
-                  ),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: enabled ? Colors.white : Colors.grey.shade400),
                 ),
               ),
               if (!enabled)
-                Icon(Icons.chevron_right,
-                    size: 14, color: Colors.grey.shade300),
+                Icon(Icons.chevron_right, size: 14, color: Colors.grey.shade300),
             ],
           ),
         ),
@@ -1224,12 +1134,8 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     );
   }
 
-  // ── Reusable sub-widgets ───────────────────────────────────────────────────
-
-  Widget _tarifBadge(String text, Color accent, bool isSel) =>
-      Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+  Widget _tarifBadge(String text, Color accent, bool isSel) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
           color: isSel
               ? Colors.white.withOpacity(0.25)
@@ -1239,60 +1145,49 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
         child: Text(
           text,
           style: TextStyle(
-            fontSize: 9,
-            fontWeight: FontWeight.w800,
-            color: isSel ? Colors.white : accent,
-          ),
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              color: isSel ? Colors.white : accent),
         ),
       );
 
   Widget _label(String text) => Text(
         text,
         style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: navyDark,
-          letterSpacing: 0.5,
-        ),
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: navyDark,
+            letterSpacing: 0.5),
       );
 
   Widget _card({required Widget child}) => Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: cardWhite,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: navyMid.withOpacity(0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 3),
-            ),
+                color: navyMid.withOpacity(0.06),
+                blurRadius: 12,
+                offset: const Offset(0, 3))
           ],
         ),
         child: child,
       );
 
-  Widget _counterTile(
-          IconData icon, String label, String value, Color color) =>
+  Widget _counterTile(IconData icon, String label, String value, Color color) =>
       Column(
         children: [
           Icon(icon, color: color, size: 20),
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: color),
-          ),
-          Text(
-            label,
-            style: TextStyle(
-                fontSize: 10,
-                color: Colors.grey.shade400,
-                letterSpacing: 0.3),
-          ),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.grey.shade400,
+                  letterSpacing: 0.3)),
         ],
       );
 
@@ -1323,15 +1218,12 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 9,
-                  color: Colors.grey.shade400,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.5,
-                ),
-              ),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 9,
+                      color: Colors.grey.shade400,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5)),
               DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   value: effectiveValue,
@@ -1340,18 +1232,15 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                           color: Colors.grey.shade400, fontSize: 13)),
                   isExpanded: true,
                   isDense: true,
-                  icon: Icon(
-                    Icons.expand_more,
-                    color: onChanged == null
-                        ? Colors.grey.shade300
-                        : navyLight.withOpacity(0.5),
-                    size: 18,
-                  ),
+                  icon: Icon(Icons.expand_more,
+                      color: onChanged == null
+                          ? Colors.grey.shade300
+                          : navyLight.withOpacity(0.5),
+                      size: 18),
                   style: const TextStyle(
-                    color: navyDark,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
+                      color: navyDark,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600),
                   onChanged: onChanged,
                   items: items
                       .map((a) => DropdownMenuItem(
@@ -1381,20 +1270,14 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
             color: enabled ? navyMid : Colors.grey.shade100,
             borderRadius: BorderRadius.circular(12),
             boxShadow: enabled
-                ? [
-                    BoxShadow(
-                      color: navyMid.withOpacity(0.3),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ]
+                ? [BoxShadow(
+                    color: navyMid.withOpacity(0.3),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2))]
                 : [],
           ),
-          child: Icon(
-            icon,
-            color: enabled ? Colors.white : Colors.grey.shade300,
-            size: 18,
-          ),
+          child: Icon(icon,
+              color: enabled ? Colors.white : Colors.grey.shade300, size: 18),
         ),
       );
 
@@ -1421,19 +1304,15 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                     ? LinearGradient(
                         colors: colors,
                         begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      )
+                        end: Alignment.bottomRight)
                     : null,
                 color: enabled ? null : Colors.grey.shade200,
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: enabled
-                    ? [
-                        BoxShadow(
-                          color: colors.first.withOpacity(0.35),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ]
+                    ? [BoxShadow(
+                        color: colors.first.withOpacity(0.35),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4))]
                     : [],
               ),
               child: Row(
@@ -1441,28 +1320,22 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
                 children: [
                   if (isLoading)
                     const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                          color: Colors.white, strokeWidth: 2),
-                    )
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2))
                   else if (icon != null)
                     Icon(icon,
-                        color: enabled
-                            ? Colors.white
-                            : Colors.grey.shade400,
+                        color: enabled ? Colors.white : Colors.grey.shade400,
                         size: 20),
                   const SizedBox(width: 8),
                   Text(
                     label,
                     style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.3,
-                      color: enabled
-                          ? Colors.white
-                          : Colors.grey.shade400,
-                    ),
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.3,
+                        color: enabled ? Colors.white : Colors.grey.shade400),
                   ),
                 ],
               ),
@@ -1499,18 +1372,14 @@ class _PriceCard extends StatelessWidget {
             ? const LinearGradient(
                 colors: [Color(0xFFDCFCE7), Color(0xFFF0FDF4)],
                 begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              )
+                end: Alignment.bottomRight)
             : const LinearGradient(
                 colors: [Color(0xFFEBF0FF), Color(0xFFF2F5FF)],
                 begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+                end: Alignment.bottomRight),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isFree
-              ? const Color(0xFF86EFAC)
-              : const Color(0xFFB8C8F0),
+          color: isFree ? const Color(0xFF86EFAC) : const Color(0xFFB8C8F0),
           width: 1.5,
         ),
       ),
@@ -1540,10 +1409,9 @@ class _PriceCard extends StatelessWidget {
                   Text(
                     '${prixNormal! * quantite} ${t.millimes}',
                     style: const TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey,
-                      decoration: TextDecoration.lineThrough,
-                    ),
+                        fontSize: 11,
+                        color: Colors.grey,
+                        decoration: TextDecoration.lineThrough),
                   ),
               ],
             ),
@@ -1554,24 +1422,19 @@ class _PriceCard extends StatelessWidget {
   }
 
   Widget _pill(String text, Color color) => Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
         decoration: BoxDecoration(
           color: color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: color.withOpacity(0.25)),
         ),
-        child: Text(
-          text,
-          style: TextStyle(
-              fontSize: 11,
-              color: color,
-              fontWeight: FontWeight.w700),
-        ),
+        child: Text(text,
+            style: TextStyle(
+                fontSize: 11, color: color, fontWeight: FontWeight.w700)),
       );
 }
 
-// ── Printed-style ticket widget for the confirmation dialog ───────────────────
+// ── Printed-style ticket widget (in-app preview dialog) ──────────────────────
 
 class _PrintedTicketWidget extends StatelessWidget {
   final String dep, arr, tarif, agent, dateStr, ticketId, qrPayload;
@@ -1593,151 +1456,165 @@ class _PrintedTicketWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      constraints: const BoxConstraints(maxWidth: 280),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFFE5E7EB), width: 1.5),
-        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFD1D5DB), width: 1),
+        borderRadius: BorderRadius.circular(6),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          // ── Header ────────────────────────────────────────────────────────
-          Container(
-            width: double.infinity,
-            color: navyDark,
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Column(
-              children: [
-                const Text(
-                  'S R T B',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 6,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                const Text(
-                  'BILLETTERIE',
-                  style: TextStyle(
-                    color: gold,
-                    fontSize: 8,
-                    letterSpacing: 3,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // ── Body ──────────────────────────────────────────────────────────
+          // ── Header: logo LEFT, "S R T B" RIGHT ────────────────────────
+        Container(
+  width: double.infinity,
+  color: Colors.white,
+  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+  child: Row(
+    mainAxisAlignment: MainAxisAlignment.center,
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      Image.asset(
+        'assets/images/logo_srtb.png',
+        height: 28,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => const Icon(
+          Icons.directions_bus,
+          size: 22,
+          color: Colors.black,
+        ),
+      ),
+      const SizedBox(width: 8),
+      const Text(
+        'S R T B',
+        style: TextStyle(
+          color: Colors.black,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 3,
+        ),
+      ),
+      Container(
+        margin: const EdgeInsets.symmetric(horizontal: 6),
+        width: 1,
+        height: 14,
+        color: Colors.black38,
+      ),
+      const Text(
+        'BILLETTERIE',
+        style: TextStyle(
+          color: Colors.black54,
+          fontSize: 8,
+          letterSpacing: 1.5,
+        ),
+      ),
+    ],
+  ),
+),
+          // ── Body ──────────────────────────────────────────────────────
           Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             child: Column(
               children: [
                 // Route box
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                   decoration: BoxDecoration(
-                    border: Border.all(color: navyDark, width: 1),
-                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.black, width: 0.8),
+                    borderRadius: BorderRadius.circular(4),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        dep,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                          color: navyDark,
-                        ),
+                      Flexible(
+                        child: Text(dep,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                                color: Colors.black),
+                            overflow: TextOverflow.ellipsis),
                       ),
                       Padding(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 8),
-                        child: Text(
-                          '>',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey.shade500),
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: Text('>',
+                            style: TextStyle(
+                                fontSize: 10, color: Colors.grey.shade500)),
                       ),
-                      Text(
-                        arr,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                          color: navyDark,
-                        ),
+                      Flexible(
+                        child: Text(arr,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                                color: Colors.black),
+                            overflow: TextOverflow.ellipsis),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
 
-                // Detail rows — same style for Tarif and Prix unitaire
-                Divider(height: 1, color: Colors.grey.shade200),
+                Divider(height: 1, thickness: 0.5, color: Colors.grey.shade300),
+                const SizedBox(height: 2),
+
+                // Detail rows
                 _detailRow('Tarif', tarif),
-                Divider(height: 1, color: Colors.grey.shade200),
-                _detailRow(
-                  'Prix unitaire',
-                  isFree ? 'Gratuit' : '$prixU millimes',
-                  valueColor: isFree ? const Color(0xFF16A34A) : null,
-                ),
-                Divider(height: 1, color: Colors.grey.shade200),
-
-                const SizedBox(height: 8),
-
-                // Agent + date
+                _detailRow('Prix unitaire',
+                    isFree ? 'Gratuit' : '$prixU millimes'),
+                const SizedBox(height: 4),
                 _detailRow('Agent', agent),
                 _detailRow('Date', dateStr),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
 
                 // Ticket ID badge
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEFF3FF),
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  child: Text(
-                    ticketId,
-                    style: const TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                      color: navyDark,
-                      letterSpacing: 0.8,
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      border:
+                          Border.all(color: Colors.grey.shade300, width: 0.6),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text(
+                      ticketId,
+                      style: const TextStyle(
+                          fontSize: 8,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                          letterSpacing: 0.5),
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
 
-                // QR Code
+                // QR code
                 QrImageView(
                   data: qrPayload,
                   version: QrVersions.auto,
-                  size: 110,
+                  size: 90,
                   backgroundColor: Colors.white,
                   eyeStyle: const QrEyeStyle(
-                      eyeShape: QrEyeShape.square, color: navyDark),
+                      eyeShape: QrEyeShape.square, color: Colors.black),
                   dataModuleStyle: const QrDataModuleStyle(
                       dataModuleShape: QrDataModuleShape.square,
-                      color: navyDark),
+                      color: Colors.black),
                 ),
                 const SizedBox(height: 6),
 
-                // Footer
                 Text(
                   'Merci pour votre voyage',
                   style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey.shade400,
-                    fontStyle: FontStyle.italic,
-                  ),
+                      fontSize: 9,
+                      color: Colors.grey.shade500,
+                      fontStyle: FontStyle.italic),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '- - - - - - - - - - - - - - - -',
+                  style:
+                      TextStyle(fontSize: 8, color: Colors.grey.shade400),
                 ),
               ],
             ),
@@ -1747,23 +1624,23 @@ class _PrintedTicketWidget extends StatelessWidget {
     );
   }
 
-  Widget _detailRow(String label, String value, {Color? valueColor}) =>
-      Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+  Widget _detailRow(String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                  fontSize: 11, color: Colors.grey.shade500),
-            ),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: valueColor ?? navyDark,
+            Text(label,
+                style:
+                    TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                value,
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black),
               ),
             ),
           ],
@@ -1775,11 +1652,9 @@ class _PrintedTicketWidget extends StatelessWidget {
 
 class _ToastWidget extends StatefulWidget {
   final String msg;
-  final Color  color;
+  final Color color;
   final IconData icon;
-
-  const _ToastWidget(
-      {required this.msg, required this.color, required this.icon});
+  const _ToastWidget({required this.msg, required this.color, required this.icon});
 
   @override
   State<_ToastWidget> createState() => _ToastWidgetState();
@@ -1797,10 +1672,8 @@ class _ToastWidgetState extends State<_ToastWidget>
     _ctrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 220));
     _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
-    _slide = Tween<Offset>(
-      begin: const Offset(1.0, 0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
+    _slide = Tween<Offset>(begin: const Offset(1.0, 0), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
     _ctrl.forward();
     Future.delayed(const Duration(milliseconds: 2100), () {
       if (mounted) _ctrl.reverse();
@@ -1835,10 +1708,9 @@ class _ToastWidgetState extends State<_ToastWidget>
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: widget.color.withOpacity(0.35),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
-                      ),
+                          color: widget.color.withOpacity(0.35),
+                          blurRadius: 16,
+                          offset: const Offset(0, 4))
                     ],
                   ),
                   child: Row(
@@ -1850,11 +1722,10 @@ class _ToastWidgetState extends State<_ToastWidget>
                         child: Text(
                           widget.msg,
                           style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            height: 1.3,
-                          ),
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              height: 1.3),
                         ),
                       ),
                     ],
