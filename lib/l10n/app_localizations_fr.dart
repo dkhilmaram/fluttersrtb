@@ -916,8 +916,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get scanBtnAssign => 'Compléter les infos';
 
   @override
+  String get scanOfflineCacheUsed =>
+      'Mode hors ligne – données chargées depuis le cache local';
+
+  @override
   String get scanSavedOfflineToast =>
-      'Enregistré hors ligne, synchronisation dès reconnexion';
+      'Enregistré localement, synchronisation à la reconnexion';
 
   @override
   String scanAlreadyValidated(String nom) {

@@ -408,8 +408,8 @@
 "scanDetectedSubtitle": "Titre de transport lu avec succès",
 "scanDetectedInfo": "Veuillez compléter les informations ci-dessous avant de valider.",
 "scanBtnAssign": "Compléter les infos",
-"scanSavedOfflineToast": "Enregistré hors ligne, synchronisation dès reconnexion",
-
+"scanOfflineCacheUsed": "Mode hors ligne – données chargées depuis le cache local",
+  "scanSavedOfflineToast": "Enregistré localement, synchronisation à la reconnexion",
   "scanAlreadyValidated": "Déjà validé aujourd'hui ({nom})",
   "@scanAlreadyValidated": {
     "placeholders": {
@@ -417,4 +417,3 @@
     }
   }
 }
-

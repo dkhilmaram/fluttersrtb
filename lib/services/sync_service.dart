@@ -70,7 +70,7 @@ class SyncService {
                 headers: {'Content-Type': 'application/json'},
                 body: jsonEncode({
                   'id_voyage':       ticket['id_voyage'],
-                  'id_segment':      ticket['id_segment'],
+                  'id_segment':      0,            // server resolves from point_depart
                   'point_depart':    ticket['point_depart'],
                   'point_arrivee':   ticket['point_arrivee'],
                   'type_tarif':      ticket['type_tarif'],
@@ -210,17 +210,17 @@ class SyncService {
                 Uri.parse(ApiConstants.logScan),
                 headers: {'Content-Type': 'application/json'},
                 body: jsonEncode({
-                  'id_voyage':        scan['id_voyage'],
-                  'id_segment':       scan['id_segment'],
-                  'scan_mode':        scan['scan_mode'],
-                  'numero_titre':     scan['numero_titre'],
-                  'nom_titulaire':    scan['nom_titulaire'],
-                  'type_abonnement':  scan['type_abonnement'],
-                  'organisme':        scan['organisme'],
-                  'ligne_titre':      scan['ligne_titre'],
-                  'expire':           scan['expire'],
-                  'date_scan':        scan['date_scan'],
-                  'matricule_agent':  scan['matricule_agent'],
+                  'id_voyage':       scan['id_voyage'],
+                  'id_segment':      0,            // server resolves from point_depart
+                  'scan_mode':       scan['scan_mode'],
+                  'numero_titre':    scan['numero_titre'],
+                  'nom_titulaire':   scan['nom_titulaire'],
+                  'type_abonnement': scan['type_abonnement'],
+                  'organisme':       scan['organisme'],
+                  'ligne_titre':     scan['ligne_titre'],
+                  'expire':          scan['expire'],
+                  'date_scan':       scan['date_scan'],
+                  'matricule_agent': scan['matricule_agent'],
                 }),
               )
               .timeout(ApiConstants.defaultTimeout);
@@ -256,7 +256,6 @@ class SyncService {
 
   // ── Heartbeat ──────────────────────────────────────────────────────────────
 
-  /// Always saves locally, then sends to server if online or queues if offline.
   static Future<void> _pushHeartbeat({
     required int pending,
     required int failed,
@@ -273,10 +272,8 @@ class SyncService {
       'app_version':     '1.0.0',
     });
 
-    // ── 1. Always persist locally first ────────────────────────────────────
     await _saveHeartbeatLocally(payload);
 
-    // ── 2. Send or queue depending on connectivity ──────────────────────────
     if (ConnectivityService.isConnected) {
       await _sendHeartbeatPayload(payload);
     } else {
@@ -284,7 +281,6 @@ class SyncService {
     }
   }
 
-  /// Persists every heartbeat to local history (online or offline).
   static Future<void> _saveHeartbeatLocally(String payload) async {
     try {
       final db = await LocalDatabase.db;
@@ -298,7 +294,6 @@ class SyncService {
     }
   }
 
-  /// Fire-and-forget HTTP send — never throws.
   static Future<void> _sendHeartbeatPayload(String payload) async {
     try {
       await http
@@ -314,7 +309,6 @@ class SyncService {
     }
   }
 
-  /// Persists a heartbeat payload to local DB for later replay (offline only).
   static Future<void> _queueHeartbeat(String payload) async {
     try {
       final db = await LocalDatabase.db;
@@ -328,7 +322,6 @@ class SyncService {
     }
   }
 
-  /// Replays all queued heartbeats in chronological order, then clears them.
   static Future<void> flushHeartbeatQueue() async {
     try {
       final db     = await LocalDatabase.db;

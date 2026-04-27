@@ -1,34 +1,14 @@
-// scan_tab_page.dart
-//
-// NFC / QR barcode scanner tab inside TicketingPage (tab index 2).
-//
-// ┌─ NFC card ─┐  Extracts hardware UID → DB lookup in `tickets` table
-// │            │  Found = valid/expired card shown. Not found = rejected.
-// └────────────┘
-// ┌─ QR code ──┐  Scans JSON payload → parsed directly, NO DB needed
-// │            │  Shows rich _NfcResultWidget (green = valid, red = expired)
-// └────────────┘
-//
-// Expiry rule: expire date == today → VALID. Only strictly before today = expired.
-//
-// Offline-first: validation always saves locally first.
-//   • Online  → TicketRepository sends to server immediately; scan_validation_log synced too.
-//   • Offline → both rows saved locally with statut_sync='pending'; SyncService picks them
-//               up on the next reconnect.
-//
-// pubspec.yaml dependencies required:
-//   mobile_scanner: ^5.2.3
-//   nfc_manager: ^3.3.0
-
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import '../../../l10n/app_localizations.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/constants/api_constants.dart';
 import '../../../data/database/daos/ticket_dao.dart';
 import '../../../data/repositories/ticket_repository.dart';
 import '../../../services/connectivity_service.dart';
@@ -63,7 +43,7 @@ class _ScanTabPageState extends State<ScanTabPage> {
   _ScanState _scanState = _ScanState.idle;
   Map<String, dynamic>? _nfcData;
   String? _errorMsg;
-  bool _isSaving    = false;
+  bool _isSaving     = false;
   int  _totalScanned = 0;
 
   OverlayEntry? _toastEntry;
@@ -117,7 +97,7 @@ class _ScanTabPageState extends State<ScanTabPage> {
       });
 
   // ══════════════════════════════════════════════════════════
-  // QR scanner — JSON payload only, never touches DB
+  // QR scanner — JSON payload only, never touches server
   // ══════════════════════════════════════════════════════════
 
   Future<void> _openBarcodeScanner() async {
@@ -129,8 +109,6 @@ class _ScanTabPageState extends State<ScanTabPage> {
       ),
     );
     if (raw == null || !mounted) return;
-
-    // QR always carries a full JSON payload — parse directly, no DB
     await _resolveQr(raw.trim());
   }
 
@@ -152,7 +130,7 @@ class _ScanTabPageState extends State<ScanTabPage> {
   }
 
   // ══════════════════════════════════════════════════════════
-  // NFC scanner — UID extracted → DB lookup only
+  // NFC scanner — UID extracted → server lookup
   // ══════════════════════════════════════════════════════════
 
   Future<void> _startNfcScan() async {
@@ -174,7 +152,6 @@ class _ScanTabPageState extends State<ScanTabPage> {
       onDiscovered: (NfcTag tag) async {
         try {
           debugPrint('📡 NFC tag data keys: ${tag.data.keys.toList()}');
-          debugPrint('📡 NFC tag data: ${tag.data}');
 
           final uid = _extractUidFromTag(tag);
           debugPrint('🔑 NFC UID extracted: "$uid"');
@@ -190,7 +167,6 @@ class _ScanTabPageState extends State<ScanTabPage> {
               _errorMsg  = _l.scanNfcUnreadable;
             });
           } else {
-            // NFC always goes to DB lookup — no JSON parsing
             await _resolveNfcByUid(uid.trim().toUpperCase());
           }
         } catch (e) {
@@ -247,21 +223,67 @@ class _ScanTabPageState extends State<ScanTabPage> {
   }
 
   // ══════════════════════════════════════════════════════════
-  // NFC resolve — DB lookup only
+  // NFC resolve — calls GET /billetterie/nfc/lookup/{uid}
+  //
+  // Offline fallback: if the server is unreachable, falls back
+  // to the local TicketDao cache so agents can still scan when
+  // connectivity is lost.
   // ══════════════════════════════════════════════════════════
 
   Future<void> _resolveNfcByUid(String uid) async {
     if (!mounted) return;
     setState(() => _scanState = _ScanState.loading);
 
-    debugPrint('🔎 NFC DB lookup for UID: "$uid"');
+    debugPrint('🔎 NFC server lookup for UID: "$uid"');
 
+    final isOnline = await ConnectivityService.isOnline();
+
+    if (isOnline) {
+      // ── Online path: ask the server ──────────────────────
+      try {
+        final uri      = Uri.parse(ApiConstants.nfcLookup(uid));
+        final response = await http
+            .get(uri)
+            .timeout(ApiConstants.defaultTimeout);
+
+        if (!mounted) return;
+
+        if (response.statusCode == 404) {
+          debugPrint('❌ UID not found on server: "$uid"');
+          setState(() {
+            _scanState = _ScanState.error;
+            _errorMsg  = _l.scanCardNotFound(uid);
+          });
+          return;
+        }
+
+        if (response.statusCode != 200) {
+          throw Exception('HTTP ${response.statusCode}');
+        }
+
+        final card = Map<String, dynamic>.from(
+            jsonDecode(response.body) as Map);
+        debugPrint('✅ UID found on server: $card');
+        await _applyParsedData(card, mode: _l.scanModeNfc);
+      } catch (e) {
+        debugPrint('⚠️ Server lookup failed, trying local cache: $e');
+        // Server reachable but threw — fall through to local
+        await _resolveNfcFromLocal(uid);
+      }
+    } else {
+      // ── Offline path: local cache only ───────────────────
+      debugPrint('📴 Offline — using local NFC cache for "$uid"');
+      await _resolveNfcFromLocal(uid);
+    }
+  }
+
+  /// Local fallback (TicketDao cache, populated when online).
+  Future<void> _resolveNfcFromLocal(String uid) async {
     try {
       final card = await TicketDao.findByCardId(uid);
       if (!mounted) return;
 
       if (card == null) {
-        debugPrint('❌ UID not found in DB: "$uid"');
         setState(() {
           _scanState = _ScanState.error;
           _errorMsg  = _l.scanCardNotFound(uid);
@@ -269,7 +291,7 @@ class _ScanTabPageState extends State<ScanTabPage> {
         return;
       }
 
-      debugPrint('✅ UID found in DB: $card');
+      _showToast(_l.scanOfflineCacheUsed, isWarning: true);
       await _applyParsedData(
         {
           'id':        uid,
@@ -282,7 +304,7 @@ class _ScanTabPageState extends State<ScanTabPage> {
         mode: _l.scanModeNfc,
       );
     } catch (e) {
-      debugPrint('❌ DB lookup error: $e');
+      debugPrint('❌ Local cache error: $e');
       if (mounted) {
         setState(() {
           _scanState = _ScanState.error;
@@ -294,10 +316,6 @@ class _ScanTabPageState extends State<ScanTabPage> {
 
   // ══════════════════════════════════════════════════════════
   // Apply parsed data (shared by QR and NFC)
-  //
-  // FIX: duplicate method removed. This single version retains the
-  // duplicate-scan check that was incorrectly lost in the second
-  // (incomplete) definition that was overwriting this one.
   // ══════════════════════════════════════════════════════════
 
   Future<void> _applyParsedData(
@@ -334,7 +352,6 @@ class _ScanTabPageState extends State<ScanTabPage> {
       });
       return;
     }
-    // ─────────────────────────────────────────────────────
 
     setState(() {
       _scanState = _ScanState.success;
@@ -368,81 +385,72 @@ class _ScanTabPageState extends State<ScanTabPage> {
 
   // ══════════════════════════════════════════════════════════
   // Save — offline-first (works for both QR and NFC)
-  //
-  // Strategy:
-  //   1. Always write scan_validation_log locally (statut_sync='pending').
-  //   2. Always call TicketRepository.saveTicket — that method already
-  //      writes to ticket_vendu_local first, then tries the server.
-  //   3. If we were offline the toast says "saved offline"; SyncService
-  //      will push both rows when connectivity is restored.
   // ══════════════════════════════════════════════════════════
 
-  Future<void> _validerNfc() async {
-    if (_nfcData == null) return;
-    if (_nfcData!['isExpired'] == true) return;
+ Future<void> _validerNfc() async {
+  if (_nfcData == null) return;
+  if (_nfcData!['isExpired'] == true) return;
 
-    setState(() => _isSaving = true);
+  setState(() => _isSaving = true);
 
-    final now       = DateTime.now().toIso8601String();
-    final idVoyage  = widget.voyage['id']               as int? ?? 0;
-    final idSegment = widget.segment['id_segment']       as int? ?? 0;
-    final agentId   = widget.voyage['matricule_agent']   as int? ?? 0;
+  final now      = DateTime.now().toIso8601String();
+  final idVoyage = widget.voyage['id']             as int? ?? 0;
+  final agentId  = widget.voyage['matricule_agent'] as int? ?? 0;
 
-    // ── Step 1: always log the scan locally ─────────────────
-    await TicketDao.insertScanLog(
-      idVoyage:       idVoyage,
-      idSegment:      idSegment,
-      scanMode:       _nfcData!['mode'] as String,
-      numeroTitre:    _nfcData!['id']   as String,
-      nomTitulaire:   _nfcData!['nom']  as String,
-      typeAbonnement: _nfcData!['type'] as String,
-      organisme:      _nfcData!['organisme'] as String,
-      ligneTitre:     _nfcData!['ligne']     as String,
-      expire:         _nfcData!['expire']    as String,
-      dateScan:       now,
-      matriculeAgent: agentId,
+  // id_segment is always 0 here — the server resolves the correct
+  // segment from point_depart, same as every other ticket save.
+
+  // Step 1: log the scan locally
+  await TicketDao.insertScanLog(
+    idVoyage:       idVoyage,
+    idSegment:      0,             // server resolves from point_depart
+    scanMode:       _nfcData!['mode']      as String,
+    numeroTitre:    _nfcData!['id']        as String,
+    nomTitulaire:   _nfcData!['nom']       as String,
+    typeAbonnement: _nfcData!['type']      as String,
+    organisme:      _nfcData!['organisme'] as String,
+    ligneTitre:     _nfcData!['ligne']     as String,
+    expire:         _nfcData!['expire']    as String,
+    dateScan:       now,
+    matriculeAgent: agentId,
+  );
+
+  // Step 2: save ticket row (offline-first via TicketRepository)
+  final isOnline = await ConnectivityService.isOnline();
+
+  final result = await TicketRepository.saveTicket({
+    'id_voyage':       idVoyage,
+    'id_segment':      0,          // server resolves from point_depart
+    'point_depart':    widget.segment['point_depart']  ?? widget.voyage['depart']  ?? '',
+    'point_arrivee':   widget.segment['point_arrivee'] ?? widget.voyage['arrivee'] ?? '',
+    'type_tarif':      '${_l.scanPrefix} ${_nfcData!['mode']} — ${_nfcData!['type']}',
+    'quantite':        1,
+    'prix_unitaire':   0,
+    'montant_total':   0,
+    'matricule_agent': agentId,
+    'numero_titre':    _nfcData!['id'],
+    'nom_titulaire':   _nfcData!['nom'],
+    'organisme':       _nfcData!['organisme'],
+    'ligne_titre':     _nfcData!['ligne'],
+  });
+
+  if (!mounted) return;
+  setState(() => _isSaving = false);
+
+  if (result.success) {
+    _showToast(
+      isOnline ? _l.scanValidatedToast : _l.scanSavedOfflineToast,
+      isWarning: !isOnline,
     );
-
-    // ── Step 2: save ticket row (offline-first via TicketRepository) ──
-    final isOnline = await ConnectivityService.isOnline();
-
-    final result = await TicketRepository.saveTicket({
-      'id_voyage':       idVoyage,
-      'id_segment':      idSegment,
-      'point_depart':    widget.segment['point_depart']  ?? widget.voyage['depart']  ?? '',
-      'point_arrivee':   widget.segment['point_arrivee'] ?? widget.voyage['arrivee'] ?? '',
-      'type_tarif':      '${_l.scanPrefix} ${_nfcData!['mode']} — ${_nfcData!['type']}',
-      'quantite':        1,
-      'prix_unitaire':   0,
-      'montant_total':   0,
-      'matricule_agent': agentId,
-      'numero_titre':    _nfcData!['id'],
-      'nom_titulaire':   _nfcData!['nom'],
-      'organisme':       _nfcData!['organisme'],
-      'ligne_titre':     _nfcData!['ligne'],
+    setState(() {
+      _totalScanned++;
+      _scanState = _ScanState.idle;
+      _nfcData   = null;
     });
-
-    if (!mounted) return;
-    setState(() => _isSaving = false);
-
-    if (result.success) {
-      // Online → immediate confirmation; offline → queued confirmation
-      if (isOnline) {
-        _showToast(_l.scanValidatedToast);
-      } else {
-        _showToast(_l.scanSavedOfflineToast, isWarning: true);
-      }
-      setState(() {
-        _totalScanned++;
-        _scanState = _ScanState.idle;
-        _nfcData   = null;
-      });
-    } else {
-      // TicketRepository already saved locally even on network failure,
-      // but if it returned an error it means even local write failed.
-      _showToast(_l.scanSaveError(result.error ?? ''), isError: true);
-    }
+  } else {
+    _showToast(_l.scanSaveError(result.error ?? ''), isError: true);
   }
+}
 
   // ══════════════════════════════════════════════════════════
   // Build
@@ -501,7 +509,7 @@ class _ScanTabPageState extends State<ScanTabPage> {
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 350),
             child: switch (_scanState) {
-              _ScanState.idle => _IdleWidget(
+              _ScanState.idle    => _IdleWidget(
                   key: const ValueKey('idle'), l: l),
               _ScanState.loading => _LoadingWidget(
                   key: const ValueKey('loading'), l: l),
@@ -513,7 +521,7 @@ class _ScanTabPageState extends State<ScanTabPage> {
                   onValidate: _validerNfc,
                   l: l,
                 ),
-              _ScanState.error => _ScanErrorWidget(
+              _ScanState.error   => _ScanErrorWidget(
                   key: const ValueKey('error'),
                   msg:     _errorMsg ?? l.scanInvalidTitle,
                   onRetry: _reset,
@@ -840,8 +848,7 @@ class _NfcResultWidget extends StatelessWidget {
                           borderRadius: BorderRadius.circular(12)),
                     ),
                     child: Text(l.annuler,
-                        style:
-                            const TextStyle(fontWeight: FontWeight.w600)),
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -1502,13 +1509,6 @@ class _ToastWidgetState extends State<_ToastWidget>
     super.dispose();
   }
 
-  // FIX: _ToastWidget is inserted directly into the Overlay via OverlayEntry.
-  // Overlay already provides a full-screen Stack context, so wrapping the
-  // widget in Positioned here is correct — but it must be the *root* widget
-  // returned from build(), which is exactly what OverlayEntry.builder expects.
-  // No change needed to the structure; the bug was that the original code had
-  // a stray `isAlreadyScannedToday` static method and duplicate `_applyParsedData`
-  // that caused compile errors before this widget was ever reached.
   @override
   Widget build(BuildContext context) => Positioned(
         top: MediaQuery.of(context).padding.top + 16,

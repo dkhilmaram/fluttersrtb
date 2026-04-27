@@ -419,11 +419,12 @@
 "scanDetectedSubtitle": "تمت قراءة تذكرة النقل بنجاح",
 "scanDetectedInfo": "يرجى إكمال المعلومات أدناه قبل التحقق.",
 "scanBtnAssign": "إكمال المعلومات",
-"scanSavedOfflineToast": "تم الحفظ محلياً، ستتم المزامنة عند استعادة الاتصال",
-"scanAlreadyValidated": "Already validated today ({nom})",
-"@scanAlreadyValidated": {
-  "placeholders": { "nom": { "type": "String" } }
+"scanOfflineCacheUsed": "وضع غير متصل – البيانات محملة من الذاكرة المحلية",
+  "scanSavedOfflineToast": "تم الحفظ محلياً، ستتم المزامنة عند استعادة الاتصال",
+  "scanAlreadyValidated": "تمت المصادقة اليوم بالفعل ({nom})",
+  "@scanAlreadyValidated": {
+    "placeholders": {
+      "nom": { "type": "String" }
+    }
+  }
 }
-  } 
-
-

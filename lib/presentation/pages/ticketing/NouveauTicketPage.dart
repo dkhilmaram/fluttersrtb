@@ -497,104 +497,103 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
   // preview dialog never wastes a sequence number.
 
   Future<void> _saveTicket({
-    required String snapDep,
-    required String snapArr,
-    required String snapTarif,
-    required int snapQte,
-    required int snapPrixU,
-    required int snapPrixT,
-  }) async {
-    final idVente   = widget.voyage['id'] as int?;
-    final idSegment = widget.voyage['id_segment'] as int?;
-    final matricule = widget.voyage['matricule_agent'] as int?;
+  required String snapDep,
+  required String snapArr,
+  required String snapTarif,
+  required int snapQte,
+  required int snapPrixU,
+  required int snapPrixT,
+}) async {
+  final idVente   = widget.voyage['id'] as int?;
+  final matricule = widget.voyage['matricule_agent'] as int?;
 
-    if (idVente == null) {
-      OfflineToastNotification.show(context);
-      return;
-    }
+  // id_segment is intentionally NOT read from widget.voyage —
+  // the server resolves the correct segment from point_depart.
 
-    if (!mounted) return;
-    setState(() => isSaving = true);
+  if (idVente == null) {
+    OfflineToastNotification.show(context);
+    return;
+  }
 
-    // ── Generate real IDs NOW — only on confirmed save ────────────────────
-    final snapDate  = DateTime.now();
-    final snapAgent = matricule ?? 0;
-    final snapVente = idVente;
-    final snapSeg   = idSegment ?? 0;
+  if (!mounted) return;
+  setState(() => isSaving = true);
 
-    final List<Map<String, String>> ticketUnits = [];
-    for (int i = 0; i < snapQte; i++) {
-      final id = await TicketData.generateId();
-      final payload = jsonEncode({
-        'id':    id,
-        'vente': snapVente,
-        'seg':   snapSeg,
-        'dep':   snapDep,
-        'arr':   snapArr,
-        'tarif': snapTarif,
-        'pu':    snapPrixU,
-        'agent': snapAgent,
-        'date':  snapDate.toIso8601String(),
-        'idx':   i + 1,
-        'total': snapQte,
-      });
-      ticketUnits.add({'id': id, 'qr': payload});
-    }
+  final snapDate  = DateTime.now();
+  final snapAgent = matricule ?? 0;
+  final snapVente = idVente;
 
-    final result = await TicketRepository.saveTicket({
-      'id_voyage':       idVente,
-      'id_segment':      idSegment ?? 0,
-      'point_depart':    snapDep,
-      'point_arrivee':   snapArr,
-      'type_tarif':      snapTarif,
-      'quantite':        snapQte,
-      'prix_unitaire':   snapPrixU,
-      'montant_total':   snapPrixT,
-      'matricule_agent': matricule ?? 0,
+  final List<Map<String, String>> ticketUnits = [];
+  for (int i = 0; i < snapQte; i++) {
+    final id = await TicketData.generateId();
+    final payload = jsonEncode({
+      'id':    id,
+      'vente': snapVente,
+      'seg':   0,          // server resolves — placeholder only in QR
+      'dep':   snapDep,
+      'arr':   snapArr,
+      'tarif': snapTarif,
+      'pu':    snapPrixU,
+      'agent': snapAgent,
+      'date':  snapDate.toIso8601String(),
+      'idx':   i + 1,
+      'total': snapQte,
+    });
+    ticketUnits.add({'id': id, 'qr': payload});
+  }
+
+  final result = await TicketRepository.saveTicket({
+    'id_voyage':       idVente,
+    'id_segment':      0,          // server resolves from point_depart
+    'point_depart':    snapDep,
+    'point_arrivee':   snapArr,
+    'type_tarif':      snapTarif,
+    'quantite':        snapQte,
+    'prix_unitaire':   snapPrixU,
+    'montant_total':   snapPrixT,
+    'matricule_agent': matricule ?? 0,
+  });
+
+  if (!mounted) return;
+  final t = AppLocalizations.of(context)!;
+
+  if (result.success) {
+    final usedIndex = arrets.indexOf(snapDep);
+    setState(() {
+      ticketsVendus += snapQte;
+      montantTotal  += snapPrixT;
+      if (usedIndex >= 0) _minDepartureIndex = usedIndex;
+      pointArrivee = null;
+      quantite     = 1;
+      isOffline    = result.wasOffline;
     });
 
-    if (!mounted) return;
-    final t = AppLocalizations.of(context)!;
-
-    if (result.success) {
-      final usedIndex = arrets.indexOf(snapDep);
-      setState(() {
-        ticketsVendus += snapQte;
-        montantTotal  += snapPrixT;
-        if (usedIndex >= 0) _minDepartureIndex = usedIndex;
-        pointArrivee = null;
-        quantite     = 1;
-        isOffline    = result.wasOffline;
-      });
-
-      if (result.wasOffline) {
-        _showToast(t.horsLigneTicketSauvegarde, isWarning: true);
-      } else {
-        _showToast(
-          snapPrixT == 0
-              ? t.passagesGratuitsEnregistres(snapQte)
-              : t.ticketsVendusToast(snapQte, snapPrixT),
-        );
-      }
-
-      widget.onTicketSold?.call();
-
-      // Pass the real IDs to the printer — no new generateId() calls
-      unawaited(_printAfterSave(
-        dep:         snapDep,
-        arr:         snapArr,
-        tarif:       snapTarif,
-        qte:         snapQte,
-        prixU:       snapPrixU,
-        total:       snapPrixT,
-        ticketUnits: ticketUnits,
-      ));
+    if (result.wasOffline) {
+      _showToast(t.horsLigneTicketSauvegarde, isWarning: true);
     } else {
-      _showToast(t.ticketErreur(result.error ?? t.inconnu), isError: true);
+      _showToast(
+        snapPrixT == 0
+            ? t.passagesGratuitsEnregistres(snapQte)
+            : t.ticketsVendusToast(snapQte, snapPrixT),
+      );
     }
 
-    if (mounted) setState(() => isSaving = false);
+    widget.onTicketSold?.call();
+
+    unawaited(_printAfterSave(
+      dep:         snapDep,
+      arr:         snapArr,
+      tarif:       snapTarif,
+      qte:         snapQte,
+      prixU:       snapPrixU,
+      total:       snapPrixT,
+      ticketUnits: ticketUnits,
+    ));
+  } else {
+    _showToast(t.ticketErreur(result.error ?? t.inconnu), isError: true);
   }
+
+  if (mounted) setState(() => isSaving = false);
+}
 
   // ── Build ──────────────────────────────────────────────────────────────────
 

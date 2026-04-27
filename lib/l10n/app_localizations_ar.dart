@@ -903,11 +903,15 @@ class AppLocalizationsAr extends AppLocalizations {
   String get scanBtnAssign => 'إكمال المعلومات';
 
   @override
+  String get scanOfflineCacheUsed =>
+      'وضع غير متصل – البيانات محملة من الذاكرة المحلية';
+
+  @override
   String get scanSavedOfflineToast =>
       'تم الحفظ محلياً، ستتم المزامنة عند استعادة الاتصال';
 
   @override
   String scanAlreadyValidated(String nom) {
-    return 'Already validated today ($nom)';
+    return 'تمت المصادقة اليوم بالفعل ($nom)';
   }
 }

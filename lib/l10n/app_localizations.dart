@@ -1712,10 +1712,16 @@ abstract class AppLocalizations {
   /// **'Compléter les infos'**
   String get scanBtnAssign;
 
+  /// No description provided for @scanOfflineCacheUsed.
+  ///
+  /// In fr, this message translates to:
+  /// **'Mode hors ligne – données chargées depuis le cache local'**
+  String get scanOfflineCacheUsed;
+
   /// No description provided for @scanSavedOfflineToast.
   ///
   /// In fr, this message translates to:
-  /// **'Enregistré hors ligne, synchronisation dès reconnexion'**
+  /// **'Enregistré localement, synchronisation à la reconnexion'**
   String get scanSavedOfflineToast;
 
   /// No description provided for @scanAlreadyValidated.

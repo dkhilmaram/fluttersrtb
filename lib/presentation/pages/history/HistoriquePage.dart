@@ -140,7 +140,6 @@ class _HistoriquePageState extends State<HistoriquePage>
                 for (final s in segs)
                   (s['id_segment'] as int): Map<String, dynamic>.from(s),
               };
-              // Re-sort tickets now that we have segment ordre info
               _sortBySegmentThenDate(_allTickets);
               _sortBySegmentThenDate(_tickets);
             });
@@ -163,7 +162,6 @@ class _HistoriquePageState extends State<HistoriquePage>
       return;
     }
 
-    // Fire segment fetch in background — re-sorts tickets when it completes
     _fetchSegments(id);
 
     final localRows = await TicketDao.getTicketsByVoyage(id);
@@ -195,8 +193,6 @@ class _HistoriquePageState extends State<HistoriquePage>
             );
           }
 
-          // ── Seed _segmentMap from server ticket rows so sorting works
-          // even before _fetchSegments completes
           for (final st in serverList) {
             final segId    = (st['id_segment']    as num?)?.toInt();
             final segOrdre = (st['segment_ordre'] as num?)?.toInt();
@@ -288,8 +284,6 @@ class _HistoriquePageState extends State<HistoriquePage>
     );
   }
 
-  /// Sort first by segment ordre (from _segmentMap), then newest-first within
-  /// each segment. Tickets with no segment go last.
   void _sortBySegmentThenDate(List list) {
     list.sort((a, b) {
       final aSegId = a['id_segment'] as int?;
@@ -370,7 +364,6 @@ class _HistoriquePageState extends State<HistoriquePage>
     return Map.fromEntries(entries);
   }
 
-  /// Groups tickets by integer id_segment and sorts by segment ordre.
   Map<int?, List<dynamic>> get _segmentBreakdown {
     final map = <int?, List<dynamic>>{};
     for (final t in _tickets) {
@@ -802,8 +795,6 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
     );
   }
 
-  /// Groups the ticket list visually by segment with a segment chip header,
-  /// then by day within each segment.
   List<Widget> _buildTicketsBySegment(_HistoriquePageState p, AppLocalizations l) {
     final widgets = <Widget>[];
     int?    lastSeg;
@@ -814,16 +805,16 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
       final segId = t['id_segment'] as int?;
       final day   = p._formatDay(t['date_heure']);
 
-      // ── Segment header ────────────────────────────────────
+      // ── Segment header
       if (segId != lastSeg) {
         lastSeg = segId;
-        lastDay = null; // reset day grouping for new segment
+        lastDay = null;
         if (i > 0) widgets.add(const SizedBox(height: 16));
         widgets.add(_segmentChip(p, segId));
         widgets.add(const SizedBox(height: 8));
       }
 
-      // ── Day header within segment ─────────────────────────
+      // ── Day header within segment
       if (day != lastDay) {
         lastDay = day;
         widgets.add(_dayChip(day));
@@ -907,7 +898,7 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
       ),
       child: Column(
         children: [
-          // ── Card header ────────────────────────────────────
+          // ── Card header ──────────────────────────────────────
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             decoration: BoxDecoration(
@@ -915,11 +906,10 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
               borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
               border: Border(bottom: BorderSide(color: color.withOpacity(0.15))),
             ),
-            // ── FIX: use Row with Flexible left + fixed right ─
             child: Row(
               children: [
-                // LEFT: tarif badge — shrinks if needed
-                Flexible(
+                // Tarif badge
+                Expanded(
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                     decoration: BoxDecoration(
@@ -936,6 +926,7 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                           child: Text(
                             type.isEmpty ? l.inconnu : type,
                             overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                             style: TextStyle(
                                 color: color,
                                 fontSize: 11,
@@ -946,50 +937,46 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                // RIGHT: sync badge + time + qty — never overflows
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (t['_statut_sync'] == 'pending')
-                      _syncBadge(const Color(0xFFD97706),
-                          Icons.cloud_upload_outlined, l.enAttenteSyncLabel)
-                    else if (t['_statut_sync'] == 'failed')
-                      _syncBadge(
-                          _clrErr, Icons.cloud_off_outlined, l.echecSyncLabel),
-                    Icon(Icons.access_time_rounded,
-                        size: 11, color: Colors.white.withOpacity(0.3)),
-                    const SizedBox(width: 3),
-                    Text(
-                      p._formatTime(t['date_heure']),
-                      style: TextStyle(
-                          fontSize: 11, color: Colors.white.withOpacity(0.45)),
-                    ),
-                    if (qty > 1) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.07),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                              color: Colors.white.withOpacity(0.12)),
-                        ),
-                        child: Text('×$qty',
-                            style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ],
+                const SizedBox(width: 6),
+                // Sync status — bare icon only, no container/text
+                if (t['_statut_sync'] == 'pending') ...[
+                  Icon(Icons.cloud_upload_outlined,
+                      size: 13, color: const Color(0xFFD97706)),
+                  const SizedBox(width: 4),
+                ],
+                if (t['_statut_sync'] == 'failed') ...[
+                  Icon(Icons.cloud_off_outlined, size: 13, color: _clrErr),
+                  const SizedBox(width: 4),
+                ],
+                // Clock icon
+                Icon(Icons.access_time_rounded,
+                    size: 11, color: Colors.white.withOpacity(0.3)),
+                const SizedBox(width: 3),
+                // Time in a fixed-width box
+                SizedBox(
+                  width: 36,
+                  child: Text(
+                    p._formatTime(t['date_heure']),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.white.withOpacity(0.45)),
+                  ),
                 ),
+                // Qty as plain text
+                if (qty > 1) ...[
+                  const SizedBox(width: 4),
+                  Text('×$qty',
+                      style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold)),
+                ],
               ],
             ),
           ),
 
-          // ── Card body ──────────────────────────────────────
+          // ── Card body ────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
@@ -1008,10 +995,11 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                                 color: _clrOk, shape: BoxShape.circle),
                           ),
                           const SizedBox(width: 5),
-                          Flexible(
+                          Expanded(
                             child: Text(
                               t['point_depart'] ?? '',
                               overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                               style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 13,
@@ -1033,10 +1021,11 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                             ),
                           ),
                           const SizedBox(width: 5),
-                          Flexible(
+                          Expanded(
                             child: Text(
                               t['point_arrivee'] ?? '',
                               overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                               style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 13,
@@ -1051,8 +1040,7 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                           spacing: 6, runSpacing: 4,
                           children: [
                             if (segLbl != null)
-                              p.smallTag(
-                                  Icons.route, segLbl, _goldLight, _goldLight),
+                              p.smallTag(Icons.route, segLbl, _goldLight, _goldLight),
                             if (t['nom_ligne'] != null)
                               p.smallTag(Icons.directions_bus, t['nom_ligne'],
                                   Colors.white54, Colors.white),
@@ -1065,31 +1053,37 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
 
                 const SizedBox(width: 12),
 
-                // Price
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    if (qty > 1)
-                      Text(
-                        l.prixUnitaireParTicket(t['prix_unitaire'] as int? ?? 0),
-                        style: TextStyle(
-                            fontSize: 10, color: Colors.white.withOpacity(0.3)),
-                      ),
-                    const SizedBox(height: 2),
-                    Text(
-                      isFree ? l.gratuit : '${t['montant_total']}',
-                      style: TextStyle(
-                        fontSize: isFree ? 15 : 22,
-                        fontWeight: FontWeight.bold,
-                        color: isFree ? _clrOk : _goldLight,
-                      ),
-                    ),
-                    if (!isFree)
-                      Text(l.millimes,
+                // Price — fixed width
+                SizedBox(
+                  width: 80,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (qty > 1)
+                        Text(
+                          l.prixUnitaireParTicket(t['prix_unitaire'] as int? ?? 0),
+                          textAlign: TextAlign.right,
                           style: TextStyle(
                               fontSize: 10,
-                              color: Colors.white.withOpacity(0.3))),
-                  ],
+                              color: Colors.white.withOpacity(0.3)),
+                        ),
+                      const SizedBox(height: 2),
+                      Text(
+                        isFree ? l.gratuit : '${t['montant_total']}',
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          fontSize: isFree ? 15 : 22,
+                          fontWeight: FontWeight.bold,
+                          color: isFree ? _clrOk : _goldLight,
+                        ),
+                      ),
+                      if (!isFree)
+                        Text(l.millimes,
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.white.withOpacity(0.3))),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -1098,26 +1092,6 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
       ),
     );
   }
-
-  Widget _syncBadge(Color bg, IconData icon, String label) => Container(
-    margin: const EdgeInsets.only(right: 6),
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-    decoration: BoxDecoration(
-      color: bg.withOpacity(0.15),
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: bg.withOpacity(0.4)),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: bg, size: 10),
-        const SizedBox(width: 3),
-        Text(label,
-            style: TextStyle(
-                color: bg, fontSize: 9, fontWeight: FontWeight.bold)),
-      ],
-    ),
-  );
 
   Widget _buildSegmentTab(_HistoriquePageState p, AppLocalizations l) {
     final segs     = p._segmentBreakdown;
@@ -1222,6 +1196,26 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
     );
   }
 
+  // ─────────────────────────────────────────────────────────
+  // FIX: _buildSegmentCard header Row overflow
+  //
+  // Root cause: the Row had three children —
+  //   1. A pill badge (intrinsic width, could be wide)
+  //   2. An Expanded route text  ← already fine
+  //   3. A plain Text for revenue ← unconstrained, pushed out
+  //
+  // The badge pill used a plain Container with no max-width cap,
+  // so on narrow screens (constrained to ~260 px) the badge +
+  // route label + revenue amount summed wider than the row.
+  //
+  // Fix applied:
+  //   • Wrap the badge pill in a ConstrainedBox(maxWidth: 130) so
+  //     it can never eat more than half the row on small screens.
+  //   • Keep the route label in an Expanded so it flexes freely.
+  //   • Wrap the revenue Text in a Column inside a fixed SizedBox
+  //     (width: 90) with textAlign: TextAlign.right so it is
+  //     always right-aligned and never grows beyond its allotment.
+  // ─────────────────────────────────────────────────────────
   Widget _buildSegmentCard(
     _HistoriquePageState p,
     AppLocalizations l,
@@ -1252,6 +1246,7 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
       ),
       child: Column(
         children: [
+          // ── FIXED header ──────────────────────────────────
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             decoration: BoxDecoration(
@@ -1260,53 +1255,75 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
               border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.06))),
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: clr.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: clr.withOpacity(0.25)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(isUnknown ? Icons.help_outline : Icons.route,
-                          color: clr, size: 12),
-                      const SizedBox(width: 5),
-                      Flexible(
-                        child: Text(
-                          label,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              color: clr,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold),
+                // ── Badge pill: constrained so it never crowds out revenue
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 130),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: clr.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: clr.withOpacity(0.25)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(isUnknown ? Icons.help_outline : Icons.route,
+                            color: clr, size: 12),
+                        const SizedBox(width: 5),
+                        Flexible(
+                          child: Text(
+                            label,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: TextStyle(
+                                color: clr,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
+
+                // ── Route text: flex-fills leftover space
                 if (!isUnknown && dep.isNotEmpty) ...[
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       '$dep → $arr',
                       overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                       style: TextStyle(
                           fontSize: 11, color: Colors.white.withOpacity(0.4)),
                     ),
                   ),
                 ] else
                   const Spacer(),
-                Text('$recette ${l.millimes}',
+
+                // ── Revenue: fixed-width column, always right-aligned
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 90,
+                  child: Text(
+                    '$recette ${l.millimes}',
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                     style: const TextStyle(
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white)),
+                        color: Colors.white),
+                  ),
+                ),
               ],
             ),
           ),
+
+          // ── Stats row ─────────────────────────────────────
           IntrinsicHeight(
             child: Row(
               children: [

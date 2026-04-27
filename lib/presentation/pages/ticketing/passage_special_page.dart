@@ -138,7 +138,7 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
 
   final result = await TicketRepository.saveTicket({
     'id_voyage':       widget.voyage['id'] as int? ?? 0,
-    'id_segment':      widget.segment['id_segment'] as int? ?? 0,
+    'id_segment':      0,          // server resolves from point_depart
     'point_depart':    widget.segment['point_depart'] ?? widget.voyage['depart'] ?? '',
     'point_arrivee':   widget.segment['point_arrivee'] ?? widget.voyage['arrivee'] ?? '',
     'type_tarif':      buildTypeTarif(selectedKey!),
