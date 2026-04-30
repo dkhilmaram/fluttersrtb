@@ -21,7 +21,7 @@ import '../../widgets/offline_toast_notification.dart';
 // ─────────────────────────────────────────────────────────────
 // ⚠️  CONFIGURE THIS before shipping
 // ─────────────────────────────────────────────────────────────
-const String _kReportRecipient = 'khalilbenritha@gmail.com';
+const String _kReportRecipient = 'dkhilmaram12@gmail.com';
 const String _kSmtpHost        = 'smtp.gmail.com';
 const int    _kSmtpPort        = 587;
 const String _kSmtpUser        = 'dkhilmaram0@gmail.com';
@@ -501,6 +501,21 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     } catch (_) { return false; }
   }
 
+  /// Returns "HH:mm:ss" from a DateTime, padded.
+  String _formatTime(DateTime dt) {
+    final h  = dt.hour.toString().padLeft(2, '0');
+    final mi = dt.minute.toString().padLeft(2, '0');
+    final s  = dt.second.toString().padLeft(2, '0');
+    return '$h:$mi:$s';
+  }
+
+  /// Returns "dd/MM/yyyy" from a DateTime.
+  String _formatDate(DateTime dt) {
+    final d = dt.day.toString().padLeft(2, '0');
+    final m = dt.month.toString().padLeft(2, '0');
+    return '$d/$m/${dt.year}';
+  }
+
   /// Fetches segment metadata for all voyages.
   /// Returns Map<id_segment, segment_row> so we can look up labels by int key.
   Future<Map<int, Map<String, dynamic>>> _fetchAllSegments(
@@ -635,16 +650,21 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
   }) async {
 
     // ── Local helper: int id_segment → "Seg. 1 · ras jebel → aousja" ──
-    String segLabel(dynamic rawId) {
+  String segLabel(dynamic rawId) {
       final id = rawId == null ? null : int.tryParse(rawId.toString());
       if (id == null || id == 0) return '—';
       final seg = segmentMap[id];
-      if (seg == null) return '#$id';
-      final ordre = seg['ordre'];
-      final dep   = seg['point_depart']  ?? '';
-      final arr   = seg['point_arrivee'] ?? '';
-      return 'Seg. $ordre · $dep → $arr';
+      if (seg == null) return 'Seg. #$id';
+      return 'Seg. ${seg['ordre']}';
     }
+
+    // ── Local helper: raw id_segment → int or null ──
+   int? segIdInt(dynamic rawId) {
+  if (rawId == null) return null;
+  final str = rawId.toString().trim();
+  if (str.isEmpty || str == '0' || str == 'null') return null;
+  return int.tryParse(str);
+}
 
     final excel = xl.Excel.createExcel();
     excel.delete('Sheet1');
@@ -717,36 +737,43 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     resume.setColumnWidth(1, 22);
 
     // ── 2. Tickets ──
+    // Columns: #, id_segment, Date, Heure (HH:mm:ss), Voyage, Départ, Arrivée,
+    //          Segment label, Tarif, Qté, Prix unit. (ms), Total (ms), Sync
     final ticketsSheet = excel['Tickets'];
     final tHeaders = [
-      '#', 'Date', 'Heure', 'Voyage', 'Départ', 'Arrivée',
+      '#', 'id_segment', 'Date', 'Heure', 'Voyage', 'Départ', 'Arrivée',
       'Segment', 'Tarif', 'Qté', 'Prix unit. (ms)', 'Total (ms)', 'Sync',
     ];
     for (int c = 0; c < tHeaders.length; c++) header(ticketsSheet, 0, c, tHeaders[c]);
 
     for (int i = 0; i < allTickets.length; i++) {
-      final t     = allTickets[i];
+      final t      = allTickets[i];
       final isFree = ((t['montant_total'] as num? ?? 0).toInt()) == 0;
       final dt     = DateTime.tryParse(t['date_heure'] ?? '');
       final bg     = i.isEven ? '#F9FAFB' : '#FFFFFF';
-      cell(ticketsSheet, i + 1, 0, i + 1, bgHex: bg);
-      cell(ticketsSheet, i + 1, 1,
-          dt != null ? '${dt.day.toString().padLeft(2,'0')}/${dt.month.toString().padLeft(2,'0')}/${dt.year}' : '',
-          bgHex: bg);
-      cell(ticketsSheet, i + 1, 2,
-          dt != null ? '${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}' : '',
-          bgHex: bg);
-      cell(ticketsSheet, i + 1, 3, t['id_voyage'] != null ? '#${t['id_voyage']}' : '—', bgHex: bg);
-      cell(ticketsSheet, i + 1, 4, t['point_depart']  ?? '', bgHex: bg);
-      cell(ticketsSheet, i + 1, 5, t['point_arrivee'] ?? '', bgHex: bg);
-      // Use segLabel for a human-readable segment column
-      cell(ticketsSheet, i + 1, 6, segLabel(t['id_segment']), bgHex: bg);
-      cell(ticketsSheet, i + 1, 7, t['type_tarif'] ?? '', bgHex: bg);
-      cell(ticketsSheet, i + 1, 8, (t['quantite'] as num? ?? 1).toInt(), bgHex: bg);
-      cell(ticketsSheet, i + 1, 9, (t['prix_unitaire'] as num? ?? 0).toInt(), bgHex: bg);
-      cell(ticketsSheet, i + 1, 10, (t['montant_total'] as num? ?? 0).toInt(),
+      final rawSegId = t['id_segment'];
+      final segId    = segIdInt(rawSegId);
+
+      cell(ticketsSheet, i + 1, 0,  i + 1,                                       bgHex: bg);
+      // ── NEW: raw id_segment ──
+     cell(ticketsSheet, i + 1, 1,
+    rawSegId != null && rawSegId.toString() != '0' && rawSegId.toString() != 'null'
+        ? rawSegId.toString()
+        : '—',
+    bgHex: bg, fgHex: '#6B7280');
+      cell(ticketsSheet, i + 1, 2,  dt != null ? _formatDate(dt) : '',           bgHex: bg);
+      // ── Time now includes seconds: HH:mm:ss ──
+      cell(ticketsSheet, i + 1, 3,  dt != null ? _formatTime(dt) : '',           bgHex: bg);
+      cell(ticketsSheet, i + 1, 4,  t['id_voyage'] != null ? '#${t['id_voyage']}' : '—', bgHex: bg);
+      cell(ticketsSheet, i + 1, 5,  t['point_depart']  ?? '',                    bgHex: bg);
+      cell(ticketsSheet, i + 1, 6,  t['point_arrivee'] ?? '',                    bgHex: bg);
+      cell(ticketsSheet, i + 1, 7,  segLabel(rawSegId),                          bgHex: bg);
+      cell(ticketsSheet, i + 1, 8,  t['type_tarif'] ?? '',                       bgHex: bg);
+      cell(ticketsSheet, i + 1, 9,  (t['quantite'] as num? ?? 1).toInt(),        bgHex: bg);
+      cell(ticketsSheet, i + 1, 10, (t['prix_unitaire'] as num? ?? 0).toInt(),   bgHex: bg);
+      cell(ticketsSheet, i + 1, 11, (t['montant_total'] as num? ?? 0).toInt(),
           bgHex: bg, bold: isFree, fgHex: isFree ? '#16A34A' : '#0D1B3E');
-      cell(ticketsSheet, i + 1, 11, t['statut_sync'] ?? 'synced', bgHex: bg,
+      cell(ticketsSheet, i + 1, 12, t['statut_sync'] ?? 'synced',                bgHex: bg,
           fgHex: t['statut_sync'] == 'pending'
               ? '#D97706'
               : t['statut_sync'] == 'failed'
@@ -755,13 +782,14 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     }
 
     final tTotalRow = allTickets.length + 2;
-    cell(ticketsSheet, tTotalRow, 7,  'TOTAL',       bold: true, bgHex: '#1A3260', fgHex: '#FFFFFF');
-    cell(ticketsSheet, tTotalRow, 8,  totalTickets,  bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
-    cell(ticketsSheet, tTotalRow, 10, totalRecette,  bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
+    cell(ticketsSheet, tTotalRow, 8,  'TOTAL',       bold: true, bgHex: '#1A3260', fgHex: '#FFFFFF');
+    cell(ticketsSheet, tTotalRow, 9,  totalTickets,  bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
+    cell(ticketsSheet, tTotalRow, 11, totalRecette,  bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
 
-    for (int c = 0; c < [5.0,13.0,10.0,10.0,22.0,22.0,28.0,28.0,8.0,16.0,14.0,12.0].length; c++) {
-      ticketsSheet.setColumnWidth(
-          c, [5.0,13.0,10.0,10.0,22.0,22.0,28.0,28.0,8.0,16.0,14.0,12.0][c]);
+    // Column widths: #, id_seg, Date, Heure, Voyage, Départ, Arrivée, Seg label, Tarif, Qté, Prix, Total, Sync
+    final tColWidths = [5.0, 12.0, 13.0, 12.0, 10.0, 22.0, 22.0, 30.0, 28.0, 8.0, 16.0, 14.0, 12.0];
+    for (int c = 0; c < tColWidths.length; c++) {
+      ticketsSheet.setColumnWidth(c, tColWidths[c]);
     }
 
     // ── 3. Par tarif ──
@@ -769,27 +797,34 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     for (int c = 0; c < ['Type de tarif','Quantité','Prix unitaire (ms)','Total (ms)','% du total'].length; c++) {
       header(tarifSheet, 0, c, ['Type de tarif','Quantité','Prix unitaire (ms)','Total (ms)','% du total'][c]);
     }
-    final tarifMap = <String, Map<String, int>>{};
+   final tarifMap = <String, Map<String, int>>{};
+    final tarifDisplayNames = <String, String>{};
     for (final t in allTickets) {
-      final type = ((t['type_tarif'] ?? '') as String).trim().isEmpty
-          ? 'Inconnu' : (t['type_tarif'] as String).trim();
-      final qty  = (t['quantite']     as num? ?? 1).toInt();
-      final tot  = (t['montant_total'] as num? ?? 0).toInt();
-      final unit = (t['prix_unitaire'] as num? ?? 0).toInt();
-      tarifMap[type] ??= {'count': 0, 'total': 0, 'unitaire': 0};
-      tarifMap[type]!['count']    = tarifMap[type]!['count']! + qty;
-      tarifMap[type]!['total']    = tarifMap[type]!['total']! + tot;
-      if (unit > 0) tarifMap[type]!['unitaire'] = unit;
+      final rawType  = ((t['type_tarif'] ?? '') as String).trim();
+      final qty      = (t['quantite']     as num? ?? 1).toInt();
+      final tot      = (t['montant_total'] as num? ?? 0).toInt();
+      final unit     = (t['prix_unitaire'] as num? ?? 0).toInt();
+      final isFree   = tot == 0;
+      final normType = rawType.isEmpty ? 'inconnu' : rawType.toLowerCase();
+      final groupKey = isFree ? normType : '${normType}_$unit';
+      tarifDisplayNames.putIfAbsent(groupKey, () => isFree
+          ? (rawType.isEmpty ? 'Inconnu' : rawType)
+          : '${rawType.isEmpty ? 'Inconnu' : rawType} · $unit ms');
+      tarifMap[groupKey] ??= {'count': 0, 'total': 0, 'unitaire': unit};
+      tarifMap[groupKey]!['count']    = tarifMap[groupKey]!['count']! + qty;
+      tarifMap[groupKey]!['total']    = tarifMap[groupKey]!['total']! + tot;
+      tarifMap[groupKey]!['unitaire'] = unit;
     }
     final tarifEntries = tarifMap.entries.toList()
       ..sort((a, b) => b.value['total']!.compareTo(a.value['total']!));
     int tRow = 1;
-    for (final e in tarifEntries) {
-      final isFree = e.value['total']! == 0;
-      final pct    = totalTickets > 0
+   for (final e in tarifEntries) {
+      final isFree  = e.value['total']! == 0;
+      final pct     = totalTickets > 0
           ? '${((e.value['count']! / totalTickets) * 100).toStringAsFixed(1)}%' : '0%';
-      final bg = tRow.isOdd ? '#F9FAFB' : '#FFFFFF';
-      cell(tarifSheet, tRow, 0, e.key,               bgHex: bg, bold: true);
+      final bg      = tRow.isOdd ? '#F9FAFB' : '#FFFFFF';
+      final display = tarifDisplayNames[e.key] ?? e.key;
+      cell(tarifSheet, tRow, 0, display,             bgHex: bg, bold: true);
       cell(tarifSheet, tRow, 1, e.value['count']!,   bgHex: bg);
       cell(tarifSheet, tRow, 2, isFree ? '—' : '${e.value['unitaire']}', bgHex: bg);
       cell(tarifSheet, tRow, 3, e.value['total']!,   bgHex: bg, bold: true,
@@ -810,18 +845,20 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     final gHeaders = ['Type de tarif','Total tickets','Dont gratuits','% gratuits','Tickets payants','Recette payants (ms)'];
     for (int c = 0; c < gHeaders.length; c++) header(gratuitSheet, 0, c, gHeaders[c]);
     final catMap = <String, Map<String, int>>{};
+    final catDisplayNames = <String, String>{};
     for (final t in allTickets) {
-      final type = ((t['type_tarif'] ?? '') as String).trim().isEmpty
-          ? 'Inconnu' : (t['type_tarif'] as String).trim();
+      final rawType  = ((t['type_tarif'] ?? '') as String).trim();
+      final normType = rawType.isEmpty ? 'inconnu' : rawType.toLowerCase();
+      catDisplayNames.putIfAbsent(normType, () => rawType.isEmpty ? 'Inconnu' : rawType);
       final qty  = (t['quantite']     as num? ?? 1).toInt();
       final tot  = (t['montant_total'] as num? ?? 0).toInt();
-      catMap[type] ??= {'total': 0, 'gratuits': 0, 'payants': 0, 'recettePayants': 0};
-      catMap[type]!['total'] = catMap[type]!['total']! + qty;
+      catMap[normType] ??= {'total': 0, 'gratuits': 0, 'payants': 0, 'recettePayants': 0};
+      catMap[normType]!['total'] = catMap[normType]!['total']! + qty;
       if (tot == 0) {
-        catMap[type]!['gratuits'] = catMap[type]!['gratuits']! + qty;
+        catMap[normType]!['gratuits'] = catMap[normType]!['gratuits']! + qty;
       } else {
-        catMap[type]!['payants']        = catMap[type]!['payants']! + qty;
-        catMap[type]!['recettePayants'] = catMap[type]!['recettePayants']! + tot;
+        catMap[normType]!['payants']        = catMap[normType]!['payants']! + qty;
+        catMap[normType]!['recettePayants'] = catMap[normType]!['recettePayants']! + tot;
       }
     }
     final catEntries = catMap.entries.toList()
@@ -834,7 +871,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       final totalCat = e.value['total']!;
       final pctG     = totalCat > 0
           ? '${((gratuits / totalCat) * 100).toStringAsFixed(1)}%' : '0%';
-      cell(gratuitSheet, gRow, 0, e.key,                        bgHex: bgG, bold: true);
+    cell(gratuitSheet, gRow, 0, catDisplayNames[e.key] ?? e.key, bgHex: bgG, bold: true);
       cell(gratuitSheet, gRow, 1, totalCat,                     bgHex: bgG);
       cell(gratuitSheet, gRow, 2, gratuits,                     bgHex: bgG,
           bold: gratuits > 0, fgHex: gratuits > 0 ? '#16A34A' : '#6B7280');
@@ -863,9 +900,12 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     }
 
     // ── 5. Par segment ──
-    // Group by int? id_segment — exact, never fuzzy
+    // Now includes id_segment as first column
     final segSheet = excel['Par segment'];
-    final sHeaders = ['Segment','Départ','Arrivée','Total tickets','Gratuits','Payants','Recette (ms)'];
+    final sHeaders = [
+      'id_segment', 'Segment', 'Départ', 'Arrivée',
+      'Total tickets', 'Gratuits', 'Payants', 'Recette (ms)',
+    ];
     for (int c = 0; c < sHeaders.length; c++) header(segSheet, 0, c, sHeaders[c]);
 
     final segGroupMap = <int?, List<Map<String, dynamic>>>{};
@@ -880,7 +920,6 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       ..sort((a, b) {
         if (a.key == null) return 1;
         if (b.key == null) return -1;
-        // Sort by ordre from segmentMap
         final aOrdre = (segmentMap[a.key]?['ordre'] as int?) ?? 9999;
         final bOrdre = (segmentMap[b.key]?['ordre'] as int?) ?? 9999;
         return aOrdre.compareTo(bOrdre);
@@ -889,7 +928,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     int sRow = 1;
     int sTotalTickets = 0, sTotalGratuits = 0, sTotalRecette = 0;
     for (final e in segEntries) {
-      final tickets   = e.value;
+      final tickets    = e.value;
       final segRecette = tickets.fold(0, (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt()));
       final segCount   = tickets.fold(0, (s, t) => s + ((t['quantite']      as num? ?? 1).toInt()));
       final segGratis  = tickets
@@ -899,16 +938,21 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       final arr  = tickets.isNotEmpty ? tickets.first['point_arrivee'] ?? '' : '';
       final bg   = sRow.isOdd ? '#F9FAFB' : '#FFFFFF';
 
-      // Use segLabel helper for the segment name column
-      cell(segSheet, sRow, 0, e.key == null ? 'Non classé' : segLabel(e.key),
+      // col 0: raw id_segment
+      cell(segSheet, sRow, 0,
+          e.key == null ? '—' : e.key,
+          bgHex: bg, fgHex: '#6B7280');
+      // col 1: human label
+      cell(segSheet, sRow, 1,
+          e.key == null ? 'Non classé' : segLabel(e.key),
           bgHex: bg, bold: true, fgHex: e.key == null ? '#9CA3AF' : '#0D1B3E');
-      cell(segSheet, sRow, 1, dep,       bgHex: bg);
-      cell(segSheet, sRow, 2, arr,       bgHex: bg);
-      cell(segSheet, sRow, 3, segCount,  bgHex: bg);
-      cell(segSheet, sRow, 4, segGratis, bgHex: bg,
+      cell(segSheet, sRow, 2, dep,       bgHex: bg);
+      cell(segSheet, sRow, 3, arr,       bgHex: bg);
+      cell(segSheet, sRow, 4, segCount,  bgHex: bg);
+      cell(segSheet, sRow, 5, segGratis, bgHex: bg,
           bold: segGratis > 0, fgHex: segGratis > 0 ? '#16A34A' : '#9CA3AF');
-      cell(segSheet, sRow, 5, segCount - segGratis, bgHex: bg);
-      cell(segSheet, sRow, 6, segRecette, bgHex: bg, bold: true, fgHex: '#0D1B3E');
+      cell(segSheet, sRow, 6, segCount - segGratis, bgHex: bg);
+      cell(segSheet, sRow, 7, segRecette, bgHex: bg, bold: true, fgHex: '#0D1B3E');
       sTotalTickets  += segCount;
       sTotalGratuits += segGratis;
       sTotalRecette  += segRecette;
@@ -920,42 +964,52 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     cell(segSheet, sRow, 0, '— DÉTAIL PAR SEGMENT ET TARIF —', bold: true, fgHex: '#6B7280');
     sRow += 2;
     for (final e in segEntries) {
-      cell(segSheet, sRow, 0, e.key == null ? 'Non classé' : segLabel(e.key),
+      // Merge-style header row for this segment
+      cell(segSheet, sRow, 0, e.key == null ? '—' : e.key,
+          bold: true, bgHex: '#1A3260', fgHex: '#D1D5DB');
+      cell(segSheet, sRow, 1, e.key == null ? 'Non classé' : segLabel(e.key),
           bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
-      for (int c = 1; c < 7; c++) cell(segSheet, sRow, c, '', bgHex: '#1A3260');
+      for (int c = 2; c < 8; c++) cell(segSheet, sRow, c, '', bgHex: '#1A3260');
       sRow++;
-      final tarifInSeg = <String, Map<String, int>>{};
+    final tarifInSeg = <String, Map<String, int>>{};
       for (final t in e.value) {
-        final type = ((t['type_tarif'] ?? '') as String).trim().isEmpty
-            ? 'Inconnu' : (t['type_tarif'] as String).trim();
-        final qty = (t['quantite']     as num? ?? 1).toInt();
-        final tot = (t['montant_total'] as num? ?? 0).toInt();
-        tarifInSeg[type] ??= {'count': 0, 'gratuits': 0, 'recette': 0};
-        tarifInSeg[type]!['count']   = tarifInSeg[type]!['count']! + qty;
-        if (tot == 0) tarifInSeg[type]!['gratuits'] = tarifInSeg[type]!['gratuits']! + qty;
-        tarifInSeg[type]!['recette'] = tarifInSeg[type]!['recette']! + tot;
+        final rawType = ((t['type_tarif'] ?? '') as String).trim();
+        final qty     = (t['quantite']     as num? ?? 1).toInt();
+        final tot     = (t['montant_total'] as num? ?? 0).toInt();
+        final unit    = (t['prix_unitaire'] as num? ?? 0).toInt();
+        final isFree  = tot == 0;
+        final display = isFree
+            ? (rawType.isEmpty ? 'Inconnu' : rawType)
+            : '${rawType.isEmpty ? 'Inconnu' : rawType} · $unit ms';
+        tarifInSeg[display] ??= {'count': 0, 'gratuits': 0, 'recette': 0};
+        tarifInSeg[display]!['count']   = tarifInSeg[display]!['count']! + qty;
+        if (tot == 0) tarifInSeg[display]!['gratuits'] = tarifInSeg[display]!['gratuits']! + qty;
+        tarifInSeg[display]!['recette'] = tarifInSeg[display]!['recette']! + tot;
       }
       for (final te in tarifInSeg.entries) {
         final isFree = te.value['recette']! == 0;
         final bg     = sRow.isOdd ? '#F9FAFB' : '#FFFFFF';
-        cell(segSheet, sRow, 0, '   └ ${te.key}', bgHex: bg);
-        cell(segSheet, sRow, 3, te.value['count']!,   bgHex: bg);
-        cell(segSheet, sRow, 4, te.value['gratuits']!, bgHex: bg,
+        cell(segSheet, sRow, 0, '',                  bgHex: bg); // id col empty for detail
+        cell(segSheet, sRow, 1, '   └ ${te.key}',    bgHex: bg);
+        cell(segSheet, sRow, 4, te.value['count']!,  bgHex: bg);
+        cell(segSheet, sRow, 5, te.value['gratuits']!, bgHex: bg,
             fgHex: te.value['gratuits']! > 0 ? '#16A34A' : '#9CA3AF');
-        cell(segSheet, sRow, 5, te.value['count']! - te.value['gratuits']!, bgHex: bg);
-        cell(segSheet, sRow, 6, te.value['recette']!,  bgHex: bg,
+        cell(segSheet, sRow, 6, te.value['count']! - te.value['gratuits']!, bgHex: bg);
+        cell(segSheet, sRow, 7, te.value['recette']!, bgHex: bg,
             fgHex: isFree ? '#16A34A' : '#0D1B3E');
         sRow++;
       }
       sRow++;
     }
-    cell(segSheet, sRow, 0, 'TOTAL',         bold: true, bgHex: '#1A3260', fgHex: '#FFFFFF');
-    cell(segSheet, sRow, 3, sTotalTickets,   bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
-    cell(segSheet, sRow, 4, sTotalGratuits,  bold: true, bgHex: '#1A3260', fgHex: '#4ADE80');
-    cell(segSheet, sRow, 5, sTotalTickets - sTotalGratuits, bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
-    cell(segSheet, sRow, 6, sTotalRecette,   bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
-    for (int c = 0; c < [28.0,22.0,22.0,14.0,14.0,14.0,18.0].length; c++) {
-      segSheet.setColumnWidth(c, [28.0,22.0,22.0,14.0,14.0,14.0,18.0][c]);
+    cell(segSheet, sRow, 0, '',              bold: true, bgHex: '#1A3260', fgHex: '#FFFFFF');
+    cell(segSheet, sRow, 1, 'TOTAL',         bold: true, bgHex: '#1A3260', fgHex: '#FFFFFF');
+    cell(segSheet, sRow, 4, sTotalTickets,   bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
+    cell(segSheet, sRow, 5, sTotalGratuits,  bold: true, bgHex: '#1A3260', fgHex: '#4ADE80');
+    cell(segSheet, sRow, 6, sTotalTickets - sTotalGratuits, bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
+    cell(segSheet, sRow, 7, sTotalRecette,   bold: true, bgHex: '#1A3260', fgHex: '#F5C842');
+    // widths: id_seg, label, dep, arr, tickets, gratuits, payants, recette
+    for (int c = 0; c < [12.0, 30.0, 22.0, 22.0, 14.0, 14.0, 14.0, 18.0].length; c++) {
+      segSheet.setColumnWidth(c, [12.0, 30.0, 22.0, 22.0, 14.0, 14.0, 14.0, 18.0][c]);
     }
 
     // ── 6. Par voyage ──
@@ -987,33 +1041,46 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       cell(voyageSheet, vRow, 6, vTotal,               bgHex: bg, bold: true, fgHex: '#0D1B3E');
       vRow++;
       if (vTickets.isNotEmpty) {
-        for (final col in [[0,'   Départ'],[1,'Arrivée'],[2,'Segment'],[3,'Tarif'],[4,'Qté'],[5,'Gratuits'],[6,'Total (ms)']]) {
+        // Sub-header: now includes id_segment and Heure with seconds
+        for (final col in [
+          [0, 'id_segment'], [1, 'Départ'], [2, 'Arrivée'],
+          [3, 'Segment'], [4, 'Tarif'], [5, 'Heure'], [6, 'Qté'], [7, 'Gratuits'], [8, 'Total (ms)'],
+        ]) {
           cell(voyageSheet, vRow, col[0] as int, col[1],
               bold: true, bgHex: '#E8EDF5', fgHex: '#374151');
         }
         vRow++;
         for (final t in vTickets) {
-          final isFree = ((t['montant_total'] as num? ?? 0).toInt()) == 0;
-          final tQty   = (t['quantite'] as num? ?? 1).toInt();
-          final tGrat  = isFree ? tQty : 0;
-          final tbg    = vRow.isOdd ? '#F9FAFB' : '#FFFFFF';
-          cell(voyageSheet, vRow, 0, '   ${t['point_depart'] ?? ''}',  bgHex: tbg);
-          cell(voyageSheet, vRow, 1, t['point_arrivee'] ?? '',          bgHex: tbg);
-          // Use segLabel so the voyage detail also shows readable segment names
-          cell(voyageSheet, vRow, 2, segLabel(t['id_segment']),         bgHex: tbg);
-          cell(voyageSheet, vRow, 3, t['type_tarif'] ?? '',             bgHex: tbg);
-          cell(voyageSheet, vRow, 4, tQty,                              bgHex: tbg);
-          cell(voyageSheet, vRow, 5, tGrat, bgHex: tbg,
+          final isFree   = ((t['montant_total'] as num? ?? 0).toInt()) == 0;
+          final tQty     = (t['quantite'] as num? ?? 1).toInt();
+          final tGrat    = isFree ? tQty : 0;
+          final tbg      = vRow.isOdd ? '#F9FAFB' : '#FFFFFF';
+          final tDt      = DateTime.tryParse(t['date_heure'] ?? '');
+          final rawSegId = t['id_segment'];
+          final tSegId   = segIdInt(rawSegId);
+
+          final tSegOrdre = tSegId != null ? (segmentMap[tSegId]?['ordre']?.toString()) : null;
+          final tSegDisplay = tSegOrdre != null ? 'Seg. $tSegOrdre' : (tSegId != null ? '$tSegId' : '—');
+          cell(voyageSheet, vRow, 0, tSegDisplay, bgHex: tbg, fgHex: '#6B7280');
+          cell(voyageSheet, vRow, 1, '   ${t['point_depart'] ?? ''}', bgHex: tbg);
+          cell(voyageSheet, vRow, 2, t['point_arrivee'] ?? '',         bgHex: tbg);
+          cell(voyageSheet, vRow, 3, segLabel(rawSegId),               bgHex: tbg);
+          cell(voyageSheet, vRow, 4, t['type_tarif'] ?? '',            bgHex: tbg);
+          // ── Time with seconds ──
+          cell(voyageSheet, vRow, 5, tDt != null ? _formatTime(tDt) : '', bgHex: tbg);
+          cell(voyageSheet, vRow, 6, tQty,                              bgHex: tbg);
+          cell(voyageSheet, vRow, 7, tGrat, bgHex: tbg,
               fgHex: tGrat > 0 ? '#16A34A' : '#9CA3AF');
-          cell(voyageSheet, vRow, 6, (t['montant_total'] as num? ?? 0).toInt(),
+          cell(voyageSheet, vRow, 8, (t['montant_total'] as num? ?? 0).toInt(),
               bgHex: tbg, bold: isFree, fgHex: isFree ? '#16A34A' : '#0D1B3E');
           vRow++;
         }
         vRow++;
       }
     }
-    for (int c = 0; c < [12.0,16.0,32.0,28.0,12.0,12.0,16.0].length; c++) {
-      voyageSheet.setColumnWidth(c, [12.0,16.0,32.0,28.0,12.0,12.0,16.0][c]);
+    // widths: voyage, type, trajet, tickets, gratuits, payants, recette + sub-cols
+    for (int c = 0; c < [12.0, 16.0, 32.0, 12.0, 28.0, 12.0, 28.0, 12.0, 16.0].length; c++) {
+      voyageSheet.setColumnWidth(c, [12.0, 16.0, 32.0, 12.0, 28.0, 12.0, 28.0, 12.0, 16.0][c]);
     }
 
     final bytes    = excel.encode()!;
@@ -1038,14 +1105,25 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     required Directory dir,
   }) async {
 
-    // ── Local helper: int id_segment → readable label ──
-    String segLabel(dynamic rawId) {
-      final id = rawId == null ? null : int.tryParse(rawId.toString());
-      if (id == null || id == 0) return '—';
+    // ── Local helper: id → readable label ──
+  String segLabel(dynamic rawId) {
+      if (rawId == null) return '—';
+      final str = rawId.toString().trim();
+      if (str.isEmpty || str == '0' || str == 'null') return '—';
+      final id = int.tryParse(str);
+      if (id == null) return '—';
       final seg = segmentMap[id];
-      if (seg == null) return '#$id';
-      return 'Seg. ${seg['ordre']} · ${seg['point_depart'] ?? ''} → ${seg['point_arrivee'] ?? ''}';
+      if (seg == null) return 'Seg. #$id';
+      return 'Seg. ${seg['ordre'] ?? '?'}';
     }
+
+    // ── Local helper: raw id → display string ──
+   String segIdStr(dynamic rawId) {
+  if (rawId == null) return '—';
+  final str = rawId.toString().trim();
+  if (str.isEmpty || str == '0' || str == 'null') return '—';
+  return str;
+}
 
     final pdf     = pw.Document();
     final payants = totalTickets - totalGratuits;
@@ -1070,7 +1148,6 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     final catEntries = catMap.entries.toList()
       ..sort((a, b) => b.value['gratuits']!.compareTo(a.value['gratuits']!));
 
-    // Group segments by int? id — sorted by ordre from segmentMap
     final segGroupMap = <int?, List<Map<String, dynamic>>>{};
     for (final t in allTickets) {
       final raw = t['id_segment'];
@@ -1162,7 +1239,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
               style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold,
                   color: PdfColor.fromHex('6B7280'))),
           pw.SizedBox(height: 8),
-          _buildPdfTicketsTable(allTickets, segLabel),
+          _buildPdfTicketsTable(allTickets, segLabel, segIdStr),
         ],
       ),
     );
@@ -1197,15 +1274,22 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
 
   pw.Widget _buildPdfTarifTable(
       List<Map<String, dynamic>> tickets, int totalTickets) {
-    final tarifMap = <String, Map<String, int>>{};
+ final tarifMap = <String, Map<String, int>>{};
+    final tarifDisplayNames = <String, String>{};
     for (final t in tickets) {
-      final type = ((t['type_tarif'] ?? '') as String).trim().isEmpty
-          ? 'Inconnu' : (t['type_tarif'] as String).trim();
-      final qty = (t['quantite']     as num? ?? 1).toInt();
-      final tot = (t['montant_total'] as num? ?? 0).toInt();
-      tarifMap[type] ??= {'count': 0, 'total': 0};
-      tarifMap[type]!['count'] = tarifMap[type]!['count']! + qty;
-      tarifMap[type]!['total'] = tarifMap[type]!['total']! + tot;
+      final rawType  = ((t['type_tarif'] ?? '') as String).trim();
+      final qty      = (t['quantite']     as num? ?? 1).toInt();
+      final tot      = (t['montant_total'] as num? ?? 0).toInt();
+      final unit     = (t['prix_unitaire'] as num? ?? 0).toInt();
+      final isFree   = tot == 0;
+      final normType = rawType.isEmpty ? 'inconnu' : rawType.toLowerCase();
+      final groupKey = isFree ? normType : '${normType}_$unit';
+      tarifDisplayNames.putIfAbsent(groupKey, () => isFree
+          ? (rawType.isEmpty ? 'Inconnu' : rawType)
+          : '${rawType.isEmpty ? 'Inconnu' : rawType} · $unit ms');
+      tarifMap[groupKey] ??= {'count': 0, 'total': 0};
+      tarifMap[groupKey]!['count'] = tarifMap[groupKey]!['count']! + qty;
+      tarifMap[groupKey]!['total'] = tarifMap[groupKey]!['total']! + tot;
     }
     final entries = tarifMap.entries.toList()
       ..sort((a, b) => b.value['total']!.compareTo(a.value['total']!));
@@ -1213,11 +1297,12 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       border: pw.TableBorder.all(color: PdfColor.fromHex('E5E7EB'), width: 0.5),
       children: [
         _pdfTableRow(['Type de tarif', 'Qté', 'Total (ms)', '% voyageurs'], isHeader: true),
-        ...entries.map((e) {
+       ...entries.map((e) {
           final pct = totalTickets > 0
               ? '${((e.value['count']! / totalTickets) * 100).toStringAsFixed(1)}%' : '0%';
+          final display = tarifDisplayNames[e.key] ?? e.key;
           return _pdfTableRow(
-              [e.key, '${e.value['count']}', '${e.value['total']}', pct],
+              [display, '${e.value['count']}', '${e.value['total']}', pct],
               highlight: entries.indexOf(e).isEven);
         }),
         _pdfTableRow([
@@ -1256,31 +1341,40 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     );
   }
 
+  // ── NOW includes id_segment column ──
   pw.Widget _buildPdfSegmentTable(
     List<MapEntry<int?, List<Map<String, dynamic>>>> segEntries,
     Map<int, Map<String, dynamic>> segmentMap,
     int totalTickets,
   ) {
-    String segLabel(int? id) {
+   String segLabel(int? id) {
       if (id == null) return 'Non classé';
       final seg = segmentMap[id];
-      if (seg == null) return '#$id';
-      return 'Seg. ${seg['ordre']} · ${seg['point_depart'] ?? ''} → ${seg['point_arrivee'] ?? ''}';
+      if (seg == null) return 'Seg. #$id';
+      return 'Seg. ${seg['ordre'] ?? '?'}';
     }
 
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColor.fromHex('E5E7EB'), width: 0.5),
       children: [
-        _pdfTableRow(['Segment', 'Tickets', 'Gratuits', 'Payants', 'Recette (ms)'], isHeader: true),
+        _pdfTableRow(
+          ['id_segment', 'Segment', 'Tickets', 'Gratuits', 'Payants', 'Recette (ms)'],
+          isHeader: true,
+        ),
         ...segEntries.map((e) {
-          final count   = e.value.fold(0, (s, t) => s + ((t['quantite']      as num? ?? 1).toInt()));
+          final count    = e.value.fold(0, (s, t) => s + ((t['quantite']      as num? ?? 1).toInt()));
           final gratuits = e.value
               .where((t) => ((t['montant_total'] as num? ?? 0).toInt()) == 0)
               .fold(0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
-          final recette = e.value.fold(0, (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt()));
+          final recette  = e.value.fold(0, (s, t) => s + ((t['montant_total'] as num? ?? 0).toInt()));
           return _pdfTableRow(
-              [segLabel(e.key), '$count', '$gratuits', '${count - gratuits}', '$recette'],
-              highlight: segEntries.indexOf(e).isEven);
+            [
+              e.key == null ? '—' : '${e.key}',   // ← raw id_segment
+              segLabel(e.key),                      // ← human label
+              '$count', '$gratuits', '${count - gratuits}', '$recette',
+            ],
+            highlight: segEntries.indexOf(e).isEven,
+          );
         }),
       ],
     );
@@ -1317,32 +1411,43 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     );
   }
 
+  // ── NOW includes id_segment column and HH:mm:ss time ──
   pw.Widget _buildPdfTicketsTable(
     List<Map<String, dynamic>> tickets,
     String Function(dynamic) segLabel,
+    String Function(dynamic) segIdStr,
   ) {
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColor.fromHex('E5E7EB'), width: 0.5),
       columnWidths: const {
-        0: pw.FixedColumnWidth(22),
-        1: pw.FlexColumnWidth(2),
-        2: pw.FlexColumnWidth(2),
-        3: pw.FlexColumnWidth(2.5),
-        4: pw.FlexColumnWidth(1.5),
-        5: pw.FixedColumnWidth(50),
-        6: pw.FixedColumnWidth(50),
+        0: pw.FixedColumnWidth(20),   // #
+        1: pw.FixedColumnWidth(30),   // id_segment  ← NEW
+        2: pw.FixedColumnWidth(55),   // Heure (HH:mm:ss needs more space)
+        3: pw.FlexColumnWidth(2),     // Départ
+        4: pw.FlexColumnWidth(2),     // Arrivée
+        5: pw.FlexColumnWidth(2.5),   // Segment label
+        6: pw.FlexColumnWidth(1.5),   // Tarif
+        7: pw.FixedColumnWidth(28),   // Qté
+        8: pw.FixedColumnWidth(46),   // Total
       },
       children: [
-        _pdfTableRow(['#', 'Départ', 'Arrivée', 'Segment', 'Tarif', 'Qté', 'Total (ms)'],
-            isHeader: true),
+        _pdfTableRow(
+          ['#', 'Seg.ID', 'Heure', 'Départ', 'Arrivée', 'Segment', 'Tarif', 'Qté', 'Total (ms)'],
+          isHeader: true,
+        ),
         ...tickets.asMap().entries.map((entry) {
-          final i = entry.key;
-          final t = entry.value;
+          final i  = entry.key;
+          final t  = entry.value;
+          final dt = DateTime.tryParse(t['date_heure'] ?? '');
+          // ── Time now shows HH:mm:ss ──
+          final timeStr = dt != null ? _formatTime(dt) : '—';
           return _pdfTableRow([
             '${i + 1}',
+            segIdStr(t['id_segment']),         // ← raw id
+            timeStr,                            // ← HH:mm:ss
             t['point_depart']  ?? '',
             t['point_arrivee'] ?? '',
-            segLabel(t['id_segment']),
+            segLabel(t['id_segment']),          // ← human label
             t['type_tarif']    ?? '',
             '${(t['quantite'] as num? ?? 1).toInt()}',
             '${(t['montant_total'] as num? ?? 0).toInt()}',

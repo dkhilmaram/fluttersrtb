@@ -256,30 +256,46 @@ class SyncService {
 
   // ── Heartbeat ──────────────────────────────────────────────────────────────
 
-  static Future<void> _pushHeartbeat({
-    required int pending,
-    required int failed,
-  }) async {
-    final matricule = _cachedMatricule;
-    if (matricule == null) return;
+static Future<void> _pushHeartbeat({
+  required int pending,
+  required int failed,
+}) async {
+  final matricule = _cachedMatricule;
+  if (matricule == null) return;
 
-    final now = DateTime.now().toIso8601String();
-    final payload = jsonEncode({
-      'matricule_agent': matricule,
-      'pending_count':   pending,
-      'failed_count':    failed,
-      'last_sync_at':    now,
-      'app_version':     '1.0.0',
-    });
+  // getUnsyncedTickets() already returns pending + failed — one call is enough
+  final allPendingTickets = await TicketDao.getUnsyncedTickets();
 
-    await _saveHeartbeatLocally(payload);
+  final pendingTickets = allPendingTickets.map((t) => {
+    'statut_sync':   t['statut_sync'],
+    'point_depart':  t['point_depart'],
+    'point_arrivee': t['point_arrivee'],
+    'type_tarif':    t['type_tarif'],
+    'quantite':      t['quantite'],
+    'montant_total': t['montant_total'],
+    'erreur':        t['erreur'],
+    'tentatives':    t['tentatives'],
+    'date_heure':    t['date_heure'],
+  }).toList();
 
-    if (ConnectivityService.isConnected) {
-      await _sendHeartbeatPayload(payload);
-    } else {
-      await _queueHeartbeat(payload);
-    }
+  final now     = DateTime.now().toIso8601String();
+  final payload = jsonEncode({
+    'matricule_agent': matricule,
+    'pending_count':   pending,
+    'failed_count':    failed,
+    'last_sync_at':    now,
+    'app_version':     '1.0.0',
+    'pending_tickets': pendingTickets,
+  });
+
+  await _saveHeartbeatLocally(payload);
+
+  if (ConnectivityService.isConnected) {
+    await _sendHeartbeatPayload(payload);
+  } else {
+    await _queueHeartbeat(payload);
   }
+}
 
   static Future<void> _saveHeartbeatLocally(String payload) async {
     try {

@@ -22,3 +22,4 @@ class HeartbeatRow(BaseModel):
     seconds_ago: Optional[int] = None
     tickets_today: int = 0
     recette_today_ms: int = 0
+    

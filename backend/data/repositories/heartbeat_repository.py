@@ -69,3 +69,4 @@ class HeartbeatRepository:
                 """
             )
             return [dict(r) for r in rows]
+    

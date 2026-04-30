@@ -59,6 +59,21 @@ class _HistoriquePageState extends State<HistoriquePage>
   /// id_segment (int) → segment row from API
   Map<int, Map<String, dynamic>> _segmentMap = {};
 
+  // ── Tarif color palette ───────────────────────────────────
+  static const List<Color> _palette = [
+    Color(0xFFFFB800),
+    Color(0xFF3B82F6),
+    Color(0xFFEF4444),
+    Color(0xFFA855F7),
+    Color(0xFFF97316),
+    Color(0xFF06B6D4),
+    Color(0xFFEC4899),
+    Color(0xFF84CC16),
+    Color(0xFF14B8A6),
+    Color(0xFFF59E0B),
+  ];
+  final Map<String, Color> _colorCache = {};
+
   bool    isLoading    = true;
   String? errorMessage;
 
@@ -154,8 +169,10 @@ class _HistoriquePageState extends State<HistoriquePage>
   // ── Fetch tickets ─────────────────────────────────────────
   Future<void> _fetchAll() async {
     setState(() { isLoading = true; errorMessage = null; });
+    _colorCache.clear();
 
     final id = widget.voyage['id'] as int?;
+
     if (id == null) {
       setState(() { errorMessage = _l.idVoyageManquantError; isLoading = false; });
       _showToast(_l.idVoyageManquantError, isError: true);
@@ -320,7 +337,7 @@ class _HistoriquePageState extends State<HistoriquePage>
     };
   }
 
-  // ── Segment label ─────────────────────────────────────────
+  // ── Segment labels ────────────────────────────────────────
   String segmentLabel(int? segId) {
     if (segId == null || segId == 0) return '—';
     final seg = _segmentMap[segId];
@@ -329,6 +346,13 @@ class _HistoriquePageState extends State<HistoriquePage>
     final dep   = seg['point_depart']  ?? '';
     final arr   = seg['point_arrivee'] ?? '';
     return 'Seg.$ordre · $dep → $arr';
+  }
+
+  String segmentShortLabel(int? segId) {
+    if (segId == null || segId == 0) return '—';
+    final seg = _segmentMap[segId];
+    if (seg == null) return '#$segId';
+    return 'Seg.${seg['ordre']}';
   }
 
   // ── Financial helpers ─────────────────────────────────────
@@ -347,21 +371,36 @@ class _HistoriquePageState extends State<HistoriquePage>
   }
 
   Map<String, Map<String, int>> get _tarifBreakdown {
-    final map = <String, Map<String, int>>{};
+    final map          = <String, Map<String, int>>{};
+    final displayNames = <String, String>{};
+
     for (final t in _tickets) {
       final rawType = (t['type_tarif'] ?? '').toString().trim();
-      final type    = rawType.isEmpty ? _l.inconnu : rawType;
-      final qty     = (t['quantite']      as num? ?? 1).toInt();
-      final total   = (t['montant_total'] as num? ?? 0).toInt();
       final unit    = (t['prix_unitaire'] as num? ?? 0).toInt();
-      map[type] ??= {'count': 0, 'total': 0, 'unitaire': 0};
-      map[type]!['count']    = map[type]!['count']! + qty;
-      map[type]!['total']    = map[type]!['total']! + total;
-      if (unit > 0) map[type]!['unitaire'] = unit;
+      final total   = (t['montant_total'] as num? ?? 0).toInt();
+      final qty     = (t['quantite']      as num? ?? 1).toInt();
+      final isFree  = total == 0;
+
+      final normType = rawType.toLowerCase();
+      final key = isFree ? normType : '${normType}_${unit}';
+
+      displayNames.putIfAbsent(key, () =>
+          isFree
+              ? (rawType.isEmpty ? _l.inconnu : rawType)
+              : '${rawType.isEmpty ? _l.inconnu : rawType} · ${unit} ms');
+
+      map[key] ??= {'count': 0, 'total': 0, 'unitaire': unit};
+      map[key]!['count']    = map[key]!['count']! + qty;
+      map[key]!['total']    = map[key]!['total']! + total;
+      map[key]!['unitaire'] = unit;
     }
+
     final entries = map.entries.toList()
       ..sort((a, b) => b.value['total']!.compareTo(a.value['total']!));
-    return Map.fromEntries(entries);
+
+    return {
+      for (final e in entries) (displayNames[e.key] ?? e.key): e.value,
+    };
   }
 
   Map<int?, List<dynamic>> get _segmentBreakdown {
@@ -385,34 +424,41 @@ class _HistoriquePageState extends State<HistoriquePage>
   // ── Tarif helpers ─────────────────────────────────────────
   Color _tarifColor(String type) {
     final t = type.toLowerCase();
-    if (t.contains('gratuit'))                                                    return const Color(0xFF22C55E);
-    if (t.contains('armee') || t.contains('garde') || t.contains('police'))      return const Color(0xFF3B82F6);
-    if (t.contains('douane') || t.contains('ministere'))                          return const Color(0xFF64748B);
-    if (t.contains('municipalite') || t.contains('scolaire') ||
-        t.contains('institution')  || t.contains('autre'))                        return const Color(0xFF10B981);
-    if (t.contains('abonnement'))  return const Color(0xFF0EA5E9);
-    if (t.contains('agent'))       return const Color(0xFFA78BFA);
-    if (t.contains('nfc'))         return const Color(0xFF60A5FA);
-    if (t.contains('barcode') || t.contains('scan')) return const Color(0xFF818CF8);
-    if (t.contains('50') || t.contains('reduit'))    return const Color(0xFFA78BFA);
-    return _goldLight;
+    if (t.contains('gratuit'))                               return const Color(0xFF22C55E);
+    if (t.contains('armee') || t.contains('garde'))          return const Color(0xFF60A5FA);
+    if (t.contains('police'))                                return const Color(0xFF93C5FD);
+    if (t.contains('douane'))                                return const Color(0xFF94A3B8);
+    if (t.contains('ministere'))                             return const Color(0xFF64748B);
+    if (t.contains('scolaire'))                              return const Color(0xFF10B981);
+    if (t.contains('municipalite'))                          return const Color(0xFF34D399);
+    if (t.contains('institution') || t.contains('autre'))    return const Color(0xFF6EE7B7);
+    if (t.contains('abonnement'))                            return const Color(0xFF0EA5E9);
+    if (t.contains('agent'))                                 return const Color(0xFFA78BFA);
+    if (t.contains('nfc'))                                   return const Color(0xFF818CF8);
+    if (t.contains('barcode') || t.contains('scan'))         return const Color(0xFF6366F1);
+    if (t.contains('reduit'))                                return const Color(0xFFC084FC);
+
+    if (_colorCache.containsKey(t)) return _colorCache[t]!;
+    final idx = _colorCache.length % _palette.length;
+    _colorCache[t] = _palette[idx];
+    return _palette[idx];
   }
 
   IconData _tarifIcon(String type) {
     final t = type.toLowerCase();
-    if (t.contains('gratuit'))                          return Icons.card_giftcard_rounded;
-    if (t.contains('armee') || t.contains('garde'))     return Icons.shield_rounded;
-    if (t.contains('police'))                           return Icons.local_police_rounded;
-    if (t.contains('douane'))                           return Icons.account_balance_rounded;
-    if (t.contains('ministere'))                        return Icons.domain_rounded;
-    if (t.contains('municipalite'))                     return Icons.location_city_rounded;
-    if (t.contains('scolaire'))                         return Icons.school_rounded;
-    if (t.contains('institution') || t.contains('autre')) return Icons.groups_rounded;
-    if (t.contains('abonnement'))  return Icons.confirmation_number_rounded;
-    if (t.contains('agent'))       return Icons.badge_rounded;
-    if (t.contains('nfc'))         return Icons.nfc_rounded;
-    if (t.contains('barcode') || t.contains('scan')) return Icons.qr_code_2_rounded;
-    if (t.contains('reduit'))      return Icons.discount_rounded;
+    if (t.contains('gratuit'))                               return Icons.card_giftcard_rounded;
+    if (t.contains('armee') || t.contains('garde'))          return Icons.shield_rounded;
+    if (t.contains('police'))                                return Icons.local_police_rounded;
+    if (t.contains('douane'))                                return Icons.account_balance_rounded;
+    if (t.contains('ministere'))                             return Icons.domain_rounded;
+    if (t.contains('municipalite'))                          return Icons.location_city_rounded;
+    if (t.contains('scolaire'))                              return Icons.school_rounded;
+    if (t.contains('institution') || t.contains('autre'))    return Icons.groups_rounded;
+    if (t.contains('abonnement'))                            return Icons.confirmation_number_rounded;
+    if (t.contains('agent'))                                 return Icons.badge_rounded;
+    if (t.contains('nfc'))                                   return Icons.nfc_rounded;
+    if (t.contains('barcode') || t.contains('scan'))         return Icons.qr_code_2_rounded;
+    if (t.contains('reduit'))                                return Icons.discount_rounded;
     return Icons.person_rounded;
   }
 
@@ -656,17 +702,30 @@ class _HistoriquePageState extends State<HistoriquePage>
     margin: const EdgeInsets.symmetric(vertical: 8),
   );
 
+  // ── FIX: reduced font sizes + overflow-safe padding ──────
   Widget tarifStat(String value, String label, {Color? color}) {
     return Expanded(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
         child: Column(
           children: [
-            Text(value, style: TextStyle(
-                fontSize: 15, fontWeight: FontWeight.bold, color: color ?? Colors.white)),
+            Text(
+              value,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: color ?? Colors.white),
+            ),
             const SizedBox(height: 3),
-            Text(label, textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.35))),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              style: TextStyle(fontSize: 9, color: Colors.white.withOpacity(0.35)),
+            ),
           ],
         ),
       ),
@@ -805,7 +864,6 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
       final segId = t['id_segment'] as int?;
       final day   = p._formatDay(t['date_heure']);
 
-      // ── Segment header
       if (segId != lastSeg) {
         lastSeg = segId;
         lastDay = null;
@@ -814,7 +872,6 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
         widgets.add(const SizedBox(height: 8));
       }
 
-      // ── Day header within segment
       if (day != lastDay) {
         lastDay = day;
         widgets.add(_dayChip(day));
@@ -828,7 +885,10 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
   }
 
   Widget _segmentChip(_HistoriquePageState p, int? segId) {
-    final label = p.segmentLabel(segId);
+    final seg   = segId != null ? p._segmentMap[segId] : null;
+    final ordre = seg?['ordre'];
+    final label = ordre != null ? 'Segment $ordre' : (segId != null ? 'Segment #$segId' : '—');
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -840,14 +900,9 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
         children: [
           const Icon(Icons.route, color: _goldLight, size: 14),
           const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              label,
-              overflow: TextOverflow.ellipsis,
+          Text(label,
               style: const TextStyle(
-                  color: _goldLight, fontSize: 12, fontWeight: FontWeight.bold),
-            ),
-          ),
+                  color: _goldLight, fontSize: 12, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -887,9 +942,6 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
     final isFree = ((t['montant_total'] as num? ?? 0).toInt()) == 0;
     final qty    = (t['quantite'] as num? ?? 1).toInt();
 
-    final segId  = t['id_segment'] as int?;
-    final segLbl = (segId != null && segId != 0) ? p.segmentLabel(segId) : null;
-
     return Container(
       decoration: BoxDecoration(
         color: _card,
@@ -908,7 +960,6 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
             ),
             child: Row(
               children: [
-                // Tarif badge
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
@@ -928,9 +979,7 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                             overflow: TextOverflow.ellipsis,
                             maxLines: 1,
                             style: TextStyle(
-                                color: color,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold),
+                                color: color, fontSize: 11, fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
@@ -938,7 +987,6 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                   ),
                 ),
                 const SizedBox(width: 6),
-                // Sync status — bare icon only, no container/text
                 if (t['_statut_sync'] == 'pending') ...[
                   Icon(Icons.cloud_upload_outlined,
                       size: 13, color: const Color(0xFFD97706)),
@@ -948,11 +996,9 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                   Icon(Icons.cloud_off_outlined, size: 13, color: _clrErr),
                   const SizedBox(width: 4),
                 ],
-                // Clock icon
                 Icon(Icons.access_time_rounded,
                     size: 11, color: Colors.white.withOpacity(0.3)),
                 const SizedBox(width: 3),
-                // Time in a fixed-width box
                 SizedBox(
                   width: 36,
                   child: Text(
@@ -963,14 +1009,11 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                         fontSize: 11, color: Colors.white.withOpacity(0.45)),
                   ),
                 ),
-                // Qty as plain text
                 if (qty > 1) ...[
                   const SizedBox(width: 4),
                   Text('×$qty',
                       style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold)),
+                          color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold)),
                 ],
               ],
             ),
@@ -982,7 +1025,6 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Route + tags
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1009,8 +1051,7 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                             child: Icon(Icons.arrow_forward,
-                                size: 11,
-                                color: Colors.white.withOpacity(0.2)),
+                                size: 11, color: Colors.white.withOpacity(0.2)),
                           ),
                           Container(
                             width: 7, height: 7,
@@ -1034,16 +1075,13 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                           ),
                         ],
                       ),
-                      if (segLbl != null || t['nom_ligne'] != null) ...[
+                      if (t['nom_ligne'] != null) ...[
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 6, runSpacing: 4,
                           children: [
-                            if (segLbl != null)
-                              p.smallTag(Icons.route, segLbl, _goldLight, _goldLight),
-                            if (t['nom_ligne'] != null)
-                              p.smallTag(Icons.directions_bus, t['nom_ligne'],
-                                  Colors.white54, Colors.white),
+                            p.smallTag(Icons.directions_bus, t['nom_ligne'],
+                                Colors.white54, Colors.white),
                           ],
                         ),
                       ],
@@ -1053,7 +1091,6 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
 
                 const SizedBox(width: 12),
 
-                // Price — fixed width
                 SizedBox(
                   width: 80,
                   child: Column(
@@ -1064,8 +1101,7 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                           l.prixUnitaireParTicket(t['prix_unitaire'] as int? ?? 0),
                           textAlign: TextAlign.right,
                           style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.white.withOpacity(0.3)),
+                              fontSize: 10, color: Colors.white.withOpacity(0.3)),
                         ),
                       const SizedBox(height: 2),
                       Text(
@@ -1080,8 +1116,7 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                       if (!isFree)
                         Text(l.millimes,
                             style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.white.withOpacity(0.3))),
+                                fontSize: 10, color: Colors.white.withOpacity(0.3))),
                     ],
                   ),
                 ),
@@ -1135,15 +1170,13 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
                 const SizedBox(width: 8),
                 Text(l.segmentsPluralLabel(realSegs.length),
                     style: const TextStyle(
-                        color: Colors.white, fontSize: 13,
-                        fontWeight: FontWeight.bold)),
+                        color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
                 const Spacer(),
                 Flexible(
                   child: Text(
                     '${p._totalTickets} ${l.tickets} · ${p._totalRecette} ${l.millimes}',
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        color: Colors.white.withOpacity(0.5), fontSize: 11),
+                    style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 11),
                   ),
                 ),
               ],
@@ -1154,8 +1187,7 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
           ...realSegs.entries.map((e) => _buildSegmentCard(p, l, e)),
           if (segs.containsKey(null)) ...[
             const SizedBox(height: 4),
-            _buildSegmentCard(
-                p, l, segs.entries.firstWhere((e) => e.key == null)),
+            _buildSegmentCard(p, l, segs.entries.firstWhere((e) => e.key == null)),
           ],
           if (bestSegId != null) ...[
             const SizedBox(height: 8),
@@ -1168,25 +1200,20 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.emoji_events_rounded,
-                      color: _goldLight, size: 16),
+                  const Icon(Icons.emoji_events_rounded, color: _goldLight, size: 16),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      l.segmentLePlusRentable(p.segmentLabel(bestSegId)),
+                      l.segmentLePlusRentable(p.segmentShortLabel(bestSegId)),
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                          fontSize: 12,
-                          color: _goldLight,
-                          fontWeight: FontWeight.bold),
+                          fontSize: 12, color: _goldLight, fontWeight: FontWeight.bold),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Text('$bestRev ${l.millimes}',
                       style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold)),
+                          fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
@@ -1196,26 +1223,6 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
     );
   }
 
-  // ─────────────────────────────────────────────────────────
-  // FIX: _buildSegmentCard header Row overflow
-  //
-  // Root cause: the Row had three children —
-  //   1. A pill badge (intrinsic width, could be wide)
-  //   2. An Expanded route text  ← already fine
-  //   3. A plain Text for revenue ← unconstrained, pushed out
-  //
-  // The badge pill used a plain Container with no max-width cap,
-  // so on narrow screens (constrained to ~260 px) the badge +
-  // route label + revenue amount summed wider than the row.
-  //
-  // Fix applied:
-  //   • Wrap the badge pill in a ConstrainedBox(maxWidth: 130) so
-  //     it can never eat more than half the row on small screens.
-  //   • Keep the route label in an Expanded so it flexes freely.
-  //   • Wrap the revenue Text in a Column inside a fixed SizedBox
-  //     (width: 90) with textAlign: TextAlign.right so it is
-  //     always right-aligned and never grows beyond its allotment.
-  // ─────────────────────────────────────────────────────────
   Widget _buildSegmentCard(
     _HistoriquePageState p,
     AppLocalizations l,
@@ -1229,13 +1236,26 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
     final gratuits = tickets
         .where((t) => ((t['montant_total'] as num? ?? 0).toInt()) == 0)
         .fold(0, (s, t) => s + ((t['quantite'] as num? ?? 1).toInt()));
+
     final isUnknown = e.key == null;
     final clr       = isUnknown ? Colors.white38 : _goldLight;
-    final label     = isUnknown ? l.nonClasse : p.segmentLabel(e.key);
 
-    final seg = e.key != null ? p._segmentMap[e.key] : null;
-    final dep = seg?['point_depart']  ?? (tickets.isNotEmpty ? tickets.first['point_depart']  ?? '' : '');
-    final arr = seg?['point_arrivee'] ?? (tickets.isNotEmpty ? tickets.first['point_arrivee'] ?? '' : '');
+    final seg   = e.key != null ? p._segmentMap[e.key] : null;
+    final ordre = seg?['ordre'];
+    final badge = isUnknown
+        ? l.nonClasse
+        : ordre != null
+            ? 'Segment $ordre'
+            : 'Segment #${e.key}';
+
+    final routeSet = <String>{};
+    for (final t in tickets) {
+      final dep = (t['point_depart']  ?? '').toString().trim();
+      final arr = (t['point_arrivee'] ?? '').toString().trim();
+      if (dep.isNotEmpty && arr.isNotEmpty) routeSet.add('$dep → $arr');
+    }
+    final routesSummary = routeSet.take(2).join('  ·  ')
+        + (routeSet.length > 2 ? '  +${routeSet.length - 2}' : '');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -1246,7 +1266,6 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
       ),
       child: Column(
         children: [
-          // ── FIXED header ──────────────────────────────────
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             decoration: BoxDecoration(
@@ -1257,64 +1276,47 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // ── Badge pill: constrained so it never crowds out revenue
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 130),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: clr.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: clr.withOpacity(0.25)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(isUnknown ? Icons.help_outline : Icons.route,
-                            color: clr, size: 12),
-                        const SizedBox(width: 5),
-                        Flexible(
-                          child: Text(
-                            label,
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                            style: TextStyle(
-                                color: clr,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: clr.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: clr.withOpacity(0.25)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(isUnknown ? Icons.help_outline : Icons.route,
+                          color: clr, size: 12),
+                      const SizedBox(width: 5),
+                      Text(badge,
+                          style: TextStyle(
+                              color: clr, fontSize: 11, fontWeight: FontWeight.bold)),
+                    ],
                   ),
                 ),
-
-                // ── Route text: flex-fills leftover space
-                if (!isUnknown && dep.isNotEmpty) ...[
+                if (routesSummary.isNotEmpty) ...[
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '$dep → $arr',
+                      routesSummary,
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
-                      style: TextStyle(
-                          fontSize: 11, color: Colors.white.withOpacity(0.4)),
+                      style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.4)),
                     ),
                   ),
                 ] else
                   const Spacer(),
-
-                // ── Revenue: fixed-width column, always right-aligned
                 const SizedBox(width: 8),
-                SizedBox(
-                  width: 90,
+                // ── FIX: use Flexible instead of fixed width ──
+                Flexible(
                   child: Text(
                     '$recette ${l.millimes}',
                     textAlign: TextAlign.right,
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
                     style: const TextStyle(
-                        fontSize: 15,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: Colors.white),
                   ),
@@ -1322,8 +1324,6 @@ class _TicketsMainTabState extends State<_TicketsMainTab>
               ],
             ),
           ),
-
-          // ── Stats row ─────────────────────────────────────
           IntrinsicHeight(
             child: Row(
               children: [
@@ -1484,8 +1484,7 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
               children: [
                 Text(value, overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                        color: color, fontSize: 14,
-                        fontWeight: FontWeight.bold)),
+                        color: color, fontSize: 14, fontWeight: FontWeight.bold)),
                 Text(label, overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                         color: Colors.white.withOpacity(0.5), fontSize: 10)),
@@ -1575,8 +1574,7 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
                     Expanded(
                       child: Text(e.key, overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                              color: color, fontSize: 11,
-                              fontWeight: FontWeight.bold)),
+                              color: color, fontSize: 11, fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
@@ -1594,8 +1592,7 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
                     widthFactor: frac.clamp(0.02, 1.0),
                     child: Container(
                       decoration: BoxDecoration(
-                          color: color,
-                          borderRadius: BorderRadius.circular(4)),
+                          color: color, borderRadius: BorderRadius.circular(4)),
                     ),
                   ),
                 ),
@@ -1678,33 +1675,43 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
             ),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: color.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(p._tarifIcon(e.key), color: color, size: 12),
-                      const SizedBox(width: 5),
-                      Text(e.key,
-                          style: TextStyle(
-                              color: color,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold)),
-                    ],
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: color.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(p._tarifIcon(e.key), color: color, size: 12),
+                        const SizedBox(width: 5),
+                        Flexible(
+                          child: Text(e.key,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  color: color,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                const Spacer(),
-                Text(
-                  isFree ? '0 ${l.millimes}' : '${e.value['total']} ${l.millimes}',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: isFree ? _clrOk : color,
+                const SizedBox(width: 8),
+                // ── FIX: wrap total in Flexible so it doesn't push the badge off-screen
+                Flexible(
+                  child: Text(
+                    isFree ? '0 ${l.millimes}' : '${e.value['total']} ${l.millimes}',
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: isFree ? _clrOk : color,
+                    ),
                   ),
                 ),
               ],
@@ -1744,6 +1751,7 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
       child: ListView(
         padding: const EdgeInsets.fromLTRB(14, 20, 14, 32),
         children: [
+          // ── Hero recette card ──────────────────────────────
           Container(
             padding: const EdgeInsets.all(22),
             decoration: BoxDecoration(
@@ -1757,11 +1765,17 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
                     style: TextStyle(
                         color: Colors.white.withOpacity(0.5), fontSize: 13)),
                 const SizedBox(height: 8),
-                Text('${p._totalRecette} ${l.millimes}',
+                // ── FIX: reduced font size to prevent overflow on narrow screens
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '${p._totalRecette} ${l.millimes}',
                     style: const TextStyle(
                         color: _goldLight,
-                        fontSize: 36,
-                        fontWeight: FontWeight.bold)),
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ),
                 const SizedBox(height: 4),
                 Text(
                   l.equivalentDT((p._totalRecette / 1000).toStringAsFixed(3)),
@@ -1792,7 +1806,6 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
             child: Column(
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
                       child: Text(l.manqueAGagnerEstime,
@@ -1801,11 +1814,18 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
                               color: Colors.white.withOpacity(0.7))),
                     ),
                     const SizedBox(width: 8),
-                    Text('$manqueAGagner ${l.millimes}',
+                    // ── FIX: Flexible prevents overflow when number is large
+                    Flexible(
+                      child: Text(
+                        '$manqueAGagner ${l.millimes}',
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right,
                         style: const TextStyle(
-                            fontSize: 16,
+                            fontSize: 15,
                             fontWeight: FontWeight.bold,
-                            color: _clrErr)),
+                            color: _clrErr),
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -1855,8 +1875,7 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
                     const SizedBox(width: 5),
                     Text('${l.payants} ($payants)',
                         style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.white.withOpacity(0.4))),
+                            fontSize: 10, color: Colors.white.withOpacity(0.4))),
                     const SizedBox(width: 14),
                     Container(width: 8, height: 8,
                         decoration: BoxDecoration(
@@ -1865,8 +1884,7 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
                     const SizedBox(width: 5),
                     Text('${l.gratuit} (${p._totalGratuits})',
                         style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.white.withOpacity(0.4))),
+                            fontSize: 10, color: Colors.white.withOpacity(0.4))),
                   ],
                 ),
               ],
@@ -1908,25 +1926,31 @@ class _FinanceMainTabState extends State<_FinanceMainTab>
     );
   }
 
+  // ── FIX: both sides Flexible with equal flex, smaller font ──
   Widget _bilanRow(String label, String value, Color valueColor) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 7),
     child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Expanded(
-          child: Text(label, overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                  fontSize: 13, color: Colors.white.withOpacity(0.5))),
+        Flexible(
+          flex: 5,
+          child: Text(
+            label,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.5)),
+          ),
         ),
         const SizedBox(width: 8),
         Flexible(
-          child: Text(value,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: valueColor)),
+          flex: 5,
+          child: Text(
+            value,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: valueColor),
+          ),
         ),
       ],
     ),

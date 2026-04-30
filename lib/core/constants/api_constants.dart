@@ -1,16 +1,17 @@
 class ApiConstants {
   ApiConstants._();
 
-  static const String baseUrl     = 'http://192.168.1.20:8000';
+  static const String baseUrl     = 'http://192.168.1.19:8000';
   static const String billetterie = '$baseUrl/billetterie';
 
   // ── Web backend (Node.js)
-  static const String webBaseUrl     = 'http://192.168.1.20:5000';
+  static const String webBaseUrl     = 'http://192.168.1.19:5000';
   static const String agentHeartbeat = '$webBaseUrl/api/sync/heartbeat';
 
   // ── Tickets
   static const String vendreTicket = '$billetterie/tickets/vendre';
   static const String logScan      = '$billetterie/scan/log';
+
 
   // ── NFC Cards
   static const String nfcRegister  = '$billetterie/nfc/register';
