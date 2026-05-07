@@ -25,6 +25,10 @@ class TicketRepository {
       'montant_total':   (ticketData['montant_total'] as num).toInt(),
       'matricule_agent': ticketData['matricule_agent'],
       'sync_status':     'online',
+      // ── Pass the client-generated QR identifier so the server stores it
+      // in ticket_vendu.numero_titre, enabling QR scan verification later.
+      if (ticketData['numero_titre'] != null)
+        'numero_titre': ticketData['numero_titre'],
     };
 
     // ── 1. Try pushing to server (online path) ────────────────────────────
@@ -49,7 +53,7 @@ class TicketRepository {
         final serverMsg = data['error'] as String? ?? 'Erreur serveur inconnue';
         final localId = await TicketDao.insertTicket({
           ...ticketData,
-          'id_segment':  0,            // consistent with what we sent
+          'id_segment':  0,
           'statut_sync': 'failed',
           'date_heure':  DateTime.now().toIso8601String(),
         });

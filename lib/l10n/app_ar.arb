@@ -415,16 +415,78 @@
 "scanValidatedTitle": "تم التحقق",
 "scanNextTitle": "مسح تذكرة أخرى",
 "scanNfcDetectedTitle": "تم اكتشاف بطاقة NFC !",
-"scanQrDetectedTitle": "تم اكتشاف رمز QR !",
-"scanDetectedSubtitle": "تمت قراءة تذكرة النقل بنجاح",
-"scanDetectedInfo": "يرجى إكمال المعلومات أدناه قبل التحقق.",
-"scanBtnAssign": "إكمال المعلومات",
-"scanOfflineCacheUsed": "وضع غير متصل – البيانات محملة من الذاكرة المحلية",
+  "scanQrDetectedTitle": "تم اكتشاف رمز QR !",
+  "scanDetectedSubtitle": "تمت قراءة تذكرة النقل بنجاح",
+  "scanDetectedInfo": "يرجى إكمال المعلومات أدناه قبل التحقق.",
+  "scanBtnAssign": "إكمال المعلومات",
+  "scanOfflineCacheUsed": "وضع غير متصل – البيانات محملة من الذاكرة المحلية",
   "scanSavedOfflineToast": "تم الحفظ محلياً، ستتم المزامنة عند استعادة الاتصال",
   "scanAlreadyValidated": "تمت المصادقة اليوم بالفعل ({nom})",
   "@scanAlreadyValidated": {
     "placeholders": {
       "nom": { "type": "String" }
     }
-  }
+  },
+  "scanTicketQrInvalid": "رمز QR غير صالح (لم يتم العثور على id_ticket)",
+  "scanTicketNotFound": "التذكرة رقم #{idTicket} غير موجودة",
+  "@scanTicketNotFound": {
+    "placeholders": { "idTicket": { "type": "int" } }
+  },
+  "scanTicketLigneMismatch": "الخط غير متوافق: {detail}",
+  "@scanTicketLigneMismatch": {
+    "placeholders": { "detail": { "type": "String" } }
+  },
+  "scanTicketAlreadyScanned": "تم مسح هذه التذكرة مسبقاً",
+  "scanTicketValidatedToast": "تم التحقق من التذكرة بنجاح ✓",
+  "scanModeTicketVendu": "تذكرة مباعة",
+  "scanTicketVenduSublabel": "مسح رمز تذكرة البيع",
+  "scanTicketVenduTitle": "التحقق من التذكرة",
+  "scanFieldTarif": "التعريفة",
+  "scanFieldQuantite": "الكمية",
+  "scanFieldPrixUnitaire": "سعر الوحدة",
+  "scanFieldMontantTotal": "المبلغ الإجمالي",
+  "scanFieldDateVente": "تاريخ البيع",
+  "scanFieldAgentVente": "عون البيع",
+  "voyageCreeSucces": "تم إنشاء الرحلة بنجاح",
+  "enAttenteSyncBadge": "في انتظار المزامنة",
+  "spontane": "عفوي",
+  "ajouterVoyage": "إضافة رحلة",
+  "aucunVoyageNonProgrammeDesc": "لا توجد رحلات غير مبرمجة لليوم",
+  "nouveauVoyage": "رحلة جديدة",
+  "voyageSpontaneAgence": "رحلة عفوية · الوكالة {code}",
+  "@voyageSpontaneAgence": {
+    "placeholders": { "code": { "type": "int" } }
+  },
+  "voyageSpontaneAgenceInconnue": "رحلة عفوية · وكالة غير معروفة",
+  "ligneLabel": "الخط *",
+  "dateHeureDepart": "تاريخ ووقت الانطلاق",
+  "selectionnerLigne": "اختر خطًا",
+  "creation": "جارٍ الإنشاء...",
+  "creerVoyage": "إنشاء الرحلة",
+  "codeAgenceIntrouvable": "رمز الوكالة غير موجود. يرجى إعادة تسجيل الدخول.",
+  "horsLigneAucuneLigneCache": "غير متصل — لا توجد خطوط محلية.",
+  "aucuneLigneAgence": "لا توجد خطوط متاحة لوكالتك.",
+  "donneesLocales": "بيانات محلية (غير متصل)",
+  "donneesLocalesDate": "بيانات محلية · {date}",
+  "@donneesLocalesDate": {
+    "placeholders": { "date": { "type": "String" } }
+  },
+  "actualiser": "تحديث",
+  "maintenant": "الآن (افتراضي)",
+  "heurePersonnalisee": "وقت مخصص",
+  "impossibleCreerVoyage": "تعذّر إنشاء الرحلة. حاول مجددًا.",
+  "veuillerSelectionnerLigne": "يرجى اختيار خط.",
+  "voyageSansIdentifiant": "رحلة بدون معرّف",
+  "aucunHistoriqueDisponible": "لا يوجد سجل متاح",
+  "voyageHorsLigneSyncMessage": "رحلة غير متصلة — ستتم مزامنة التذاكر عند استعادة الاتصال.",
+  "voyageEnAttenteSync": "غير متصل",
+  "syncDisponibleApres": "متاح بعد المزامنة",
+  "horsLigneCloturePendingSync": "الرحلة في انتظار المزامنة — الإغلاق غير متاح",
+  "horsLigneLabel": "⏳ غير متصل",
+  "scanTicketAlreadyScannedAt": "تم المسح بتاريخ {dateTime}",
+  "@scanTicketAlreadyScannedAt": {
+    "placeholders": { "dateTime": { "type": "String" } }
+  },
+  "scanTicketAlreadyScannedBtn": "تم المسح مسبقاً",
+  "scanStatusAlreadyScanned": "تم المسح مسبقاً"
 }

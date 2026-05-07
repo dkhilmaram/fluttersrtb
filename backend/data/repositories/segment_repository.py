@@ -110,3 +110,45 @@ class SegmentRepository:
             return segments, tarif_types
         finally:
             conn.close()
+
+    def copy_segments_from_ligne(self, id_voyage: int, id_ligne: int) -> int:
+        """
+        Copy the template segments (id_voyage IS NULL) for a given ligne
+        into segment_voyage rows linked to the new voyage.
+        Returns the number of segments copied.
+        """
+        conn = get_db()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            # Fetch template segments for this ligne
+            cursor.execute("""
+                SELECT id_ligne, point_depart, point_arrivee, ordre
+                FROM billetterie.segment_voyage
+                WHERE id_ligne = %s AND id_voyage IS NULL
+                ORDER BY ordre ASC
+            """, (id_ligne,))
+            templates = cursor.fetchall()
+
+            if not templates:
+                return 0
+
+            for seg in templates:
+                cursor.execute("""
+                    INSERT INTO billetterie.segment_voyage
+                        (id_voyage, id_ligne, point_depart, point_arrivee, ordre)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (
+                    id_voyage,
+                    seg['id_ligne'],
+                    seg['point_depart'],
+                    seg['point_arrivee'],
+                    seg['ordre'],
+                ))
+
+            conn.commit()
+            return len(templates)
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()

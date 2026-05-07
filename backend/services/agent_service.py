@@ -2,6 +2,7 @@ from data.repositories.agent_repository import AgentRepository
 from core.security import hash_password, verify_password
 from core.exceptions import AgentNotFound
 
+
 class AgentService:
     def __init__(self):
         self.repo = AgentRepository()
@@ -15,12 +16,20 @@ class AgentService:
                 "matricule_agent": agent["matricule_agent"],
                 "nom":             agent["nom"],
                 "prenom":          agent["prenom"],
+                "code_agence":     agent.get("code_agence"),
             }
         return None
 
-    def create(self, matricule, mot_de_passe, nom, prenom):
+    def create(
+        self,
+        matricule: str,
+        mot_de_passe: str,
+        nom: str,
+        prenom: str,
+        code_agence: int | None = None,   # ← was missing
+    ):
         hashed = hash_password(mot_de_passe)
-        self.repo.create(matricule, hashed, nom, prenom)
+        self.repo.create(matricule, hashed, nom, prenom, code_agence)
 
     def list_all(self):
         return self.repo.list_all()
@@ -30,6 +39,13 @@ class AgentService:
         if not deleted:
             raise AgentNotFound()
 
-    def update(self, matricule: str, nom: str, prenom: str, mot_de_passe: str = ""):
+    def update(
+        self,
+        matricule: str,
+        nom: str,
+        prenom: str,
+        mot_de_passe: str = "",
+        code_agence: int | None = None,   # ← was missing
+    ):
         hashed = hash_password(mot_de_passe) if mot_de_passe else None
-        self.repo.update(matricule, nom, prenom, hashed)
+        self.repo.update(matricule, nom, prenom, hashed, code_agence)

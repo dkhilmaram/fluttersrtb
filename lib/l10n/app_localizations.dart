@@ -1729,6 +1729,288 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Déjà validé aujourd\'hui ({nom})'**
   String scanAlreadyValidated(String nom);
+
+  /// No description provided for @scanTicketQrInvalid.
+  ///
+  /// In fr, this message translates to:
+  /// **'QR code invalide (id_ticket introuvable)'**
+  String get scanTicketQrInvalid;
+
+  /// No description provided for @scanTicketNotFound.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ticket #{idTicket} introuvable'**
+  String scanTicketNotFound(int idTicket);
+
+  /// No description provided for @scanTicketLigneMismatch.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ligne incompatible : {detail}'**
+  String scanTicketLigneMismatch(String detail);
+
+  /// No description provided for @scanTicketAlreadyScanned.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ce ticket a déjà été scanné'**
+  String get scanTicketAlreadyScanned;
+
+  /// No description provided for @scanTicketValidatedToast.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ticket validé avec succès ✓'**
+  String get scanTicketValidatedToast;
+
+  /// No description provided for @scanModeTicketVendu.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ticket vendu'**
+  String get scanModeTicketVendu;
+
+  /// No description provided for @scanTicketVenduSublabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Scanner un ticket de vente'**
+  String get scanTicketVenduSublabel;
+
+  /// No description provided for @scanTicketVenduTitle.
+  ///
+  /// In fr, this message translates to:
+  /// **'Vérification du ticket'**
+  String get scanTicketVenduTitle;
+
+  /// No description provided for @scanFieldTarif.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tarif'**
+  String get scanFieldTarif;
+
+  /// No description provided for @scanFieldQuantite.
+  ///
+  /// In fr, this message translates to:
+  /// **'Quantité'**
+  String get scanFieldQuantite;
+
+  /// No description provided for @scanFieldPrixUnitaire.
+  ///
+  /// In fr, this message translates to:
+  /// **'Prix unitaire'**
+  String get scanFieldPrixUnitaire;
+
+  /// No description provided for @scanFieldMontantTotal.
+  ///
+  /// In fr, this message translates to:
+  /// **'Montant total'**
+  String get scanFieldMontantTotal;
+
+  /// No description provided for @scanFieldDateVente.
+  ///
+  /// In fr, this message translates to:
+  /// **'Date de vente'**
+  String get scanFieldDateVente;
+
+  /// No description provided for @scanFieldAgentVente.
+  ///
+  /// In fr, this message translates to:
+  /// **'Agent de vente'**
+  String get scanFieldAgentVente;
+
+  /// No description provided for @voyageCreeSucces.
+  ///
+  /// In fr, this message translates to:
+  /// **'Voyage créé avec succès'**
+  String get voyageCreeSucces;
+
+  /// No description provided for @enAttenteSyncBadge.
+  ///
+  /// In fr, this message translates to:
+  /// **'En attente de sync'**
+  String get enAttenteSyncBadge;
+
+  /// No description provided for @spontane.
+  ///
+  /// In fr, this message translates to:
+  /// **'Spontané'**
+  String get spontane;
+
+  /// No description provided for @ajouterVoyage.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ajouter un voyage'**
+  String get ajouterVoyage;
+
+  /// No description provided for @aucunVoyageNonProgrammeDesc.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucun voyage non programmé pour aujourd\'hui'**
+  String get aucunVoyageNonProgrammeDesc;
+
+  /// No description provided for @nouveauVoyage.
+  ///
+  /// In fr, this message translates to:
+  /// **'Nouveau voyage'**
+  String get nouveauVoyage;
+
+  /// No description provided for @voyageSpontaneAgence.
+  ///
+  /// In fr, this message translates to:
+  /// **'Voyage spontané · Agence {code}'**
+  String voyageSpontaneAgence(int code);
+
+  /// No description provided for @voyageSpontaneAgenceInconnue.
+  ///
+  /// In fr, this message translates to:
+  /// **'Voyage spontané · Agence inconnue'**
+  String get voyageSpontaneAgenceInconnue;
+
+  /// No description provided for @ligneLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ligne *'**
+  String get ligneLabel;
+
+  /// No description provided for @dateHeureDepart.
+  ///
+  /// In fr, this message translates to:
+  /// **'Date et heure de départ'**
+  String get dateHeureDepart;
+
+  /// No description provided for @selectionnerLigne.
+  ///
+  /// In fr, this message translates to:
+  /// **'Sélectionner une ligne'**
+  String get selectionnerLigne;
+
+  /// No description provided for @creation.
+  ///
+  /// In fr, this message translates to:
+  /// **'Création...'**
+  String get creation;
+
+  /// No description provided for @creerVoyage.
+  ///
+  /// In fr, this message translates to:
+  /// **'Créer le voyage'**
+  String get creerVoyage;
+
+  /// No description provided for @codeAgenceIntrouvable.
+  ///
+  /// In fr, this message translates to:
+  /// **'Code agence introuvable. Veuillez vous reconnecter.'**
+  String get codeAgenceIntrouvable;
+
+  /// No description provided for @horsLigneAucuneLigneCache.
+  ///
+  /// In fr, this message translates to:
+  /// **'Hors ligne — aucune ligne en cache.'**
+  String get horsLigneAucuneLigneCache;
+
+  /// No description provided for @aucuneLigneAgence.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucune ligne disponible pour votre agence.'**
+  String get aucuneLigneAgence;
+
+  /// No description provided for @donneesLocales.
+  ///
+  /// In fr, this message translates to:
+  /// **'Données locales (hors ligne)'**
+  String get donneesLocales;
+
+  /// No description provided for @donneesLocalesDate.
+  ///
+  /// In fr, this message translates to:
+  /// **'Données locales · {date}'**
+  String donneesLocalesDate(String date);
+
+  /// No description provided for @actualiser.
+  ///
+  /// In fr, this message translates to:
+  /// **'Actualiser'**
+  String get actualiser;
+
+  /// No description provided for @maintenant.
+  ///
+  /// In fr, this message translates to:
+  /// **'Maintenant (par défaut)'**
+  String get maintenant;
+
+  /// No description provided for @heurePersonnalisee.
+  ///
+  /// In fr, this message translates to:
+  /// **'Heure personnalisée'**
+  String get heurePersonnalisee;
+
+  /// No description provided for @impossibleCreerVoyage.
+  ///
+  /// In fr, this message translates to:
+  /// **'Impossible de créer le voyage. Réessayez.'**
+  String get impossibleCreerVoyage;
+
+  /// No description provided for @veuillerSelectionnerLigne.
+  ///
+  /// In fr, this message translates to:
+  /// **'Veuillez sélectionner une ligne.'**
+  String get veuillerSelectionnerLigne;
+
+  /// No description provided for @voyageSansIdentifiant.
+  ///
+  /// In fr, this message translates to:
+  /// **'Voyage sans identifiant'**
+  String get voyageSansIdentifiant;
+
+  /// No description provided for @aucunHistoriqueDisponible.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucun historique disponible'**
+  String get aucunHistoriqueDisponible;
+
+  /// No description provided for @voyageHorsLigneSyncMessage.
+  ///
+  /// In fr, this message translates to:
+  /// **'Voyage hors ligne — les tickets seront synchronisés dès que la connexion sera rétablie.'**
+  String get voyageHorsLigneSyncMessage;
+
+  /// No description provided for @voyageEnAttenteSync.
+  ///
+  /// In fr, this message translates to:
+  /// **'Hors ligne'**
+  String get voyageEnAttenteSync;
+
+  /// No description provided for @syncDisponibleApres.
+  ///
+  /// In fr, this message translates to:
+  /// **'Disponible après sync'**
+  String get syncDisponibleApres;
+
+  /// No description provided for @horsLigneCloturePendingSync.
+  ///
+  /// In fr, this message translates to:
+  /// **'Voyage en attente de synchronisation — clôture indisponible'**
+  String get horsLigneCloturePendingSync;
+
+  /// No description provided for @horsLigneLabel.
+  ///
+  /// In fr, this message translates to:
+  /// **'⏳ Hors ligne'**
+  String get horsLigneLabel;
+
+  /// No description provided for @scanStatusAlreadyScanned.
+  ///
+  /// In fr, this message translates to:
+  /// **'Déjà scanné'**
+  String get scanStatusAlreadyScanned;
+
+  /// No description provided for @scanTicketAlreadyScannedAt.
+  ///
+  /// In fr, this message translates to:
+  /// **'Scanné le {dateTime}'**
+  String scanTicketAlreadyScannedAt(String dateTime);
+
+  /// No description provided for @scanTicketAlreadyScannedBtn.
+  ///
+  /// In fr, this message translates to:
+  /// **'Déjà scanné'**
+  String get scanTicketAlreadyScannedBtn;
 }
 
 class _AppLocalizationsDelegate

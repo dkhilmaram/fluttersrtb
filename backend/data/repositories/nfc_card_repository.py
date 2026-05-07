@@ -1,15 +1,11 @@
 from core.database import get_db
-from datetime import datetime
+import datetime
 
 
 class NfcCardRepository:
 
     def find_by_uid(self, uid: str) -> dict | None:
-        """
-        Look up a pre-registered NFC card by its hardware UID.
-        Returns a dict or None if not found.
-        """
-        conn = get_db()
+        conn   = get_db()
         cursor = conn.cursor(dictionary=True)
         try:
             cursor.execute(
@@ -18,7 +14,7 @@ class NfcCardRepository:
                     card_uid,
                     nom,
                     type,
-                    DATE_FORMAT(expire, '%%Y-%%m-%%d') AS expire,
+                    expire,
                     ligne,
                     organisme
                 FROM billetterie.nfc_cards
@@ -26,8 +22,16 @@ class NfcCardRepository:
                 """,
                 (uid.upper().strip(),),
             )
-            return cursor.fetchone()
+            row = cursor.fetchone()
+            if row is None:
+                return None
+
+            print(f"[NFC] raw expire = {repr(row.get('expire'))}")
+            row["expire"] = _to_iso(row.get("expire"))
+            print(f"[NFC] normalised expire = {repr(row['expire'])}")
+            return row
         finally:
+            cursor.close()
             conn.close()
 
     def register(
@@ -39,11 +43,7 @@ class NfcCardRepository:
         ligne:     str,
         organisme: str,
     ) -> bool:
-        """
-        Insert a new pre-registered NFC card.
-        Returns True on success, raises on duplicate key.
-        """
-        conn = get_db()
+        conn   = get_db()
         cursor = conn.cursor()
         try:
             cursor.execute(
@@ -67,10 +67,11 @@ class NfcCardRepository:
             conn.rollback()
             raise
         finally:
+            cursor.close()
             conn.close()
 
     def list_all(self) -> list[dict]:
-        conn = get_db()
+        conn   = get_db()
         cursor = conn.cursor(dictionary=True)
         try:
             cursor.execute(
@@ -79,7 +80,7 @@ class NfcCardRepository:
                     card_uid,
                     nom,
                     type,
-                    DATE_FORMAT(expire, '%%Y-%%m-%%d') AS expire,
+                    expire,
                     ligne,
                     organisme,
                     created_at
@@ -87,6 +88,34 @@ class NfcCardRepository:
                 ORDER BY created_at DESC
                 """
             )
-            return cursor.fetchall()
+            rows = cursor.fetchall()
+            for row in rows:
+                row["expire"] = _to_iso(row.get("expire"))
+            return rows
         finally:
+            cursor.close()
             conn.close()
+
+
+# ── helper ────────────────────────────────────────────────────────────────────
+
+def _to_iso(value) -> str:
+    """
+    Convert whatever MySQL returns for a date column into YYYY-MM-DD.
+
+    Handles:
+      - datetime.date       →  '2026-12-31'
+      - datetime.datetime   →  '2026-12-31'
+      - str '2026-12-31'    →  '2026-12-31'   (already correct)
+      - str '2026-12-31 00:00:00'  →  '2026-12-31'
+      - None / ''           →  ''
+    """
+    if value is None:
+        return ""
+    if isinstance(value, (datetime.date, datetime.datetime)):
+        return value.strftime("%Y-%m-%d")
+    s = str(value).strip()
+    if not s:
+        return ""
+    # If stored as 'YYYY-MM-DD HH:MM:SS', keep only the date part
+    return s[:10]

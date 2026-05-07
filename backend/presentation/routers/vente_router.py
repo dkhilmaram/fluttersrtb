@@ -60,3 +60,20 @@ def get_prix_ligne(id_ligne: int):
 @router.get("/ligne/{id_ligne}/tarifs")
 def get_tarifs_ligne(id_ligne: int):
     return _seg_svc.get_tarifs_ligne(id_ligne)
+
+# ─────────────────────────────────────────────────────────────
+# NEW — list lines by agence (used by Flutter "Ajouter voyage")
+# ─────────────────────────────────────────────────────────────
+@router.get("/lignes/agence/{code_agence}")
+def get_lignes_by_agence(code_agence: int):
+    """
+    Returns all lines for a given agence code.
+    Called by the Flutter bottom sheet when the receveur wants
+    to open a non-scheduled voyage.
+    """
+    lignes = _svc.get_lignes_by_agence(code_agence)
+    return {"success": True, "lignes": lignes}
+@router.post("/ventes/creer")
+def creer_voyage(data: VenteData):
+    id_voyage = _svc.create(data)
+    return {"success": True, "id_voyage": id_voyage}

@@ -14,8 +14,6 @@ const _goldLight = AppTheme.goldLight;
 const _surface   = AppTheme.offWhite;
 
 // ── Category definitions (stable keys, no labels) ─────────────
-// 'key' is sent to the server (French, never changes).
-// Labels are resolved at runtime via AppLocalizations.
 const List<Map<String, dynamic>> kCategoryDefs = [
   {'key': 'armee_nationale',       'icon': Icons.shield_rounded,              'color': Color(0xFF1E40AF)},
   {'key': 'garde_nationale',       'icon': Icons.security_rounded,            'color': Color(0xFF1D4ED8)},
@@ -31,7 +29,6 @@ const List<Map<String, dynamic>> kCategoryDefs = [
 
 // ── Helpers ───────────────────────────────────────────────────
 
-/// Localized display label for a category key.
 String categoryLabel(AppLocalizations t, String key) {
   switch (key) {
     case 'armee_nationale':        return t.categorieArmeeNationale;
@@ -48,7 +45,6 @@ String categoryLabel(AppLocalizations t, String key) {
   }
 }
 
-/// French server value (never localised — must stay consistent with back-end).
 String buildTypeTarif(String key) {
   if (key == 'agent')       return 'Agent';
   if (key == 'abonnement')  return 'Abonnement';
@@ -85,8 +81,8 @@ class PassageSpecialPage extends StatefulWidget {
 }
 
 class _PassageSpecialPageState extends State<PassageSpecialPage> {
-  String? selectedKey; // stores category key, not label
-  int quantite          = 1;
+  String? selectedKey;
+  static const int quantite = 1; // fixed at 1, no UI picker
   bool isSaving         = false;
   int totalEnregistres  = 0;
 
@@ -132,49 +128,47 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
   // ── Save ──────────────────────────────────────────────────
 
   Future<void> _enregistrer() async {
-  if (selectedKey == null) return;
-  final t = AppLocalizations.of(context)!;
-  setState(() => isSaving = true);
+    if (selectedKey == null) return;
+    final t = AppLocalizations.of(context)!;
+    setState(() => isSaving = true);
 
-  final result = await TicketRepository.saveTicket({
-    'id_voyage':       widget.voyage['id'] as int? ?? 0,
-    'id_segment':      0,          // server resolves from point_depart
-    'point_depart':    widget.segment['point_depart'] ?? widget.voyage['depart'] ?? '',
-    'point_arrivee':   widget.segment['point_arrivee'] ?? widget.voyage['arrivee'] ?? '',
-    'type_tarif':      buildTypeTarif(selectedKey!),
-    'quantite':        quantite,
-    'prix_unitaire':   0,
-    'montant_total':   0,
-    'matricule_agent': widget.voyage['matricule_agent'] ?? 0,
-  });
-
-  if (result.success) {
-    final saved = quantite;
-    setState(() {
-      totalEnregistres += saved;
-      selectedKey = null;
-      quantite    = 1;
+    final result = await TicketRepository.saveTicket({
+      'id_voyage':       widget.voyage['id'] as int? ?? 0,
+      'id_segment':      0,
+      'point_depart':    widget.segment['point_depart'] ?? widget.voyage['depart'] ?? '',
+      'point_arrivee':   widget.segment['point_arrivee'] ?? widget.voyage['arrivee'] ?? '',
+      'type_tarif':      buildTypeTarif(selectedKey!),
+      'quantite':        quantite,
+      'prix_unitaire':   0,
+      'montant_total':   0,
+      'matricule_agent': widget.voyage['matricule_agent'] ?? 0,
     });
 
-    if (result.wasOffline) {
-      OfflineToastNotification.show(context);
+    if (result.success) {
+      setState(() {
+        totalEnregistres += quantite;
+        selectedKey = null;
+      });
+
+      if (result.wasOffline) {
+        OfflineToastNotification.show(context);
+      } else {
+        _showToast(t.passagesToast(quantite));
+      }
+
+      if (widget.embeddedMode && widget.onPassageSaved != null) {
+        await Future.delayed(const Duration(milliseconds: 600));
+        if (mounted) widget.onPassageSaved!.call();
+      }
     } else {
-      _showToast(t.passagesToast(saved));
+      _showToast(
+        t.erreurPassage(result.error ?? t.erreurInconnue),
+        isError: true,
+      );
     }
 
-    if (widget.embeddedMode && widget.onPassageSaved != null) {
-      await Future.delayed(const Duration(milliseconds: 600));
-      if (mounted) widget.onPassageSaved!.call();
-    }
-  } else {
-    _showToast(
-      t.erreurPassage(result.error ?? t.erreurInconnue),
-      isError: true,
-    );
+    if (mounted) setState(() => isSaving = false);
   }
-
-  if (mounted) setState(() => isSaving = false);
-}
 
   // ── Build ─────────────────────────────────────────────────
 
@@ -185,7 +179,6 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
     final dep = widget.segment['point_depart']  ?? widget.voyage['depart']  ?? '?';
     final arr = widget.segment['point_arrivee'] ?? widget.voyage['arrivee'] ?? '?';
 
-    // Build localised categories list once per frame
     final allCategories = kCategoryDefs.map((def) => {
       ...def,
       'label': categoryLabel(t, def['key'] as String),
@@ -242,16 +235,6 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
             ],
           ),
           const SizedBox(height: 24),
-
-          // ── Quantity
-          _SectionLabel(t.nombreDePersonnes, Icons.people_rounded),
-          const SizedBox(height: 10),
-          _QuantiteCard(
-            quantite: quantite,
-            onDec: quantite > 1 ? () => setState(() => quantite--) : null,
-            onInc: () => setState(() => quantite++),
-          ),
-          const SizedBox(height: 16),
 
           // ── Summary
           if (selectedKey != null) ...[
@@ -380,7 +363,6 @@ class _PassageSpecialPageState extends State<PassageSpecialPage> {
             ),
           ),
           const SizedBox(height: 12),
-          // Route pill
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             decoration: BoxDecoration(
@@ -582,79 +564,6 @@ class _CategoryButton extends StatelessWidget {
       ),
     );
   }
-}
-
-class _QuantiteCard extends StatelessWidget {
-  final int quantite;
-  final VoidCallback? onDec;
-  final VoidCallback onInc;
-  const _QuantiteCard({required this.quantite, this.onDec, required this.onInc});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppLocalizations.of(context)!;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(color: _navyMid.withOpacity(0.06), blurRadius: 10, offset: const Offset(0, 3)),
-        ],
-      ),
-      child: Row(
-        children: [
-          _QtyBtn(icon: Icons.remove, enabled: onDec != null, onTap: onDec ?? () {}),
-          Expanded(
-            child: Column(
-              children: [
-                Text(
-                  '$quantite',
-                  style: const TextStyle(
-                    fontSize: 28, fontWeight: FontWeight.bold, color: _navyDark,
-                  ),
-                ),
-                Text(
-                  quantite == 1 ? t.personne : t.personnes,
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-          _QtyBtn(icon: Icons.add, enabled: true, onTap: onInc),
-        ],
-      ),
-    );
-  }
-}
-
-class _QtyBtn extends StatelessWidget {
-  final IconData icon;
-  final bool enabled;
-  final VoidCallback onTap;
-  const _QtyBtn({required this.icon, required this.enabled, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-        onTap: enabled ? onTap : null,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: enabled ? _navyMid : Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: enabled
-                ? [BoxShadow(color: _navyMid.withOpacity(0.3), blurRadius: 6, offset: const Offset(0, 2))]
-                : [],
-          ),
-          child: Icon(
-            icon,
-            color: enabled ? Colors.white : Colors.grey.shade300,
-            size: 18,
-          ),
-        ),
-      );
 }
 
 class _BigBtn extends StatelessWidget {

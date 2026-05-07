@@ -18,5 +18,3 @@ class HeartbeatService:
         by the router before sending).
         """
         return await HeartbeatRepository.get_all_with_stats()
-    
-    

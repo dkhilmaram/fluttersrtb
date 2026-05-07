@@ -12,7 +12,7 @@ from services.heartbeat_service import HeartbeatService
 router = APIRouter(tags=["heartbeat"])
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# ── helpers ───────────────────────────────────────────────────────────────────
 
 def _serialize(obj):
     """JSON-serialise datetime / date objects."""
@@ -28,6 +28,7 @@ async def receive_heartbeat(payload: HeartbeatPayload):
     """
     Called by the Flutter SyncService every 30 s and after every sync attempt.
     Upserts a row in agent_heartbeat so the web dashboard can track liveness.
+    Also persists pending_tickets details so the dashboard can inspect queued items.
     """
     await HeartbeatService.record(payload)
     return {"success": True}
@@ -46,7 +47,6 @@ async def _event_generator() -> AsyncGenerator[str, None]:
             payload = json.dumps(rows, default=_serialize)
             yield f"data: {payload}\n\n"
         except Exception as exc:
-            # Send an error event so the client can display it, then keep going
             yield f"event: error\ndata: {str(exc)}\n\n"
         await asyncio.sleep(2)
 

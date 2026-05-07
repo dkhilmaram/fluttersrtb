@@ -35,6 +35,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   intl: ^0.20.2
+  crypto: ^3.0.3
 
   # Printing & PDF
   printing: ^5.13.1

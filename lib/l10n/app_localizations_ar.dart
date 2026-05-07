@@ -914,4 +914,159 @@ class AppLocalizationsAr extends AppLocalizations {
   String scanAlreadyValidated(String nom) {
     return 'تمت المصادقة اليوم بالفعل ($nom)';
   }
+
+  @override
+  String get scanTicketQrInvalid =>
+      'رمز QR غير صالح (لم يتم العثور على id_ticket)';
+
+  @override
+  String scanTicketNotFound(int idTicket) {
+    return 'التذكرة رقم #$idTicket غير موجودة';
+  }
+
+  @override
+  String scanTicketLigneMismatch(String detail) {
+    return 'الخط غير متوافق: $detail';
+  }
+
+  @override
+  String get scanTicketAlreadyScanned => 'تم مسح هذه التذكرة مسبقاً';
+
+  @override
+  String get scanTicketValidatedToast => 'تم التحقق من التذكرة بنجاح ✓';
+
+  @override
+  String get scanModeTicketVendu => 'تذكرة مباعة';
+
+  @override
+  String get scanTicketVenduSublabel => 'مسح رمز تذكرة البيع';
+
+  @override
+  String get scanTicketVenduTitle => 'التحقق من التذكرة';
+
+  @override
+  String get scanFieldTarif => 'التعريفة';
+
+  @override
+  String get scanFieldQuantite => 'الكمية';
+
+  @override
+  String get scanFieldPrixUnitaire => 'سعر الوحدة';
+
+  @override
+  String get scanFieldMontantTotal => 'المبلغ الإجمالي';
+
+  @override
+  String get scanFieldDateVente => 'تاريخ البيع';
+
+  @override
+  String get scanFieldAgentVente => 'عون البيع';
+
+  @override
+  String get voyageCreeSucces => 'تم إنشاء الرحلة بنجاح';
+
+  @override
+  String get enAttenteSyncBadge => 'في انتظار المزامنة';
+
+  @override
+  String get spontane => 'عفوي';
+
+  @override
+  String get ajouterVoyage => 'إضافة رحلة';
+
+  @override
+  String get aucunVoyageNonProgrammeDesc => 'لا توجد رحلات غير مبرمجة لليوم';
+
+  @override
+  String get nouveauVoyage => 'رحلة جديدة';
+
+  @override
+  String voyageSpontaneAgence(int code) {
+    return 'رحلة عفوية · الوكالة $code';
+  }
+
+  @override
+  String get voyageSpontaneAgenceInconnue => 'رحلة عفوية · وكالة غير معروفة';
+
+  @override
+  String get ligneLabel => 'الخط *';
+
+  @override
+  String get dateHeureDepart => 'تاريخ ووقت الانطلاق';
+
+  @override
+  String get selectionnerLigne => 'اختر خطًا';
+
+  @override
+  String get creation => 'جارٍ الإنشاء...';
+
+  @override
+  String get creerVoyage => 'إنشاء الرحلة';
+
+  @override
+  String get codeAgenceIntrouvable =>
+      'رمز الوكالة غير موجود. يرجى إعادة تسجيل الدخول.';
+
+  @override
+  String get horsLigneAucuneLigneCache => 'غير متصل — لا توجد خطوط محلية.';
+
+  @override
+  String get aucuneLigneAgence => 'لا توجد خطوط متاحة لوكالتك.';
+
+  @override
+  String get donneesLocales => 'بيانات محلية (غير متصل)';
+
+  @override
+  String donneesLocalesDate(String date) {
+    return 'بيانات محلية · $date';
+  }
+
+  @override
+  String get actualiser => 'تحديث';
+
+  @override
+  String get maintenant => 'الآن (افتراضي)';
+
+  @override
+  String get heurePersonnalisee => 'وقت مخصص';
+
+  @override
+  String get impossibleCreerVoyage => 'تعذّر إنشاء الرحلة. حاول مجددًا.';
+
+  @override
+  String get veuillerSelectionnerLigne => 'يرجى اختيار خط.';
+
+  @override
+  String get voyageSansIdentifiant => 'رحلة بدون معرّف';
+
+  @override
+  String get aucunHistoriqueDisponible => 'لا يوجد سجل متاح';
+
+  @override
+  String get voyageHorsLigneSyncMessage =>
+      'رحلة غير متصلة — ستتم مزامنة التذاكر عند استعادة الاتصال.';
+
+  @override
+  String get voyageEnAttenteSync => 'غير متصل';
+
+  @override
+  String get syncDisponibleApres => 'متاح بعد المزامنة';
+
+  @override
+  String get horsLigneCloturePendingSync =>
+      'الرحلة في انتظار المزامنة — الإغلاق غير متاح';
+
+  @override
+  String get horsLigneLabel => '⏳ غير متصل';
+
+  @override
+  String get scanStatusAlreadyScanned => 'تم المسح مسبقاً';
+
+  @override
+  String scanTicketAlreadyScannedAt(String dateTime) {
+    return 'تم المسح بتاريخ $dateTime';
+  }
+
+  @override
+  String get scanTicketAlreadyScannedBtn => 'تم المسح مسبقاً';
 }

@@ -927,4 +927,161 @@ class AppLocalizationsFr extends AppLocalizations {
   String scanAlreadyValidated(String nom) {
     return 'Déjà validé aujourd\'hui ($nom)';
   }
+
+  @override
+  String get scanTicketQrInvalid => 'QR code invalide (id_ticket introuvable)';
+
+  @override
+  String scanTicketNotFound(int idTicket) {
+    return 'Ticket #$idTicket introuvable';
+  }
+
+  @override
+  String scanTicketLigneMismatch(String detail) {
+    return 'Ligne incompatible : $detail';
+  }
+
+  @override
+  String get scanTicketAlreadyScanned => 'Ce ticket a déjà été scanné';
+
+  @override
+  String get scanTicketValidatedToast => 'Ticket validé avec succès ✓';
+
+  @override
+  String get scanModeTicketVendu => 'Ticket vendu';
+
+  @override
+  String get scanTicketVenduSublabel => 'Scanner un ticket de vente';
+
+  @override
+  String get scanTicketVenduTitle => 'Vérification du ticket';
+
+  @override
+  String get scanFieldTarif => 'Tarif';
+
+  @override
+  String get scanFieldQuantite => 'Quantité';
+
+  @override
+  String get scanFieldPrixUnitaire => 'Prix unitaire';
+
+  @override
+  String get scanFieldMontantTotal => 'Montant total';
+
+  @override
+  String get scanFieldDateVente => 'Date de vente';
+
+  @override
+  String get scanFieldAgentVente => 'Agent de vente';
+
+  @override
+  String get voyageCreeSucces => 'Voyage créé avec succès';
+
+  @override
+  String get enAttenteSyncBadge => 'En attente de sync';
+
+  @override
+  String get spontane => 'Spontané';
+
+  @override
+  String get ajouterVoyage => 'Ajouter un voyage';
+
+  @override
+  String get aucunVoyageNonProgrammeDesc =>
+      'Aucun voyage non programmé pour aujourd\'hui';
+
+  @override
+  String get nouveauVoyage => 'Nouveau voyage';
+
+  @override
+  String voyageSpontaneAgence(int code) {
+    return 'Voyage spontané · Agence $code';
+  }
+
+  @override
+  String get voyageSpontaneAgenceInconnue =>
+      'Voyage spontané · Agence inconnue';
+
+  @override
+  String get ligneLabel => 'Ligne *';
+
+  @override
+  String get dateHeureDepart => 'Date et heure de départ';
+
+  @override
+  String get selectionnerLigne => 'Sélectionner une ligne';
+
+  @override
+  String get creation => 'Création...';
+
+  @override
+  String get creerVoyage => 'Créer le voyage';
+
+  @override
+  String get codeAgenceIntrouvable =>
+      'Code agence introuvable. Veuillez vous reconnecter.';
+
+  @override
+  String get horsLigneAucuneLigneCache => 'Hors ligne — aucune ligne en cache.';
+
+  @override
+  String get aucuneLigneAgence => 'Aucune ligne disponible pour votre agence.';
+
+  @override
+  String get donneesLocales => 'Données locales (hors ligne)';
+
+  @override
+  String donneesLocalesDate(String date) {
+    return 'Données locales · $date';
+  }
+
+  @override
+  String get actualiser => 'Actualiser';
+
+  @override
+  String get maintenant => 'Maintenant (par défaut)';
+
+  @override
+  String get heurePersonnalisee => 'Heure personnalisée';
+
+  @override
+  String get impossibleCreerVoyage =>
+      'Impossible de créer le voyage. Réessayez.';
+
+  @override
+  String get veuillerSelectionnerLigne => 'Veuillez sélectionner une ligne.';
+
+  @override
+  String get voyageSansIdentifiant => 'Voyage sans identifiant';
+
+  @override
+  String get aucunHistoriqueDisponible => 'Aucun historique disponible';
+
+  @override
+  String get voyageHorsLigneSyncMessage =>
+      'Voyage hors ligne — les tickets seront synchronisés dès que la connexion sera rétablie.';
+
+  @override
+  String get voyageEnAttenteSync => 'Hors ligne';
+
+  @override
+  String get syncDisponibleApres => 'Disponible après sync';
+
+  @override
+  String get horsLigneCloturePendingSync =>
+      'Voyage en attente de synchronisation — clôture indisponible';
+
+  @override
+  String get horsLigneLabel => '⏳ Hors ligne';
+
+  @override
+  String get scanStatusAlreadyScanned => 'Déjà scanné';
+
+  @override
+  String scanTicketAlreadyScannedAt(String dateTime) {
+    return 'Scanné le $dateTime';
+  }
+
+  @override
+  String get scanTicketAlreadyScannedBtn => 'Déjà scanné';
 }

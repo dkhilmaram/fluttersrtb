@@ -13,13 +13,13 @@ class VenteService:
         return [
             {
                 "id":              r["id_voyage"],
-                "id_voyage":        r["id_voyage"],
+                "id_voyage":       r["id_voyage"],
                 "id_ligne":        r["id_ligne"],
                 "id_appareil":     r["id_appareil"],
                 "matricule_agent": r["matricule_agent"],
                 "code_agence":     r["code_agence"],
-                "depart":          r["point_depart"],
-                "arrivee":         r["point_arrive"],
+                "depart":          r["depart"],       # aliased in SQL
+                "arrivee":         r["arrivee"],      # aliased in SQL
                 "nom_ligne":       r["nom_ligne"],
                 "date_heure":      str(r["date_heure"]),
                 "statut":          r["statut"],
@@ -32,13 +32,13 @@ class VenteService:
         return [
             {
                 "id":              r["id_voyage"],
-                "id_voyage":        r["id_voyage"],
+                "id_voyage":       r["id_voyage"],
                 "id_ligne":        r["id_ligne"],
                 "id_appareil":     r["id_appareil"],
                 "code_agence":     r["code_agence"],
                 "matricule_agent": r["matricule_agent"],
-                "depart":          r["point_depart"],
-                "arrivee":         r["point_arrive"],
+                "depart":          r["depart"],       # aliased in SQL
+                "arrivee":         r["arrivee"],      # aliased in SQL
                 "nom_ligne":       r["nom_ligne"],
                 "date_heure":      str(r["date_heure"]),
                 "type":            r["type"],
@@ -77,3 +77,18 @@ class VenteService:
 
     def bulk_reopen(self, ids: list[int]) -> int:
         return self.repo.bulk_reopen(ids)
+
+    # ─────────────────────────────────────────────────────────────
+    # Lines by agence
+    # ─────────────────────────────────────────────────────────────
+    def get_lignes_by_agence(self, code_agence: int) -> list[dict]:
+        rows = self.repo.get_lignes_by_agence(code_agence)
+        return [
+            {
+                "id_ligne":  r["id_ligne"],
+                "nom_ligne": r["nom_ligne"],
+                "depart":    r["point_depart"],   # not aliased in this query
+                "arrivee":   r["point_arrive"],   # not aliased in this query
+            }
+            for r in rows
+        ]

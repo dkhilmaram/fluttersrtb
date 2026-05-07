@@ -35,6 +35,10 @@ class _LoginPageState extends State<LoginPage> {
   OverlayEntry? _toastEntry;
   Timer?        _toastTimer;
 
+  // ─────────────────────────────────────────────────────────────
+  // Toast
+  // ─────────────────────────────────────────────────────────────
+
   void _showToast(String msg,
       {bool isError = false, bool isWarning = false}) {
     _toastTimer?.cancel();
@@ -72,82 +76,147 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  void _seConnecter() async {
+  // ─────────────────────────────────────────────────────────────
+  // Login logic
+  // ─────────────────────────────────────────────────────────────
+
+  Future<void> _seConnecter() async {
     if (!_formKey.currentState!.validate()) return;
+    if (!mounted) return;
+
+    // ── Capture values FIRST before any async gap ────────────────
+    final matriculeInput = _matriculeController.text.trim();
+    final passwordInput  = _motDePasseController.text;
+
     final t = AppLocalizations.of(context)!;
     setState(() => _isLoading = true);
 
-    // 1. Try server login
+    // ── 1. Try online login ──────────────────────────────────────
+    // null  = network/timeout (fall through to offline)
+    // true  = server said success
+    // false = server explicitly rejected credentials
+    bool? serverResult;
+
     try {
       final response = await http
           .post(
             Uri.parse('${ApiConstants.baseUrl}/login'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
-              'matricule':    _matriculeController.text,
-              'mot_de_passe': _motDePasseController.text,
+              'matricule':    matriculeInput,
+              'mot_de_passe': passwordInput,
             }),
           )
-          .timeout(ApiConstants.defaultTimeout);
+          .timeout(const Duration(seconds: 5));
 
-      final data = jsonDecode(response.body);
-      setState(() => _isLoading = false);
-      if (!mounted) return;
+      // ── Debug: log the raw server response ─────────────────────
+      print('🌐 Online response status: ${response.statusCode}');
+      print('🌐 Online response body:   ${response.body}');
 
-      if (data['success'] == true) {
-        final employe   = data['employe'] as Map<String, dynamic>;
-        final matricule = int.parse(_matriculeController.text);
-
-        await AgentDao.saveAgent(
-          matricule:   matricule,
-          motDePasse:  _motDePasseController.text,
-          employeData: employe,
-        );
-
-        // ── Set matricule so the heartbeat timer fires immediately ──
-        SyncService.setMatricule(matricule);
-
-        _showToast(t.bienvenue(employe['prenom'], employe['nom']));
-        if (!mounted) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => VoyageProgrammePage(agent: employe),
-          ),
-        );
+      // 5xx = server-side infrastructure failure (DB down, crash, etc.)
+      // Treat exactly like a network error → fall through to offline.
+      if (response.statusCode >= 500) {
+        print('⚠️  Server error ${response.statusCode} (infrastructure) — falling back to offline…');
+        serverResult = null;
       } else {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+        if (data['success'] == true) {
+          serverResult = true;
+
+          final employe = Map<String, dynamic>.from(
+              data['employe'] as Map<String, dynamic>);
+
+          final matricule = employe['matricule_agent'] as int? ??
+              int.tryParse(employe['matricule']?.toString() ?? '') ??
+              int.parse(matriculeInput);
+
+          try {
+            await AgentDao.saveAgent(
+              matricule:   matricule,
+              motDePasse:  passwordInput,
+              employeData: employe,
+            );
+            print('✅ Agent credentials cached for offline use');
+          } catch (e, stack) {
+            print('❌ CRITICAL: failed to cache agent credentials: $e');
+            print(stack);
+          }
+
+          SyncService.setMatricule(matricule);
+
+          if (mounted) {
+            setState(() => _isLoading = false);
+            _showToast(t.bienvenue(employe['prenom'], employe['nom']));
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => VoyageProgrammePage(agent: employe),
+              ),
+            );
+          }
+          return;
+
+        } else {
+          // 4xx or explicit success:false → wrong credentials, stop here
+          serverResult = false;
+          print('❌ Server rejected login (${response.statusCode}): success=${data['success']} message=${data['message']}');
+        }
+      }
+
+    } on TimeoutException {
+      print('⏱  Server timeout — falling back to offline login…');
+      serverResult = null; // treat as offline
+    } on http.ClientException catch (e) {
+      print('🌐 Network error (ClientException) — falling back to offline… ($e)');
+      serverResult = null;
+    } catch (e) {
+      print('🌐 Network error — falling back to offline login… ($e)');
+      serverResult = null;
+    }
+
+    // ── If server explicitly rejected, stop — don't try offline ──
+    if (serverResult == false) {
+      if (mounted) {
+        setState(() => _isLoading = false);
         _showToast(t.loginError, isError: true);
       }
       return;
-    } catch (_) {}
+    }
 
-    setState(() => _isLoading = false);
+    // ── 2. Offline fallback (serverResult == null = no connection) ─
+    if (mounted) setState(() => _isLoading = false);
 
-    // 2. Offline login
-    final matricule = int.tryParse(_matriculeController.text);
+    print('🔑 OFFLINE ATTEMPT: matricule="$matriculeInput" pass_len=${passwordInput.length}');
+
+    final matricule = int.tryParse(matriculeInput);
     if (matricule == null) {
-      _showToast(t.matriculeInvalid, isError: true);
+      if (mounted) _showToast(t.matriculeInvalid, isError: true);
       return;
     }
 
-    final cached = await AgentDao.getAgent(matricule, _motDePasseController.text);
-    if (!mounted) return;
+    final cached = await AgentDao.getAgent(matricule, passwordInput);
+    print('🔑 OFFLINE RESULT: ${cached != null ? "SUCCESS" : "FAILED"}');
 
     if (cached != null) {
-      // ── Set matricule even for offline login ──
       SyncService.setMatricule(matricule);
-
-      _showToast(t.bienvenueOffline(cached['prenom']), isWarning: true);
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => VoyageProgrammePage(agent: cached),
-        ),
-      );
+      if (mounted) {
+        _showToast(t.bienvenueOffline(cached['prenom']), isWarning: true);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => VoyageProgrammePage(agent: cached),
+          ),
+        );
+      }
     } else {
-      _showToast(t.offlineNoAccount, isError: true);
+      if (mounted) _showToast(t.offlineNoAccount, isError: true);
     }
   }
+
+  // ─────────────────────────────────────────────────────────────
+  // Build
+  // ─────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -158,7 +227,6 @@ class _LoginPageState extends State<LoginPage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // ── Header gradient ──────────────────────────────
             Container(
               width: double.infinity,
               decoration: const BoxDecoration(
@@ -171,16 +239,10 @@ class _LoginPageState extends State<LoginPage> {
               padding: const EdgeInsets.fromLTRB(20, 50, 20, 36),
               child: Column(
                 children: [
-                  // ── Top row: spacer + language switcher ──
                   Row(
-                    children: const [
-                      Spacer(),
-                      LanguageSwitcher(),
-                    ],
+                    children: const [Spacer(), LanguageSwitcher()],
                   ),
                   const SizedBox(height: 16),
-
-                  // ── Centered logo ─────────────────────────
                   Container(
                     width: 88,
                     height: 88,
@@ -239,7 +301,6 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
 
-            // ── Form card ─────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 24, 16, 40),
               child: Container(
@@ -260,7 +321,6 @@ class _LoginPageState extends State<LoginPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Title
                       Row(
                         children: [
                           Container(
@@ -292,9 +352,8 @@ class _LoginPageState extends State<LoginPage> {
                         hint:            t.matriculeHint,
                         keyboardType:    TextInputType.number,
                         textInputAction: TextInputAction.next,
-                        validator: (v) => (v == null || v.isEmpty)
-                            ? t.matriculeError
-                            : null,
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty) ? t.matriculeError : null,
                       ),
 
                       const SizedBox(height: 20),
@@ -302,10 +361,10 @@ class _LoginPageState extends State<LoginPage> {
                       _fieldLabel(Icons.lock_outline, t.motDePasse),
                       const SizedBox(height: 8),
                       _textField(
-                        controller:       _motDePasseController,
-                        hint:             t.motDePasseHint,
-                        obscureText:      _obscurePassword,
-                        textInputAction:  TextInputAction.done,
+                        controller:      _motDePasseController,
+                        hint:            t.motDePasseHint,
+                        obscureText:     _obscurePassword,
+                        textInputAction: TextInputAction.done,
                         onFieldSubmitted: (_) => _seConnecter(),
                         suffixIcon: IconButton(
                           icon: Icon(
@@ -318,14 +377,12 @@ class _LoginPageState extends State<LoginPage> {
                           onPressed: () => setState(
                               () => _obscurePassword = !_obscurePassword),
                         ),
-                        validator: (v) => (v == null || v.isEmpty)
-                            ? t.motDePasseError
-                            : null,
+                        validator: (v) =>
+                            (v == null || v.isEmpty) ? t.motDePasseError : null,
                       ),
 
                       const SizedBox(height: 32),
 
-                      // Submit button
                       SizedBox(
                         width: double.infinity,
                         height: 54,
@@ -344,6 +401,7 @@ class _LoginPageState extends State<LoginPage> {
                                         begin: Alignment.topLeft,
                                         end: Alignment.bottomRight,
                                       ),
+                                color: _isLoading ? Colors.grey.shade200 : null,
                                 borderRadius: BorderRadius.circular(14),
                                 boxShadow: _isLoading
                                     ? []
@@ -404,90 +462,91 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Widget _fieldLabel(IconData icon, String label) {
-    return Row(
-      children: [
-        Icon(icon, color: _navyMid, size: 16),
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: _navyDark,
-            letterSpacing: 0.3,
+  // ─────────────────────────────────────────────────────────────
+  // Micro-widgets
+  // ─────────────────────────────────────────────────────────────
+
+  Widget _fieldLabel(IconData icon, String label) => Row(
+        children: [
+          Icon(icon, color: _navyMid, size: 16),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: _navyDark,
+              letterSpacing: 0.3,
+            ),
           ),
-        ),
-      ],
-    );
-  }
+        ],
+      );
 
   Widget _textField({
     required TextEditingController controller,
     required String hint,
-    TextInputType keyboardType         = TextInputType.text,
-    TextInputAction textInputAction    = TextInputAction.next,
-    bool obscureText                   = false,
+    TextInputType   keyboardType     = TextInputType.text,
+    TextInputAction textInputAction  = TextInputAction.next,
+    bool obscureText                 = false,
     Widget? suffixIcon,
     void Function(String)? onFieldSubmitted,
     String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller:       controller,
-      keyboardType:     keyboardType,
-      textInputAction:  textInputAction,
-      obscureText:      obscureText,
-      onFieldSubmitted: onFieldSubmitted,
-      style: const TextStyle(
-        color: _navyDark,
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-      ),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: TextStyle(
-          color: Colors.grey.shade400,
-          fontSize: 13,
-          fontWeight: FontWeight.normal,
+  }) =>
+      TextFormField(
+        controller:       controller,
+        keyboardType:     keyboardType,
+        textInputAction:  textInputAction,
+        obscureText:      obscureText,
+        onFieldSubmitted: onFieldSubmitted,
+        style: const TextStyle(
+          color: _navyDark,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
         ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        filled: true,
-        fillColor: _surface,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade200),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(
+            color: Colors.grey.shade400,
+            fontSize: 13,
+            fontWeight: FontWeight.normal,
+          ),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          filled: true,
+          fillColor: _surface,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey.shade200),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey.shade200),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: _navyMid, width: 2),
+          ),
+          errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.red.shade300),
+          ),
+          focusedErrorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.red.shade400, width: 2),
+          ),
+          suffixIcon: suffixIcon,
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade200),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: _navyMid, width: 2),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.red.shade300),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.red.shade400, width: 2),
-        ),
-        suffixIcon: suffixIcon,
-      ),
-      validator: validator,
-    );
-  }
+        validator: validator,
+      );
 }
 
 // ─────────────────────────────────────────────────────────────
-// Toast
+// Toast widget
 // ─────────────────────────────────────────────────────────────
 
 class _ToastWidget extends StatefulWidget {
-  final String msg;
-  final Color color;
+  final String   msg;
+  final Color    color;
   final IconData icon;
 
   const _ToastWidget(
@@ -500,8 +559,8 @@ class _ToastWidget extends StatefulWidget {
 class _ToastWidgetState extends State<_ToastWidget>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
-  late final Animation<double> _opacity;
-  late final Animation<Offset> _slide;
+  late final Animation<double>   _opacity;
+  late final Animation<Offset>   _slide;
 
   @override
   void initState() {
@@ -511,7 +570,7 @@ class _ToastWidgetState extends State<_ToastWidget>
       duration: const Duration(milliseconds: 220),
     );
     _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
-    _slide = Tween<Offset>(
+    _slide   = Tween<Offset>(
       begin: const Offset(1.0, 0),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
@@ -519,7 +578,9 @@ class _ToastWidgetState extends State<_ToastWidget>
     _ctrl.forward();
     Future.delayed(
       const Duration(milliseconds: 2100),
-      () { if (mounted) _ctrl.reverse(); },
+      () {
+        if (mounted) _ctrl.reverse();
+      },
     );
   }
 

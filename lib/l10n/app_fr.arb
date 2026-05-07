@@ -404,16 +404,78 @@
 "scanValidatedTitle": "Titre validé",
 "scanNextTitle": "Scanner un autre titre",
 "scanNfcDetectedTitle": "Carte NFC Détectée !",
-"scanQrDetectedTitle": "QR Code Détecté !",
-"scanDetectedSubtitle": "Titre de transport lu avec succès",
-"scanDetectedInfo": "Veuillez compléter les informations ci-dessous avant de valider.",
-"scanBtnAssign": "Compléter les infos",
-"scanOfflineCacheUsed": "Mode hors ligne – données chargées depuis le cache local",
+  "scanQrDetectedTitle": "QR Code Détecté !",
+  "scanDetectedSubtitle": "Titre de transport lu avec succès",
+  "scanDetectedInfo": "Veuillez compléter les informations ci-dessous avant de valider.",
+  "scanBtnAssign": "Compléter les infos",
+  "scanOfflineCacheUsed": "Mode hors ligne – données chargées depuis le cache local",
   "scanSavedOfflineToast": "Enregistré localement, synchronisation à la reconnexion",
   "scanAlreadyValidated": "Déjà validé aujourd'hui ({nom})",
   "@scanAlreadyValidated": {
     "placeholders": {
       "nom": { "type": "String" }
     }
-  }
+  },
+  "scanTicketQrInvalid": "QR code invalide (id_ticket introuvable)",
+  "scanTicketNotFound": "Ticket #{idTicket} introuvable",
+  "@scanTicketNotFound": {
+    "placeholders": { "idTicket": { "type": "int" } }
+  },
+  "scanTicketLigneMismatch": "Ligne incompatible : {detail}",
+  "@scanTicketLigneMismatch": {
+    "placeholders": { "detail": { "type": "String" } }
+  },
+  "scanTicketAlreadyScanned": "Ce ticket a déjà été scanné",
+  "scanTicketValidatedToast": "Ticket validé avec succès ✓",
+  "scanModeTicketVendu": "Ticket vendu",
+  "scanTicketVenduSublabel": "Scanner un ticket de vente",
+  "scanTicketVenduTitle": "Vérification du ticket",
+  "scanFieldTarif": "Tarif",
+  "scanFieldQuantite": "Quantité",
+  "scanFieldPrixUnitaire": "Prix unitaire",
+  "scanFieldMontantTotal": "Montant total",
+  "scanFieldDateVente": "Date de vente",
+  "scanFieldAgentVente": "Agent de vente",
+  "voyageCreeSucces": "Voyage créé avec succès",
+  "enAttenteSyncBadge": "En attente de sync",
+  "spontane": "Spontané",
+  "ajouterVoyage": "Ajouter un voyage",
+  "aucunVoyageNonProgrammeDesc": "Aucun voyage non programmé pour aujourd'hui",
+  "nouveauVoyage": "Nouveau voyage",
+  "voyageSpontaneAgence": "Voyage spontané · Agence {code}",
+  "@voyageSpontaneAgence": {
+    "placeholders": { "code": { "type": "int" } }
+  },
+  "voyageSpontaneAgenceInconnue": "Voyage spontané · Agence inconnue",
+  "ligneLabel": "Ligne *",
+  "dateHeureDepart": "Date et heure de départ",
+  "selectionnerLigne": "Sélectionner une ligne",
+  "creation": "Création...",
+  "creerVoyage": "Créer le voyage",
+  "codeAgenceIntrouvable": "Code agence introuvable. Veuillez vous reconnecter.",
+  "horsLigneAucuneLigneCache": "Hors ligne — aucune ligne en cache.",
+  "aucuneLigneAgence": "Aucune ligne disponible pour votre agence.",
+  "donneesLocales": "Données locales (hors ligne)",
+  "donneesLocalesDate": "Données locales · {date}",
+  "@donneesLocalesDate": {
+    "placeholders": { "date": { "type": "String" } }
+  },
+  "actualiser": "Actualiser",
+  "maintenant": "Maintenant (par défaut)",
+  "heurePersonnalisee": "Heure personnalisée",
+  "impossibleCreerVoyage": "Impossible de créer le voyage. Réessayez.",
+  "veuillerSelectionnerLigne": "Veuillez sélectionner une ligne.",
+  "voyageSansIdentifiant": "Voyage sans identifiant",
+  "aucunHistoriqueDisponible": "Aucun historique disponible",
+  "voyageHorsLigneSyncMessage": "Voyage hors ligne — les tickets seront synchronisés dès que la connexion sera rétablie.",
+  "voyageEnAttenteSync": "Hors ligne",
+  "syncDisponibleApres": "Disponible après sync",
+  "horsLigneCloturePendingSync": "Voyage en attente de synchronisation — clôture indisponible",
+  "horsLigneLabel": "⏳ Hors ligne",
+  "scanStatusAlreadyScanned": "Déjà scanné",
+  "scanTicketAlreadyScannedAt": "Scanné le {dateTime}",
+  "@scanTicketAlreadyScannedAt": {
+    "placeholders": { "dateTime": { "type": "String" } }
+  },
+  "scanTicketAlreadyScannedBtn": "Déjà scanné"
 }
