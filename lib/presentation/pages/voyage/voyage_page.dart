@@ -161,7 +161,6 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       final idVente   = (voyage['id_voyage'] ?? voyage['id']) as int?;
       final isPending = voyage['_is_pending'] == true;
 
-      // Pending offline voyages keep their own statut — skip statut lookup
       if (isPending) {
         merged.add(voyage);
         continue;
@@ -271,13 +270,11 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
 
         await VoyageDao.clearStaleVoyageStatuts(serverList);
 
-        // Merge server data with any locally-pending offline voyages
         final merged = await VoyageDao.mergeServerWithPending(
           matriculeNonProg: _matriculeNonProg,
           serverVoyages:    serverList,
         );
 
-        // Persist merged so offline reads are consistent
         await VoyageDao.saveVoyages(_matriculeNonProg, merged);
 
         final withStatuts = await _mergeLocalStatuts(merged);
@@ -350,7 +347,6 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
       _clotureConfirming = false;
     });
 
-    // Pending offline voyages have no server id yet — exclude them
     final toCloseProg = voyagesProgrammes
         .where((v) => v['statut'] != 'cloture')
         .toList();
@@ -368,7 +364,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     final ids = allToClose
         .map((v) => (v['id_voyage'] ?? v['id']) as int?)
         .whereType<int>()
-        .where((id) => id > 0) // skip local negative ids
+        .where((id) => id > 0)
         .toList();
 
     bool success  = false;
@@ -463,7 +459,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     final ids = allClotures
         .map((v) => (v['id_voyage'] ?? v['id']) as int?)
         .whereType<int>()
-        .where((id) => id > 0) // skip local negative ids
+        .where((id) => id > 0)
         .toList();
 
     bool success = false;
@@ -529,7 +525,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
   Future<void> _reopenVoyage(Map<String, dynamic> voyage) async {
     final t       = AppLocalizations.of(context)!;
     final idVente = (voyage['id_voyage'] ?? voyage['id']) as int?;
-    if (idVente == null || idVente < 0) return; // skip local ids
+    if (idVente == null || idVente < 0) return;
 
     final confirmed = await showModalBottomSheet<bool>(
       context:            context,
@@ -584,19 +580,103 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Export
+  // Export — builds both Excel + PDF and sends both as attachments
   // ─────────────────────────────────────────────────────────────
-  Future<void> _showExportDialog() async {
-    final choice = await showModalBottomSheet<String>(
-      context:            context,
-      backgroundColor:    Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => _ExportFormatSheet(todayLabel: _todayLabel),
-    );
-    if (choice == null || !mounted) return;
-    await _doExport(choice);
+  Future<void> _doExport() async {
+    final t = AppLocalizations.of(context)!;
+    setState(() => _exportLoading = true);
+    _showToast(t.generationExcel, isWarning: true);
+
+    // Exclude pending offline voyages from export (no server data yet)
+    final allVoyages = [
+      ...voyagesProgrammes,
+      ...voyagesNonProgrammes.where((v) => v['_is_pending'] != true),
+    ];
+
+    try {
+      final List<Map<String, dynamic>> allTickets = [];
+      for (final v in allVoyages) {
+        final id = (v['id_voyage'] ?? v['id']) as int?;
+        if (id == null || id < 0) continue;
+        final rows = await _fetchAndSyncTickets(id);
+        for (final r in rows) {
+          final ticket = Map<String, dynamic>.from(r);
+          if (_isToday(ticket['date_heure'] as String?)) {
+            allTickets.add(ticket);
+          }
+        }
+      }
+
+      final segmentMap = await _fetchAllSegments(allVoyages);
+      final agent      = widget.agent;
+      final agentName  = '${agent['prenom'] ?? ''} ${agent['nom'] ?? ''}'.trim();
+      final now        = DateTime.now();
+      final dateStr    =
+          '${now.day.toString().padLeft(2, '0')}-'
+          '${now.month.toString().padLeft(2, '0')}-'
+          '${now.year}';
+
+      final int totalRecette = allTickets.fold(
+          0, (s, tk) => s + ((tk['montant_total'] as num? ?? 0).toInt()));
+      final int totalTickets = allTickets.fold(
+          0, (s, tk) => s + ((tk['quantite'] as num? ?? 1).toInt()));
+      final int totalGratuits = allTickets
+          .where((tk) => ((tk['montant_total'] as num? ?? 0).toInt()) == 0)
+          .fold(0, (s, tk) => s + ((tk['quantite'] as num? ?? 1).toInt()));
+
+      final dir = await getTemporaryDirectory();
+
+      // Build both files in parallel
+      final results = await Future.wait([
+        _buildExcel(
+          allTickets:    allTickets,
+          voyages:       allVoyages,
+          segmentMap:    segmentMap,
+          agentName:     agentName,
+          dateStr:       dateStr,
+          label:         'journee_complete',
+          totalRecette:  totalRecette,
+          totalTickets:  totalTickets,
+          totalGratuits: totalGratuits,
+          dir:           dir,
+        ),
+        _buildPdf(
+          allTickets:    allTickets,
+          voyages:       allVoyages,
+          segmentMap:    segmentMap,
+          agentName:     agentName,
+          dateStr:       dateStr,
+          totalRecette:  totalRecette,
+          totalTickets:  totalTickets,
+          totalGratuits: totalGratuits,
+          dir:           dir,
+        ),
+      ]);
+
+      final excelFile = results[0];
+      final pdfFile   = results[1];
+
+      await _sendEmail(
+        files:        [excelFile, pdfFile],
+        agentName:    agentName,
+        dateStr:      dateStr,
+        totalRecette: totalRecette,
+        totalTickets: totalTickets,
+        voyageCount:  allVoyages.length,
+      );
+
+      _showToast(t.rapportEnvoye);
+    } catch (e) {
+      debugPrint('❌ Export error: $e');
+      _showToast(t.erreurExport(e.toString()), isError: true);
+    } finally {
+      if (mounted) setState(() => _exportLoading = false);
+    }
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // Helpers
+  // ─────────────────────────────────────────────────────────────
   bool _isToday(String? dateStr) {
     if (dateStr == null) return false;
     try {
@@ -628,7 +708,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     final result = <int, Map<String, dynamic>>{};
     for (final v in voyages) {
       final id = (v['id_voyage'] ?? v['id']) as int?;
-      if (id == null || id < 0) continue; // skip pending
+      if (id == null || id < 0) continue;
       try {
         final response = await http
             .get(Uri.parse(
@@ -650,7 +730,7 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
 
   Future<List<Map<String, dynamic>>> _fetchAndSyncTickets(
       int idVoyage) async {
-    if (idVoyage < 0) return []; // skip pending offline voyages
+    if (idVoyage < 0) return [];
 
     try {
       final response = await http
@@ -710,101 +790,6 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
     }
 
     return await TicketDao.getTicketsByVoyage(idVoyage);
-  }
-
-  Future<void> _doExport(String format) async {
-    final t = AppLocalizations.of(context)!;
-    setState(() => _exportLoading = true);
-    _showToast(
-      format == 'excel' ? t.generationExcel : t.generationPdf,
-      isWarning: true,
-    );
-
-    // Exclude pending offline voyages from export (no server data yet)
-    final allVoyages = [
-      ...voyagesProgrammes,
-      ...voyagesNonProgrammes.where((v) => v['_is_pending'] != true),
-    ];
-
-    try {
-      final List<Map<String, dynamic>> allTickets = [];
-      for (final v in allVoyages) {
-        final id = (v['id_voyage'] ?? v['id']) as int?;
-        if (id == null || id < 0) continue;
-        final rows = await _fetchAndSyncTickets(id);
-        for (final r in rows) {
-          final ticket = Map<String, dynamic>.from(r);
-          if (_isToday(ticket['date_heure'] as String?)) {
-            allTickets.add(ticket);
-          }
-        }
-      }
-
-      final segmentMap = await _fetchAllSegments(allVoyages);
-      final agent      = widget.agent;
-      final agentName  = '${agent['prenom'] ?? ''} ${agent['nom'] ?? ''}'.trim();
-      final now        = DateTime.now();
-      final dateStr    =
-          '${now.day.toString().padLeft(2, '0')}-'
-          '${now.month.toString().padLeft(2, '0')}-'
-          '${now.year}';
-
-      final int totalRecette = allTickets.fold(
-          0, (s, tk) => s + ((tk['montant_total'] as num? ?? 0).toInt()));
-      final int totalTickets = allTickets.fold(
-          0, (s, tk) => s + ((tk['quantite'] as num? ?? 1).toInt()));
-      final int totalGratuits = allTickets
-          .where((tk) => ((tk['montant_total'] as num? ?? 0).toInt()) == 0)
-          .fold(
-              0, (s, tk) => s + ((tk['quantite'] as num? ?? 1).toInt()));
-
-      final dir = await getTemporaryDirectory();
-      File file;
-
-      if (format == 'excel') {
-        file = await _buildExcel(
-          allTickets:    allTickets,
-          voyages:       allVoyages,
-          segmentMap:    segmentMap,
-          agentName:     agentName,
-          dateStr:       dateStr,
-          label:         'journee_complete',
-          totalRecette:  totalRecette,
-          totalTickets:  totalTickets,
-          totalGratuits: totalGratuits,
-          dir:           dir,
-        );
-      } else {
-        file = await _buildPdf(
-          allTickets:    allTickets,
-          voyages:       allVoyages,
-          segmentMap:    segmentMap,
-          agentName:     agentName,
-          dateStr:       dateStr,
-          totalRecette:  totalRecette,
-          totalTickets:  totalTickets,
-          totalGratuits: totalGratuits,
-          dir:           dir,
-        );
-      }
-
-      await _sendEmail(
-        file:         file,
-        format:       format,
-        agentName:    agentName,
-        dateStr:      dateStr,
-        totalRecette: totalRecette,
-        totalTickets: totalTickets,
-        voyageCount:  allVoyages.length,
-      );
-
-      _showToast(t.rapportEnvoye);
-    } catch (e) {
-      debugPrint('❌ Export error: $e');
-      _showToast(t.erreurExport(e.toString()), isError: true);
-    } finally {
-      if (mounted) setState(() => _exportLoading = false);
-    }
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -1189,11 +1174,10 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Send email
+  // Send email — attaches both Excel and PDF
   // ─────────────────────────────────────────────────────────────
   Future<void> _sendEmail({
-    required File   file,
-    required String format,
+    required List<File> files,
     required String agentName,
     required String dateStr,
     required int    totalRecette,
@@ -1219,9 +1203,11 @@ Récapitulatif :
   • Total tickets  : $totalTickets
   • Total voyages  : $voyageCount
 
-Fichier joint : ${file.path.split('/').last}
+Fichiers joints : ${files.map((f) => f.path.split('/').last).join(', ')}
 '''.trim()
-      ..attachments = [FileAttachment(file)..location = Location.attachment];
+      ..attachments = files
+          .map((f) => FileAttachment(f)..location = Location.attachment)
+          .toList();
     // ignore: deprecated_member_use
     await send(message, smtpServer);
   }
@@ -1489,7 +1475,7 @@ Fichier joint : ${file.path.split('/').last}
             color:        Colors.transparent,
             borderRadius: BorderRadius.circular(14),
             child: InkWell(
-              onTap:        _exportLoading ? null : _showExportDialog,
+              onTap:        _exportLoading ? null : _doExport,
               borderRadius: BorderRadius.circular(14),
               child: Ink(
                 decoration: BoxDecoration(
@@ -2346,124 +2332,6 @@ Fichier joint : ${file.path.split('/').last}
               fontSize:   15,
               fontWeight: FontWeight.w600,
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Export format chooser
-// ─────────────────────────────────────────────────────────────
-class _ExportFormatSheet extends StatelessWidget {
-  final String todayLabel;
-  const _ExportFormatSheet({required this.todayLabel});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppLocalizations.of(context)!;
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-          24, 20, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
-      decoration: const BoxDecoration(
-        color:        AppTheme.cardWhite,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width:  40,
-            height: 4,
-            decoration: BoxDecoration(
-              color:        Colors.grey.shade300,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 22),
-          Container(
-            width:  56,
-            height: 56,
-            decoration: BoxDecoration(
-              color:        AppTheme.navyMid.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Icon(Icons.send_rounded,
-                color: AppTheme.navyMid, size: 28),
-          ),
-          const SizedBox(height: 14),
-          Text(t.envoyerRapport,
-              style: const TextStyle(
-                  fontSize:   17,
-                  fontWeight: FontWeight.bold,
-                  color:      AppTheme.navyDark)),
-          const SizedBox(height: 6),
-          Text(
-            t.envoyerRapportBody(todayLabel),
-            textAlign: TextAlign.center,
-            style: TextStyle(
-                fontSize: 13, color: Colors.grey.shade500, height: 1.5),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            _kReportRecipient,
-            style: TextStyle(
-                fontSize:   12,
-                color:      AppTheme.navyMid,
-                fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 56,
-                  child: ElevatedButton.icon(
-                    onPressed: () => Navigator.pop(context, 'excel'),
-                    icon:  const Icon(Icons.table_chart_rounded, size: 20),
-                    label: const Text('Excel\n.xlsx',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 13)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.navyMid,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: SizedBox(
-                  height: 56,
-                  child: ElevatedButton.icon(
-                    onPressed: () => Navigator.pop(context, 'pdf'),
-                    icon:  const Icon(Icons.picture_as_pdf_rounded, size: 20),
-                    label: const Text('PDF\n.pdf',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 13)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFDC2626),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(t.annuler,
-                style: TextStyle(color: Colors.grey.shade500)),
           ),
         ],
       ),
