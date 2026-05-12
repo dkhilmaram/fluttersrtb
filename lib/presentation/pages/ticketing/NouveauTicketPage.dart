@@ -348,42 +348,179 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
       pointArrivee != null &&
       pointDepart != pointArrivee;
 
-  // ── Print after save ───────────────────────────────────────────────────────
+  /// ── Replace the existing _saveTicket method with this one ────────────────────
+//
+// Key changes vs the old version:
+//   1. Offline?  → skip printing, save as pending, show offline toast.
+//   2. Online?   → print FIRST.
+//                  • Print failed → abort, show error toast, nothing is saved.
+//                  • Print OK    → save to server, show success toast.
+//   3. `unawaited(_printAfterSave(...))` is REMOVED — printing is now
+//      synchronous and gating, not a fire-and-forget side-effect.
+// ─────────────────────────────────────────────────────────────────────────────
 
-  Future<void> _printAfterSave({
-    required String dep,
-    required String arr,
-    required String tarif,
-    required int qte,
-    required int prixU,
-    required int total,
-    required List<Map<String, String>> ticketUnits,
-  }) async {
-    final ticket = TicketData.fromVoyageMap(
-      voyage: widget.voyage,
-      dep:    dep,
-      arr:    arr,
-      tarif:  tarif,
-      qte:    qte,
-      prixU:  prixU,
-      total:  total,
-    );
+Future<void> _saveTicket({
+  required String snapDep,
+  required String snapArr,
+  required String snapTarif,
+  required int snapQte,
+  required int snapPrixU,
+  required int snapPrixT,
+}) async {
+  final idVente   = widget.voyage['id']              as int?;
+  final matricule = widget.voyage['matricule_agent'] as int?;
 
-    final printers = await PrinterService.instance.discoverPrinters();
-    final printer  = printers.isNotEmpty ? printers.first : null;
-
-    final ok = await PrinterService.instance.printTicket(
-      ticket:      ticket,
-      ticketUnits: ticketUnits,
-      printer:     printer,
-      format:      PaperFormat.ticket58mm,
-    );
-
-    if (mounted && !ok) {
-      _showToast('Impression échouée – réessayez', isError: true);
-    }
+  if (idVente == null) {
+    OfflineToastNotification.show(context);
+    return;
   }
 
+  if (!mounted) return;
+  setState(() => isSaving = true);
+
+  final snapDate  = DateTime.now();
+  final snapAgent = matricule ?? 0;
+  final snapVente = idVente;
+
+  // ── Generate ticket IDs + QR payloads up-front ───────────────────────────
+
+  
+  // IDs are created here so the QR is identical whether we're printing or
+  // saving; we never call generateId() twice for the same ticket.
+  final List<Map<String, String>> ticketUnits = [];
+  for (int i = 0; i < snapQte; i++) {
+    final id      = await TicketData.generateId();
+    final payload = jsonEncode({
+      'id':    id,
+      'vente': snapVente,
+      'seg':   0,
+      'dep':   snapDep,
+      'arr':   snapArr,
+      'tarif': snapTarif,
+      'pu':    snapPrixU,
+      'agent': snapAgent,
+      'date':  snapDate.toIso8601String(),
+      'idx':   i + 1,
+      'total': snapQte,
+    });
+    ticketUnits.add({'id': id, 'qr': payload});
+  }
+
+  final primaryNumeroTitre = ticketUnits.first['id']!;
+  final t = AppLocalizations.of(context)!;
+
+  // ── Offline branch: save locally, skip printing ──────────────────────────
+  // When the device has no connectivity we queue the ticket for later sync.
+  // We do NOT attempt to print — an unconfirmed sale must not be printed.
+  if (isOffline) {
+    final result = await TicketRepository.saveTicket({
+      'id_voyage':       idVente,
+      'id_segment':      0,
+      'point_depart':    snapDep,
+      'point_arrivee':   snapArr,
+      'type_tarif':      snapTarif,
+      'quantite':        snapQte,
+      'prix_unitaire':   snapPrixU,
+      'montant_total':   snapPrixT,
+      'matricule_agent': matricule ?? 0,
+      'numero_titre':    primaryNumeroTitre,
+    });
+
+    if (!mounted) return;
+
+    if (result.success) {
+      final usedIndex = arrets.indexOf(snapDep);
+      setState(() {
+        ticketsVendus += snapQte;
+        montantTotal  += snapPrixT;
+        if (usedIndex > _minDepartureIndex) _minDepartureIndex = usedIndex;
+        pointArrivee   = null;
+        quantite       = 1;
+        isOffline      = result.wasOffline;
+      });
+      _showToast(t.horsLigneTicketSauvegarde, isWarning: true);
+      widget.onTicketSold?.call();
+    } else {
+      _showToast(t.ticketErreur(result.error ?? t.inconnu), isError: true);
+    }
+
+    if (mounted) setState(() => isSaving = false);
+    return;
+  }
+
+  // ── Online branch: PRINT FIRST, then save ────────────────────────────────
+  // If printing fails we abort entirely — the ticket is never saved.
+  final ticket = TicketData.fromVoyageMap(
+    voyage: widget.voyage,
+    dep:    snapDep,
+    arr:    snapArr,
+    tarif:  snapTarif,
+    qte:    snapQte,
+    prixU:  snapPrixU,
+    total:  snapPrixT,
+  );
+
+  final printers = await PrinterService.instance.discoverPrinters();
+  final printer  = printers.isNotEmpty ? printers.first : null;
+
+  final printed = await PrinterService.instance.printTicket(
+    ticket:      ticket,
+    ticketUnits: ticketUnits,
+    printer:     printer,
+    format:      PaperFormat.ticket58mm,
+  );
+
+  if (!printed) {
+    // Printing failed → do NOT save anything.
+    if (mounted) {
+      _showToast(t.impressionEchouee, isError: true); // add this key to your l10n
+      setState(() => isSaving = false);
+    }
+    return;
+  }
+
+  // ── Print succeeded → now persist the ticket ─────────────────────────────
+  final result = await TicketRepository.saveTicket({
+    'id_voyage':       idVente,
+    'id_segment':      0,
+    'point_depart':    snapDep,
+    'point_arrivee':   snapArr,
+    'type_tarif':      snapTarif,
+    'quantite':        snapQte,
+    'prix_unitaire':   snapPrixU,
+    'montant_total':   snapPrixT,
+    'matricule_agent': matricule ?? 0,
+    'numero_titre':    primaryNumeroTitre,
+  });
+
+  if (!mounted) return;
+
+  if (result.success) {
+    final usedIndex = arrets.indexOf(snapDep);
+    setState(() {
+      ticketsVendus += snapQte;
+      montantTotal  += snapPrixT;
+      if (usedIndex > _minDepartureIndex) _minDepartureIndex = usedIndex;
+      pointArrivee   = null;
+      quantite       = 1;
+      isOffline      = result.wasOffline;
+    });
+
+    _showToast(
+      snapPrixT == 0
+          ? t.passagesGratuitsEnregistres(snapQte)
+          : t.ticketsVendusToast(snapQte, snapPrixT),
+    );
+    widget.onTicketSold?.call();
+  } else {
+    // Save failed after a successful print — warn the agent.
+    // The ticket is already in the customer's hand, so we log the error
+    // but do NOT ask them to reprint.
+    _showToast(t.ticketErreur(result.error ?? t.inconnu), isError: true);
+  }
+
+  if (mounted) setState(() => isSaving = false);
+}
   // ── Ticket actions ─────────────────────────────────────────────────────────
 
   void _openGratuit() {
@@ -545,116 +682,8 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     );
   }
 
-  // ── Save ticket ────────────────────────────────────────────────────────────
 
-  Future<void> _saveTicket({
-    required String snapDep,
-    required String snapArr,
-    required String snapTarif,
-    required int snapQte,
-    required int snapPrixU,
-    required int snapPrixT,
-  }) async {
-    final idVente   = widget.voyage['id'] as int?;
-    final matricule = widget.voyage['matricule_agent'] as int?;
-
-    if (idVente == null) {
-      OfflineToastNotification.show(context);
-      return;
-    }
-
-    if (!mounted) return;
-    setState(() => isSaving = true);
-
-    final snapDate  = DateTime.now();
-    final snapAgent = matricule ?? 0;
-    final snapVente = idVente;
-
-    // Each ticket unit gets its own numero_titre and QR payload.
-    // We generate the IDs BEFORE calling the server so the QR is ready
-    // to print immediately after confirmation — without a second round-trip.
-    final List<Map<String, String>> ticketUnits = [];
-    for (int i = 0; i < snapQte; i++) {
-      final id = await TicketData.generateId();   // e.g. "SRTB-20260505-000042"
-      final payload = jsonEncode({
-        'id':    id,
-        'vente': snapVente,
-        'seg':   0,
-        'dep':   snapDep,
-        'arr':   snapArr,
-        'tarif': snapTarif,
-        'pu':    snapPrixU,
-        'agent': snapAgent,
-        'date':  snapDate.toIso8601String(),
-        'idx':   i + 1,
-        'total': snapQte,
-      });
-      ticketUnits.add({'id': id, 'qr': payload});
-    }
-
-    // Use the FIRST ticket unit's numero_titre for the DB record.
-    // (For quantite > 1, each physical ticket shares the same sale record
-    //  but has its own QR — the first ID is stored as the lookup key.)
-    final primaryNumeroTitre = ticketUnits.first['id']!;
-
-    final result = await TicketRepository.saveTicket({
-      'id_voyage':       idVente,
-      'id_segment':      0,
-      'point_depart':    snapDep,
-      'point_arrivee':   snapArr,
-      'type_tarif':      snapTarif,
-      'quantite':        snapQte,
-      'prix_unitaire':   snapPrixU,
-      'montant_total':   snapPrixT,
-      'matricule_agent': matricule ?? 0,
-      'numero_titre':    primaryNumeroTitre, // ← tells server what to store in ticket_vendu.numero_titre
-    });
-
-    if (!mounted) return;
-    final t = AppLocalizations.of(context)!;
-
-    if (result.success) {
-      final usedIndex = arrets.indexOf(snapDep);
-      setState(() {
-        ticketsVendus += snapQte;
-        montantTotal  += snapPrixT;
-        // Only advance _minDepartureIndex if the used stop is ahead of
-        // the current minimum — never go backwards.
-        if (usedIndex > _minDepartureIndex) {
-          _minDepartureIndex = usedIndex;
-        }
-        pointArrivee = null;
-        quantite     = 1;
-        isOffline    = result.wasOffline;
-      });
-
-      if (result.wasOffline) {
-        _showToast(t.horsLigneTicketSauvegarde, isWarning: true);
-      } else {
-        _showToast(
-          snapPrixT == 0
-              ? t.passagesGratuitsEnregistres(snapQte)
-              : t.ticketsVendusToast(snapQte, snapPrixT),
-        );
-      }
-
-      widget.onTicketSold?.call();
-
-      unawaited(_printAfterSave(
-        dep:         snapDep,
-        arr:         snapArr,
-        tarif:       snapTarif,
-        qte:         snapQte,
-        prixU:       snapPrixU,
-        total:       snapPrixT,
-        ticketUnits: ticketUnits,
-      ));
-    } else {
-      _showToast(t.ticketErreur(result.error ?? t.inconnu), isError: true);
-    }
-
-    if (mounted) setState(() => isSaving = false);
-  }
+  
 
   // ── Build ──────────────────────────────────────────────────────────────────
 

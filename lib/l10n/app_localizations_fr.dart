@@ -1084,4 +1084,8 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get scanTicketAlreadyScannedBtn => 'Déjà scanné';
+
+  @override
+  String get impressionEchouee =>
+      'Échec de l\'impression. Ticket non enregistré.';
 }

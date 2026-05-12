@@ -477,5 +477,6 @@
   "@scanTicketAlreadyScannedAt": {
     "placeholders": { "dateTime": { "type": "String" } }
   },
-  "scanTicketAlreadyScannedBtn": "Déjà scanné"
+  "scanTicketAlreadyScannedBtn": "Déjà scanné",
+  "impressionEchouee": "Échec de l'impression. Ticket non enregistré."
 }

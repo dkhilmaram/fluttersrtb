@@ -5,7 +5,7 @@ class ApiConstants {
   static const String billetterie = '$baseUrl/billetterie';
 
   // ── Web backend (Node.js)
-  static const String webBaseUrl     = 'http://192.168.1.19:5000'; // fixed typo: was 192.168.1.19t
+  static const String webBaseUrl     = 'http://10.248.182.63:5000'; // fixed typo: was 192.168.1.19t
   static const String agentHeartbeat = '$webBaseUrl/api/sync/heartbeat';
 
   // ── Tickets

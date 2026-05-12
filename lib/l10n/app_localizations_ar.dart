@@ -1069,4 +1069,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get scanTicketAlreadyScannedBtn => 'تم المسح مسبقاً';
+
+  @override
+  String get impressionEchouee => 'فشل الطباعة. لم يتم حفظ التذكرة.';
 }

@@ -2011,6 +2011,12 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Déjà scanné'**
   String get scanTicketAlreadyScannedBtn;
+
+  /// No description provided for @impressionEchouee.
+  ///
+  /// In fr, this message translates to:
+  /// **'Échec de l\'impression. Ticket non enregistré.'**
+  String get impressionEchouee;
 }
 
 class _AppLocalizationsDelegate

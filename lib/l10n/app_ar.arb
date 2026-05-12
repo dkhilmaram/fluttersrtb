@@ -488,5 +488,6 @@
     "placeholders": { "dateTime": { "type": "String" } }
   },
   "scanTicketAlreadyScannedBtn": "تم المسح مسبقاً",
-  "scanStatusAlreadyScanned": "تم المسح مسبقاً"
+  "scanStatusAlreadyScanned": "تم المسح مسبقاً",
+  "impressionEchouee": "فشل الطباعة. لم يتم حفظ التذكرة."
 }
