@@ -5,7 +5,7 @@ class ApiConstants {
   static const String billetterie = '$baseUrl/billetterie';
 
   // ── Web backend (Node.js)
-  static const String webBaseUrl     = 'http://10.248.182.63:5000'; // fixed typo: was 192.168.1.19t
+  static const String webBaseUrl     = 'http://192.168.1.19:5000'; 
   static const String agentHeartbeat = '$webBaseUrl/api/sync/heartbeat';
 
   // ── Tickets
@@ -21,12 +21,10 @@ class ApiConstants {
       '$billetterie/tickets/$idTicket/scan';
 
   /// Verify by string numero_titre  (NouveauTicketPage QR: {"id": "XXX", ...})
-  /// GET /billetterie/tickets/verify-by-numero/{numero}?id_voyage_courant=X
   static String verifyTicketByNumero(String numero) =>
       '$billetterie/tickets/verify-by-numero/$numero';
 
   /// Scan/validate by string numero_titre  (NouveauTicketPage QR)
-  /// POST /billetterie/tickets/by-numero/{numero}/scan
   static String scanTicketByNumero(String numero) =>
       '$billetterie/tickets/by-numero/$numero/scan';
 
