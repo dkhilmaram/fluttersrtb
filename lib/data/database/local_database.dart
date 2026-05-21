@@ -29,8 +29,6 @@ class LocalDatabase {
   // Migration helpers
   // ─────────────────────────────────────────────────────────────
 
-  /// Adds code_agence column to agent_cache if it does not exist yet.
-  /// Safe to call multiple times.
   static Future<void> _ensureCodeAgenceColumn(Database db) async {
     try {
       await db.execute(
@@ -51,7 +49,6 @@ class LocalDatabase {
 
     return openDatabase(
       path,
-      // ── Bump to 17 to trigger the password-hash migration ──
       version: 17,
 
       onCreate: (db, version) async {
@@ -248,11 +245,8 @@ class LocalDatabase {
         }
 
         if (oldVersion < 17) {
-          // ── Password-hash migration ──────────────────────────────────
-          // Wipe all cached agents. Passwords previously stored as plain
-          // text, empty strings, or bcrypt hashes are all incompatible
-          // with the new SHA-256 scheme. Each agent must log in online
-          // once to re-populate the cache with the correct hash.
+          // One-time wipe — passwords were stored in incompatible format.
+          // Each agent must log in online once to re-populate with SHA-256.
           try {
             await db.delete('agent_cache');
             print('✓ v17: cleared agent_cache — password hash migration');
@@ -265,41 +259,13 @@ class LocalDatabase {
         print('✓ Database upgraded');
       },
 
+      // ── onOpen: only safe structural maintenance, no data wiping ──
       onOpen: (db) async {
-  await _ensureCodeAgenceColumn(db);
-  await _createAllTables(db);
-  
-  // TEMPORARY DEBUG: force clear old password rows
-  // Remove this block after confirming offline login works
-  await _migratePasswordHashes(db);
-},
+        await _ensureCodeAgenceColumn(db);
+        await _createAllTables(db);
+      },
     );
   }
-  /// Wipes agent_cache if any row has a non-SHA256 password stored.
-/// SHA-256 hex strings are always exactly 64 characters.
-/// Plain text passwords and bcrypt hashes are never 64 chars.
-static Future<void> _migratePasswordHashes(Database db) async {
-  try {
-    final rows = await db.query('agent_cache');
-    bool wiped = false;
-    for (final row in rows) {
-      final stored = row['mot_de_passe'] as String? ?? '';
-      if (stored.length != 64) {
-        // Not a SHA-256 hash — wipe everything and re-login required
-        await db.delete('agent_cache');
-        print('🧹 _migratePasswordHashes: wiped ${rows.length} stale row(s) '
-              '(stored hash length was ${stored.length}, expected 64)');
-        wiped = true;
-        break;
-      }
-    }
-    if (!wiped) {
-      print('✓ _migratePasswordHashes: all rows already have SHA-256 hashes');
-    }
-  } catch (e) {
-    print('⚠️ _migratePasswordHashes: $e');
-  }
-}
 
   // ─────────────────────────────────────────────────────────────
   // Table definitions
@@ -367,7 +333,6 @@ static Future<void> _migratePasswordHashes(Database db) async {
         cached_at        TEXT    NOT NULL
       )''',
 
-      // code_agence included from scratch for new installs
       '''CREATE TABLE IF NOT EXISTS agent_cache (
         matricule    INTEGER PRIMARY KEY,
         mot_de_passe TEXT    NOT NULL,

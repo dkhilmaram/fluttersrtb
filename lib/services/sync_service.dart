@@ -328,41 +328,45 @@ class SyncService {
       }
 
       // ── Step 3: Sync pending reopens ──────────────────────────────────────
-      final pendingReopens = await VoyageDao.getPendingReopens();
-      print('🔄 Syncing ${pendingReopens.length} pending reopen(s)…');
+      // ── Step 3: Sync pending reopens ──────────────────────────────────────
+final pendingReopens = await VoyageDao.getPendingReopens();
+print('🔄 Syncing ${pendingReopens.length} pending reopen(s)…');
 
-      for (final reopen in pendingReopens) {
-        final idVente = reopen['id_voyage'] as int;
-        final scope   = reopen['scope'] as String? ?? 'single';
-        // Skip local negative ids
-        if (idVente < 0) continue;
+for (final reopen in pendingReopens) {
+  final idVente = reopen['id_voyage'] as int;
+  final scope   = reopen['scope'] as String? ?? 'single';
+  if (idVente < 0) continue;
 
-        try {
-          final response = await http
-              .put(
-                Uri.parse(ApiConstants.reopenVoyage(idVente)),
-                headers: {'Content-Type': 'application/json'},
-              )
-              .timeout(ApiConstants.reopenTimeout);
+  try {
+    final response = await http
+        .put(
+          Uri.parse(ApiConstants.reopenVoyage(idVente)),
+          headers: {'Content-Type': 'application/json'},
+        )
+        .timeout(ApiConstants.reopenTimeout);
 
-          if (response.statusCode == 200 ||
-              response.statusCode == 409) {
-            await VoyageDao.markReopenSynced(idVente);
-            await VoyageDao.clearVoyageStatut(idVente);
-            final reason = response.statusCode == 409
-                ? 'already active'
-                : 'reopened';
-            print('✅ Reopen synced for vente $idVente '
-                '(scope=$scope, $reason)');
-            synced++;
-          } else {
-            print('⚠️ Reopen HTTP ${response.statusCode} '
-                'for vente $idVente');
-          }
-        } catch (e) {
-          print('❌ Reopen sync failed for vente $idVente: $e');
-        }
-      }
+    if (response.statusCode == 200 ||
+        response.statusCode == 409 ||
+        response.statusCode == 404 ||
+        response.statusCode == 400) {
+      // 200 = reopened ✅
+      // 409 = already active ✅ (our goal anyway)
+      // 400 = already active (some backends) ✅
+      // 404 = voyage deleted from server — clear it ✅
+      await VoyageDao.markReopenSynced(idVente);
+      await VoyageDao.clearVoyageStatut(idVente);
+      print('✅ Reopen synced for vente $idVente (scope=$scope, HTTP ${response.statusCode})');
+      synced++;
+    } else {
+      print('⚠️ Reopen HTTP ${response.statusCode} for vente $idVente');
+    }
+  } on TimeoutException {
+    // Server unreachable — leave pending, retry next sync
+    print('⏱ Reopen timeout for vente $idVente — will retry');
+  } catch (e) {
+    print('❌ Reopen sync failed for vente $idVente: $e');
+  }
+}
 
       // ── Step 4: Sync pending scan logs ────────────────────────────────────
       final pendingScans = await TicketDao.getUnsyncedScanLogs();

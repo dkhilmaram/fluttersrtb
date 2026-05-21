@@ -367,15 +367,26 @@ class VoyageDao {
   static Future<void> saveCloturePending(int idVente) async {
     try {
       await _clearReopenPendingForVente(idVente);
-      await (await LocalDatabase.db).insert(
+
+      // Use ignore: if a pending row already exists, don't reset it.
+      // This prevents duplicate cloture calls when the UI fires
+      // saveCloturePending more than once before the first sync completes.
+      final inserted = await (await LocalDatabase.db).insert(
         'cloture_pending',
         {
           'id_voyage':   idVente,
           'created_at':  DateTime.now().toIso8601String(),
           'statut_sync': 'pending',
         },
-        conflictAlgorithm: ConflictAlgorithm.replace,
+        conflictAlgorithm: ConflictAlgorithm.ignore, // ← was: replace
       );
+
+      if (inserted == 0) {
+        print('ℹ️ VoyageDao.saveCloturePending: '
+            'already pending for vente=$idVente, skipped');
+        return;
+      }
+
       await saveVoyageStatut(idVente, 'cloture', serverStatut: 'actif');
       print('✓ VoyageDao.saveCloturePending: vente=$idVente');
     } catch (e) {
@@ -398,9 +409,8 @@ class VoyageDao {
 
   static Future<void> markClotureSynced(int idVente) async {
     try {
-      await (await LocalDatabase.db).update(
+      await (await LocalDatabase.db).delete(
         'cloture_pending',
-        {'statut_sync': 'synced'},
         where:     'id_voyage = ?',
         whereArgs: [idVente],
       );
@@ -434,7 +444,12 @@ class VoyageDao {
   }) async {
     try {
       await _clearCloturePendingForVente(idVente);
-      await (await LocalDatabase.db).insert(
+
+      // Use ignore: if a pending row already exists, don't reset it.
+      // This prevents the repeated PUT /reopen calls (and duplicate
+      // voyage_historique rows) caused by the UI calling saveReopenPending
+      // again before the first sync has completed.
+      final inserted = await (await LocalDatabase.db).insert(
         'reopen_pending',
         {
           'id_voyage':   idVente,
@@ -442,8 +457,15 @@ class VoyageDao {
           'created_at':  DateTime.now().toIso8601String(),
           'statut_sync': 'pending',
         },
-        conflictAlgorithm: ConflictAlgorithm.replace,
+        conflictAlgorithm: ConflictAlgorithm.ignore, // ← was: replace
       );
+
+      if (inserted == 0) {
+        print('ℹ️ VoyageDao.saveReopenPending: '
+            'already pending for vente=$idVente, skipped');
+        return;
+      }
+
       await saveVoyageStatut(idVente, 'actif', serverStatut: 'cloture');
       print('✓ VoyageDao.saveReopenPending: vente=$idVente scope=$scope');
     } catch (e) {
@@ -480,9 +502,8 @@ class VoyageDao {
 
   static Future<void> markReopenSynced(int idVente) async {
     try {
-      await (await LocalDatabase.db).update(
+      await (await LocalDatabase.db).delete(
         'reopen_pending',
-        {'statut_sync': 'synced'},
         where:     'id_voyage = ?',
         whereArgs: [idVente],
       );

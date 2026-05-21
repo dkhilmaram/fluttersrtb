@@ -221,32 +221,47 @@ class _ClotureVoyagePageState extends State<ClotureVoyagePage> {
     }
   }
 
-  Future<void> _cloturerOnline(AppLocalizations t) async {
-    final id = widget.voyage['id'] as int;
-    try {
-      final response = await http
-          .put(
-            Uri.parse(ApiConstants.cloturerVoyage(id)),
-            headers: {'Content-Type': 'application/json'},
-          )
-          .timeout(ApiConstants.defaultTimeout);
+ Future<void> _cloturerOnline(AppLocalizations t) async {
+  final id = widget.voyage['id'] as int;
+  try {
+    final response = await http
+        .put(
+          Uri.parse(ApiConstants.cloturerVoyage(id)),
+          headers: {'Content-Type': 'application/json'},
+        )
+        .timeout(ApiConstants.defaultTimeout);
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          await VoyageDao.saveVoyageStatut(id, 'cloture', serverStatut: 'cloture');
-          _onClotureDone();
-        } else {
-          setState(() => isCloturing = false);
-          if (mounted) _showToast(data['message'] ?? t.erreurInattendue, isError: true);
-        }
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['success'] == true) {
+        await VoyageDao.saveVoyageStatut(id, 'cloture', serverStatut: 'cloture');
+        _onClotureDone();
       } else {
-        await _cloturerOffline(t);
+        setState(() => isCloturing = false);
+        if (mounted) _showToast(data['message'] ?? t.erreurInattendue, isError: true);
       }
-    } catch (e) {
+    } else if (response.statusCode == 404) {           // ← ADD THIS BLOCK
+      final matricule = widget.voyage['matricule_agent'] as int? ?? 0;
+      await VoyageDao.clearVoyageStatut(id);
+      final voyages = await VoyageDao.getVoyages(matricule) ?? [];
+      final cleaned = voyages
+          .where((v) => ((v['id_voyage'] ?? v['id']) as int?) != id)
+          .toList();
+      await VoyageDao.saveVoyages(matricule, cleaned);
+      setState(() => isCloturing = false);
+      if (mounted) _showToast('Voyage #$id introuvable — cache nettoyé', isError: true);
+      await Future.delayed(const Duration(seconds: 2));
+      if (mounted) {
+        Navigator.pop(context);
+        Navigator.pop(context);
+      }
+    } else {                                           // ← existing else, unchanged
       await _cloturerOffline(t);
     }
+  } catch (e) {
+    await _cloturerOffline(t);
   }
+}
 
   Future<void> _cloturerOffline(AppLocalizations t) async {
   final id = widget.voyage['id'] as int;

@@ -5,7 +5,7 @@ class ApiConstants {
   static const String billetterie = '$baseUrl/billetterie';
 
   // ── Web backend (Node.js)
-  static const String webBaseUrl     = 'http://192.168.1.19:5000'; 
+  static const String webBaseUrl     = 'http://192.168.1.20:5000'; 
   static const String agentHeartbeat = '$webBaseUrl/api/sync/heartbeat';
 
   // ── Tickets
@@ -56,5 +56,5 @@ class ApiConstants {
   // ── Timeouts
   static const Duration defaultTimeout = Duration(seconds: 6);
   static const Duration actionTimeout  = Duration(seconds: 10);
-  static const Duration reopenTimeout  = Duration(seconds: 8);
+  static const Duration reopenTimeout  = Duration(seconds: 20);
 }

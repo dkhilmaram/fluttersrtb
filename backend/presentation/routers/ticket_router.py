@@ -19,9 +19,6 @@ def vendre_ticket(data: dict):
 
     try:
         result = _svc.vendre(data)
-        # Return both id_ticket AND numero_titre so Flutter can confirm
-        # which ID was actually stored (useful when Flutter omits the field
-        # and the server generates a fallback).
         return {
             "success":       True,
             "id_ticket":     result["id_ticket"],
@@ -62,6 +59,10 @@ def verify_ticket(id_ticket: int, id_voyage_courant: int):
     """
     Verify by integer PK (legacy / server-generated QR).
     Does NOT mark the ticket as scanned.
+
+    On ligne mismatch (409), the full ticket data is ALWAYS included in the
+    response body under the `ticket` key so the Flutter client can display
+    all fields even when the ligne is wrong.
     """
     try:
         info = _svc.verify_ticket(id_ticket, id_voyage_courant)
@@ -69,7 +70,24 @@ def verify_ticket(id_ticket: int, id_voyage_courant: int):
     except TicketIntrouvable as e:
         raise HTTPException(status_code=404, detail=str(e))
     except LigneIncompatible as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        # ── KEY FIX: fetch the full ticket row so the client can render it ──
+        # We fetch without the voyage filter (passing the ticket's own voyage)
+        # to get all fields, then let the client overlay the ligne_invalide flag.
+        ticket_data = None
+        try:
+            row = _svc.repo.get_ticket_for_verification(id_ticket)
+            if row is not None:
+                ticket_data = _svc._build_ticket_response(row)
+        except Exception:
+            pass  # If this fails, the client falls back to QR payload fields
+
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "detail": str(e),
+                "ticket": ticket_data,  # always present when ticket exists
+            },
+        )
 
 
 @router.post("/tickets/{id_ticket}/scan")
@@ -90,7 +108,20 @@ def mark_ticket_scanned(id_ticket: int, data: dict):
     except TicketDejaScanne as e:
         raise HTTPException(status_code=409, detail=str(e))
     except LigneIncompatible as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        ticket_data = None
+        try:
+            row = _svc.repo.get_ticket_for_verification(id_ticket)
+            if row is not None:
+                ticket_data = _svc._build_ticket_response(row)
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "detail": str(e),
+                "ticket": ticket_data,
+            },
+        )
 
 
 # ── Sold-ticket QR: verify by string numero_titre (NouveauTicketPage) ────────
@@ -101,12 +132,8 @@ def verify_ticket_by_numero(numero_titre: str, id_voyage_courant: int):
     Verify by client-generated numero_titre (NouveauTicketPage QR format).
     Does NOT mark the ticket as scanned.
 
-    Query params:
-      id_voyage_courant — agent's current voyage ID
-
-    Error codes:
-      404 — no ticket found with this numero_titre
-      409 — ligne mismatch
+    On ligne mismatch (409), the full ticket data is ALWAYS included in the
+    response body under the `ticket` key.
     """
     try:
         info = _svc.verify_ticket_by_numero(numero_titre, id_voyage_courant)
@@ -114,7 +141,20 @@ def verify_ticket_by_numero(numero_titre: str, id_voyage_courant: int):
     except TicketIntrouvable as e:
         raise HTTPException(status_code=404, detail=str(e))
     except LigneIncompatible as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        ticket_data = None
+        try:
+            row = _svc.repo.get_ticket_by_numero(numero_titre)
+            if row is not None:
+                ticket_data = _svc._build_ticket_response(row)
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "detail": str(e),
+                "ticket": ticket_data,
+            },
+        )
 
 
 @router.post("/tickets/by-numero/{numero_titre:path}/scan")
@@ -122,10 +162,6 @@ def mark_ticket_scanned_by_numero(numero_titre: str, data: dict):
     """
     Validate/scan by client-generated numero_titre.
     Body: { "id_voyage_courant": <int> }
-
-    Error codes:
-      404 — ticket not found
-      409 — ligne mismatch OR already scanned
     """
     id_voyage_courant = data.get("id_voyage_courant")
     if not id_voyage_courant:
@@ -139,4 +175,17 @@ def mark_ticket_scanned_by_numero(numero_titre: str, data: dict):
     except TicketDejaScanne as e:
         raise HTTPException(status_code=409, detail=str(e))
     except LigneIncompatible as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        ticket_data = None
+        try:
+            row = _svc.repo.get_ticket_by_numero(numero_titre)
+            if row is not None:
+                ticket_data = _svc._build_ticket_response(row)
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "detail": str(e),
+                "ticket": ticket_data,
+            },
+        )

@@ -37,7 +37,7 @@ def cloturer(id_voyage: int):
 @router.put("/vente/{id_voyage}/reopen")
 def reopen(id_voyage: int):
     _svc.reopen(id_voyage)
-    return {"success": True, "message": "Voyage réouvert"}
+    return {"success": True, "message": "Voyage réouvert ou déjà actif"}
 
 @router.put("/ventes/cloturer-journee")
 def cloturer_journee(data: ClotureJourneeData):
@@ -73,7 +73,3 @@ def get_lignes_by_agence(code_agence: int):
     """
     lignes = _svc.get_lignes_by_agence(code_agence)
     return {"success": True, "lignes": lignes}
-@router.post("/ventes/creer")
-def creer_voyage(data: VenteData):
-    id_voyage = _svc.create(data)
-    return {"success": True, "id_voyage": id_voyage}

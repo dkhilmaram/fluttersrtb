@@ -210,7 +210,7 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
     } else {
-      if (mounted) _showToast(t.offlineNoAccount, isError: true);
+      if (mounted) _showToast(t.loginError, isError: true);
     }
   }
 
