@@ -489,5 +489,6 @@
   },
   "scanTicketAlreadyScannedBtn": "تم المسح مسبقاً",
   "scanStatusAlreadyScanned": "تم المسح مسبقاً",
-  "impressionEchouee": "فشل الطباعة. لم يتم حفظ التذكرة."
+  "impressionEchouee": "فشل الطباعة. لم يتم حفظ التذكرة.",
+  "roleNotAllowed": "تم رفض الوصول. لا يمكن الاتصال إلا للمستلمين"
 }

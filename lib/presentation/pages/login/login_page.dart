@@ -76,144 +76,153 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Login logic
-  // ─────────────────────────────────────────────────────────────
+ Future<void> _seConnecter() async {
+  if (!_formKey.currentState!.validate()) return;
+  if (!mounted) return;
 
-  Future<void> _seConnecter() async {
-    if (!_formKey.currentState!.validate()) return;
-    if (!mounted) return;
+  final matriculeInput = _matriculeController.text.trim();
+  final passwordInput  = _motDePasseController.text;
 
-    // ── Capture values FIRST before any async gap ────────────────
-    final matriculeInput = _matriculeController.text.trim();
-    final passwordInput  = _motDePasseController.text;
+  final t = AppLocalizations.of(context)!;
+  setState(() => _isLoading = true);
 
-    final t = AppLocalizations.of(context)!;
-    setState(() => _isLoading = true);
+  bool? serverResult;
 
-    // ── 1. Try online login ──────────────────────────────────────
-    // null  = network/timeout (fall through to offline)
-    // true  = server said success
-    // false = server explicitly rejected credentials
-    bool? serverResult;
+  try {
+    final response = await http
+        .post(
+          Uri.parse('${ApiConstants.baseUrl}/login'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'matricule':    matriculeInput,
+            'mot_de_passe': passwordInput,
+          }),
+        )
+        .timeout(const Duration(seconds: 5));
 
-    try {
-      final response = await http
-          .post(
-            Uri.parse('${ApiConstants.baseUrl}/login'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'matricule':    matriculeInput,
-              'mot_de_passe': passwordInput,
-            }),
-          )
-          .timeout(const Duration(seconds: 5));
+    print('🌐 Online response status: ${response.statusCode}');
+    print('🌐 Online response body:   ${response.body}');
 
-      // ── Debug: log the raw server response ─────────────────────
-      print('🌐 Online response status: ${response.statusCode}');
-      print('🌐 Online response body:   ${response.body}');
-
-      // 5xx = server-side infrastructure failure (DB down, crash, etc.)
-      // Treat exactly like a network error → fall through to offline.
-      if (response.statusCode >= 500) {
-        print('⚠️  Server error ${response.statusCode} (infrastructure) — falling back to offline…');
-        serverResult = null;
-      } else {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-
-        if (data['success'] == true) {
-          serverResult = true;
-
-          final employe = Map<String, dynamic>.from(
-              data['employe'] as Map<String, dynamic>);
-
-          final matricule = employe['matricule_agent'] as int? ??
-              int.tryParse(employe['matricule']?.toString() ?? '') ??
-              int.parse(matriculeInput);
-
-          try {
-            await AgentDao.saveAgent(
-              matricule:   matricule,
-              motDePasse:  passwordInput,
-              employeData: employe,
-            );
-            print('✅ Agent credentials cached for offline use');
-          } catch (e, stack) {
-            print('❌ CRITICAL: failed to cache agent credentials: $e');
-            print(stack);
-          }
-
-          SyncService.setMatricule(matricule);
-
-          if (mounted) {
-            setState(() => _isLoading = false);
-            _showToast(t.bienvenue(employe['prenom'], employe['nom']));
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => VoyageProgrammePage(agent: employe),
-              ),
-            );
-          }
-          return;
-
-        } else {
-          // 4xx or explicit success:false → wrong credentials, stop here
-          serverResult = false;
-          print('❌ Server rejected login (${response.statusCode}): success=${data['success']} message=${data['message']}');
-        }
-      }
-
-    } on TimeoutException {
-      print('⏱  Server timeout — falling back to offline login…');
-      serverResult = null; // treat as offline
-    } on http.ClientException catch (e) {
-      print('🌐 Network error (ClientException) — falling back to offline… ($e)');
+    if (response.statusCode >= 500) {
+      print('⚠️  Server error ${response.statusCode} — falling back to offline…');
       serverResult = null;
-    } catch (e) {
-      print('🌐 Network error — falling back to offline login… ($e)');
-      serverResult = null;
-    }
 
-    // ── If server explicitly rejected, stop — don't try offline ──
-    if (serverResult == false) {
+    } else if (response.statusCode == 403) {
+      // ── Role denied: server confirmed user exists but is not receveur ──
+      // Hard stop — never fall through to offline cache
+      print('🚫 Role denied by server (403) — blocking offline fallback');
       if (mounted) {
         setState(() => _isLoading = false);
-        _showToast(t.loginError, isError: true);
+        _showToast(t.roleNotAllowed, isError: true);
       }
       return;
-    }
 
-    // ── 2. Offline fallback (serverResult == null = no connection) ─
-    if (mounted) setState(() => _isLoading = false);
-
-    print('🔑 OFFLINE ATTEMPT: matricule="$matriculeInput" pass_len=${passwordInput.length}');
-
-    final matricule = int.tryParse(matriculeInput);
-    if (matricule == null) {
-      if (mounted) _showToast(t.matriculeInvalid, isError: true);
-      return;
-    }
-
-    final cached = await AgentDao.getAgent(matricule, passwordInput);
-    print('🔑 OFFLINE RESULT: ${cached != null ? "SUCCESS" : "FAILED"}');
-
-    if (cached != null) {
-      SyncService.setMatricule(matricule);
-      if (mounted) {
-        _showToast(t.bienvenueOffline(cached['prenom']), isWarning: true);
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => VoyageProgrammePage(agent: cached),
-          ),
-        );
-      }
     } else {
-      if (mounted) _showToast(t.loginError, isError: true);
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+      if (data['success'] == true) {
+        serverResult = true;
+
+        final employe = Map<String, dynamic>.from(
+            data['employe'] as Map<String, dynamic>);
+
+        final matricule = employe['matricule_agent'] as int? ??
+            int.tryParse(employe['matricule']?.toString() ?? '') ??
+            int.parse(matriculeInput);
+
+        try {
+          await AgentDao.saveAgent(
+            matricule:   matricule,
+            motDePasse:  passwordInput,
+            employeData: employe,
+          );
+          print('✅ Agent credentials cached for offline use');
+        } catch (e, stack) {
+          print('❌ CRITICAL: failed to cache agent credentials: $e');
+          print(stack);
+        }
+
+        SyncService.setMatricule(matricule);
+
+        if (mounted) {
+          setState(() => _isLoading = false);
+          _showToast(t.bienvenue(employe['prenom'], employe['nom']));
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => VoyageProgrammePage(agent: employe),
+            ),
+          );
+        }
+        return;
+
+      } else {
+        // 401 — wrong credentials
+        serverResult = false;
+        print('❌ Server rejected login (${response.statusCode}): '
+            'success=${data['success']} message=${data['message']}');
+      }
     }
+
+  } on TimeoutException {
+    print('⏱  Server timeout — falling back to offline login…');
+    serverResult = null;
+  } on http.ClientException catch (e) {
+    print('🌐 Network error (ClientException) — falling back to offline… ($e)');
+    serverResult = null;
+  } catch (e) {
+    print('🌐 Network error — falling back to offline login… ($e)');
+    serverResult = null;
   }
 
+  // ── If server explicitly rejected (401), stop ─────────────────
+  if (serverResult == false) {
+    if (mounted) {
+      setState(() => _isLoading = false);
+      _showToast(t.loginError, isError: true);
+    }
+    return;
+  }
+
+  // ── 2. Offline fallback (serverResult == null = no connection) ─
+  if (mounted) setState(() => _isLoading = false);
+
+  print('🔑 OFFLINE ATTEMPT: matricule="$matriculeInput" pass_len=${passwordInput.length}');
+
+  final matricule = int.tryParse(matriculeInput);
+  if (matricule == null) {
+    if (mounted) _showToast(t.matriculeInvalid, isError: true);
+    return;
+  }
+
+  final cached = await AgentDao.getAgent(matricule, passwordInput);
+  print('🔑 OFFLINE RESULT: ${cached != null ? "SUCCESS" : "FAILED"}');
+  print('🔑 OFFLINE CACHED DATA: $cached');
+
+  if (cached != null) {
+    final role = (cached['role'] as String? ?? '').trim().toLowerCase();
+    print('🔑 OFFLINE ROLE CHECK: role="$role"');
+
+    if (role != 'receveur') {
+      print('❌ OFFLINE: role "$role" is not allowed');
+      if (mounted) _showToast(t.roleNotAllowed, isError: true);
+      return;
+    }
+
+    SyncService.setMatricule(matricule);
+    if (mounted) {
+      _showToast(t.bienvenueOffline(cached['prenom']), isWarning: true);
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => VoyageProgrammePage(agent: cached),
+        ),
+      );
+    }
+  } else {
+    if (mounted) _showToast(t.loginError, isError: true);
+  }
+}
   // ─────────────────────────────────────────────────────────────
   // Build
   // ─────────────────────────────────────────────────────────────

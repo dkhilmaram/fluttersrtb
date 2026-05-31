@@ -7,7 +7,8 @@ router = APIRouter(tags=["Ventes"])
 _svc     = VenteService()
 _seg_svc = SegmentService()
 
-@router.post("/ajouter_vente")
+@router.post("/ventes/creer")
+
 def ajouter_vente(data: VenteData):
     id_voyage = _svc.create(data)
     return {"success": True, "id_voyage": id_voyage}

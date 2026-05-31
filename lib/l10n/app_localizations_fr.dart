@@ -1088,4 +1088,8 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get impressionEchouee =>
       'Échec de l\'impression. Ticket non enregistré.';
+
+  @override
+  String get roleNotAllowed =>
+      'Accès refusé. Seuls les receveurs peuvent se connecter.';
 }

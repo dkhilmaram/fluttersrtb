@@ -478,5 +478,6 @@
     "placeholders": { "dateTime": { "type": "String" } }
   },
   "scanTicketAlreadyScannedBtn": "Déjà scanné",
-  "impressionEchouee": "Échec de l'impression. Ticket non enregistré."
+  "impressionEchouee": "Échec de l'impression. Ticket non enregistré.",
+  "roleNotAllowed": "Accès refusé. Seuls les receveurs peuvent se connecter."
 }

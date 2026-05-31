@@ -13,7 +13,8 @@ class AgentRepository:
                     a.mot_de_passe,
                     a.nom,
                     a.prenom,
-                    a.code_agence
+                    a.code_agence,
+                    a.role
                 FROM agent a
                 WHERE a.matricule_agent = %s
             """, (matricule,))
@@ -23,15 +24,16 @@ class AgentRepository:
 
     def create(self, matricule: str, hashed_password: str,
                nom: str, prenom: str,
+               role: str = "receveur",
                code_agence: int | None = None) -> bool:
         conn = get_db()
         cursor = conn.cursor()
         try:
             cursor.execute(
                 """INSERT INTO agent
-                   (matricule_agent, mot_de_passe, nom, prenom, code_agence)
-                   VALUES (%s, %s, %s, %s, %s)""",
-                (matricule, hashed_password, nom, prenom, code_agence),
+                   (matricule_agent, mot_de_passe, nom, prenom, role, code_agence)
+                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                (matricule, hashed_password, nom, prenom, role, code_agence),
             )
             conn.commit()
             return True
@@ -46,7 +48,7 @@ class AgentRepository:
         cursor = conn.cursor(dictionary=True)
         try:
             cursor.execute(
-                "SELECT matricule_agent, nom, prenom, code_agence FROM agent"
+                "SELECT matricule_agent, nom, prenom, role, code_agence FROM agent"
             )
             return cursor.fetchall()
         finally:
@@ -70,6 +72,7 @@ class AgentRepository:
 
     def update(self, matricule: str, nom: str, prenom: str,
                hashed_password: str | None = None,
+               role: str = "receveur",
                code_agence: int | None = None) -> bool:
         conn = get_db()
         cursor = conn.cursor()
@@ -77,16 +80,16 @@ class AgentRepository:
             if hashed_password:
                 cursor.execute(
                     """UPDATE agent
-                       SET nom=%s, prenom=%s, mot_de_passe=%s, code_agence=%s
+                       SET nom=%s, prenom=%s, mot_de_passe=%s, role=%s, code_agence=%s
                        WHERE matricule_agent=%s""",
-                    (nom, prenom, hashed_password, code_agence, matricule),
+                    (nom, prenom, hashed_password, role, code_agence, matricule),
                 )
             else:
                 cursor.execute(
                     """UPDATE agent
-                       SET nom=%s, prenom=%s, code_agence=%s
+                       SET nom=%s, prenom=%s, role=%s, code_agence=%s
                        WHERE matricule_agent=%s""",
-                    (nom, prenom, code_agence, matricule),
+                    (nom, prenom, role, code_agence, matricule),
                 )
             conn.commit()
             return cursor.rowcount > 0

@@ -2017,6 +2017,12 @@ abstract class AppLocalizations {
   /// In fr, this message translates to:
   /// **'Échec de l\'impression. Ticket non enregistré.'**
   String get impressionEchouee;
+
+  /// No description provided for @roleNotAllowed.
+  ///
+  /// In fr, this message translates to:
+  /// **'Accès refusé. Seuls les receveurs peuvent se connecter.'**
+  String get roleNotAllowed;
 }
 
 class _AppLocalizationsDelegate

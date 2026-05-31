@@ -1072,4 +1072,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get impressionEchouee => 'فشل الطباعة. لم يتم حفظ التذكرة.';
+
+  @override
+  String get roleNotAllowed => 'تم رفض الوصول. لا يمكن الاتصال إلا للمستلمين';
 }

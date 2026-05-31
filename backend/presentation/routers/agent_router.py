@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 from data.models.agent_models import LoginData, AgentData, AgentUpdateData
 from services.agent_service import AgentService
 
@@ -8,10 +9,28 @@ _svc = AgentService()
 
 @router.post("/login")
 def login(data: LoginData):
-    agent = _svc.login(data.matricule, data.mot_de_passe)
+    agent, error = _svc.login(data.matricule, data.mot_de_passe)
+
     if agent:
         return {"success": True, "employe": agent}
-    return {"success": False}
+
+    if error == "role_denied":
+        return JSONResponse(
+            status_code=403,
+            content={
+                "success": False,
+                "message": "Accès refusé — rôle non autorisé",
+            },
+        )
+
+    # "not_found" or "wrong_password"
+    return JSONResponse(
+        status_code=401,
+        content={
+            "success": False,
+            "message": "Identifiants invalides",
+        },
+    )
 
 
 @router.post("/agents")
@@ -21,6 +40,7 @@ def create_agent(data: AgentData):
         data.mot_de_passe,
         data.nom,
         data.prenom,
+        data.role,
         data.code_agence,
     )
     return {"success": True}
@@ -44,6 +64,7 @@ def update_agent(matricule: str, data: AgentUpdateData):
         data.nom,
         data.prenom,
         data.mot_de_passe,
+        data.role,
         data.code_agence,
     )
     return {"success": True}

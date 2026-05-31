@@ -44,6 +44,7 @@ class SyncService {
 
   static void setMatricule(int matricule) {
     _cachedMatricule = matricule;
+    print('✓ SyncService.setMatricule: $_cachedMatricule');
   }
 
   // ── Main sync entry point ──────────────────────────────────────────────────
@@ -55,17 +56,22 @@ class SyncService {
     int synced = 0, failed = 0;
 
     try {
+      // ── Resolve matricule from agent_cache if not set yet ─────────────────
+      if (_cachedMatricule == null) {
+        final db   = await LocalDatabase.db;
+        final rows = await db.query('agent_cache', limit: 1);
+        if (rows.isNotEmpty) {
+          _cachedMatricule = rows.first['matricule'] as int?;
+          print('🔄 SyncService: resolved matricule from '
+              'agent_cache: $_cachedMatricule');
+        }
+      }
+
+      if (_cachedMatricule == null) {
+        print('⚠️ SyncService: no matricule available — skipping voyage sync');
+      }
+
       // ── Step 0: Sync offline voyages from voyages_cache ──────────────────
-      //
-      // Offline voyages are stored in voyages_cache with:
-      //   • a negative local id  (-(timestamp % 999999 + 1))
-      //   • _is_pending = true
-      //
-      // After the server confirms a voyage we:
-      //   1. Replace the negative id with the real server id in cache.
-      //   2. Patch every ticket that was sold against the local id so it
-      //      now references the real id — critical for correct reporting.
-      // ─────────────────────────────────────────────────────────────────────
       if (_cachedMatricule != null) {
         final matriculeNonProg = -_cachedMatricule!;
         final cached = await VoyageDao.getVoyages(matriculeNonProg) ?? [];
@@ -74,26 +80,26 @@ class SyncService {
             .where((v) => v['_is_pending'] == true)
             .toList();
 
-        print('🔄 SyncService: ${pendingList.length} offline voyage(s) to sync…');
+        print('🔄 SyncService: ${pendingList.length} offline voyage(s) to sync '
+            '(matricule=$_cachedMatricule, key=$matriculeNonProg)');
 
         for (final v in pendingList) {
-          final localId =
-              ((v['id_voyage'] ?? v['id']) as num).toInt();
+          final localId = ((v['id_voyage'] ?? v['id']) as num).toInt();
 
+          // Build the POST body — only send what the backend VenteData expects
           final body = <String, dynamic>{
             'id_ligne':        v['id_ligne'],
-            'depart':          v['depart']          ?? '',
-            'arrivee':         v['arrivee']         ?? '',
-            'nom_ligne':       v['nom_ligne']       ?? '',
-            'type':            'spontané',
-            'statut':          'actif',
+            'type':            'non programmé',
             'matricule_agent': v['matricule_agent'],
-            'id_appareil':     v['id_appareil']     ?? 0,
+            'id_appareil':     v['id_appareil'] ?? 0,
             'code_agence':     v['code_agence'],
-            'date_heure':      v['date_heure'],
+            'date_heure':      v['date_heure'] ??
+                DateTime.now().toIso8601String(),
           };
 
-          if (v['id_billet'] != null) body['id_billet'] = v['id_billet'];
+          print('📤 Posting offline voyage localId=$localId '
+              'to ${ApiConstants.createVoyage}');
+          print('   body: $body');
 
           try {
             final response = await http
@@ -104,13 +110,15 @@ class SyncService {
                 )
                 .timeout(ApiConstants.defaultTimeout);
 
+            print('   → HTTP ${response.statusCode}: ${response.body}');
+
             if (response.statusCode == 200 || response.statusCode == 201) {
               final data = jsonDecode(response.body) as Map<String, dynamic>;
 
               if (data['success'] == true || data['id_voyage'] != null) {
-                final realId = data['id_voyage'] as int?;
+                final realId = (data['id_voyage'] as num?)?.toInt();
 
-                // 1. Update the voyage cache entry
+                // 1. Swap negative local id → real server id in cache
                 await VoyageDao.replacePendingVoyageInCache(
                   matriculeNonProg: matriculeNonProg,
                   localId:          localId,
@@ -124,8 +132,7 @@ class SyncService {
                     serverStatut: 'actif',
                   );
 
-                  // 2. Patch every ticket sold against the local negative id
-                  //    so they reference the real server id instead.
+                  // 2. Patch tickets that were sold against the local id
                   await _patchTicketVoyageId(
                     localId: localId,
                     realId:  realId,
@@ -135,19 +142,20 @@ class SyncService {
                 print('✅ Offline voyage $localId → server id: $realId');
                 synced++;
               } else {
-                print('⚠️ Offline voyage $localId rejected: '
-                    '${data['message']}');
+                print('⚠️ Offline voyage $localId rejected by server: '
+                    '${data['message'] ?? data}');
               }
             } else {
-              print('⚠️ Offline voyage $localId HTTP ${response.statusCode}');
+              print('⚠️ Offline voyage $localId HTTP ${response.statusCode}: '
+                  '${response.body}');
             }
           } catch (e) {
-            // Network unavailable — leave in cache, retry on next reconnect.
+            // Network still unavailable — leave pending, retry on next reconnect
             print('❌ Offline voyage $localId sync failed: $e');
           }
         }
 
-        // ── Also drain the legacy pending_voyages table (if any old rows) ──
+        // ── Drain legacy pending_voyages table ───────────────────────────────
         final legacyPending = await VoyageDao.getPendingVoyages();
         if (legacyPending.isNotEmpty) {
           print('🔄 Draining ${legacyPending.length} '
@@ -155,8 +163,18 @@ class SyncService {
 
           for (final row in legacyPending) {
             final legacyId   = row['id'] as int;
-            final legacyBody = jsonDecode(row['data'] as String)
-                as Map<String, dynamic>;
+            final legacyBody =
+                jsonDecode(row['data'] as String) as Map<String, dynamic>;
+
+            // Strip fields the backend doesn't know about
+            legacyBody.remove('depart');
+            legacyBody.remove('arrivee');
+            legacyBody.remove('nom_ligne');
+            legacyBody.remove('statut');
+            legacyBody.remove('id_billet');
+            legacyBody['type'] = 'non programmé';
+
+            print('📤 Legacy voyage $legacyId: $legacyBody');
 
             try {
               final response = await http
@@ -167,12 +185,14 @@ class SyncService {
                   )
                   .timeout(ApiConstants.defaultTimeout);
 
+              print('   → HTTP ${response.statusCode}: ${response.body}');
+
               if (response.statusCode == 200 || response.statusCode == 201) {
                 final data =
                     jsonDecode(response.body) as Map<String, dynamic>;
 
                 if (data['success'] == true || data['id_voyage'] != null) {
-                  final voyageId = data['id_voyage'] as int?;
+                  final voyageId = (data['id_voyage'] as num?)?.toInt();
                   if (voyageId != null) {
                     await VoyageDao.saveVoyageStatut(
                       voyageId,
@@ -193,11 +213,6 @@ class SyncService {
       }
 
       // ── Step 1: Sync pending tickets ──────────────────────────────────────
-      //
-      // NOTE: tickets sold against a pending voyage have a negative id_voyage.
-      // We skip those here — they will be retried after the voyage is synced
-      // and _patchTicketVoyageId gives them the real id.
-      // ─────────────────────────────────────────────────────────────────────
       final toSync = await TicketDao.getUnsyncedTickets();
       final readyToSync =
           toSync.where((t) => ((t['id_voyage'] as num?) ?? 0) > 0).toList();
@@ -211,10 +226,8 @@ class SyncService {
       for (final ticket in readyToSync) {
         final localId = ticket['id'] as int;
 
-        if (_cachedMatricule == null &&
-            ticket['matricule_agent'] != null) {
-          _cachedMatricule =
-              (ticket['matricule_agent'] as num).toInt();
+        if (_cachedMatricule == null && ticket['matricule_agent'] != null) {
+          _cachedMatricule = (ticket['matricule_agent'] as num).toInt();
         }
 
         try {
@@ -245,8 +258,7 @@ class SyncService {
               .timeout(ApiConstants.defaultTimeout);
 
           if (response.statusCode == 200) {
-            final data =
-                jsonDecode(response.body) as Map<String, dynamic>;
+            final data = jsonDecode(response.body) as Map<String, dynamic>;
 
             if (data['success'] == true) {
               await TicketDao.markSynced(
@@ -254,19 +266,15 @@ class SyncService {
               await LogDao.insertLog(
                 idTicketLocal: localId,
                 statut:        'synced',
-                message:
-                    'Synchronisé avec succès (restauration réseau)',
+                message:       'Synchronisé avec succès (restauration réseau)',
               );
-              print('✅ Ticket $localId → server id: '
-                  '${data['id_ticket']}');
+              print('✅ Ticket $localId → server id: ${data['id_ticket']}');
               synced++;
             } else {
-              throw Exception(
-                  data['error'] ?? 'Réponse serveur invalide');
+              throw Exception(data['error'] ?? 'Réponse serveur invalide');
             }
           } else {
-            throw Exception(
-                'HTTP ${response.statusCode}: ${response.body}');
+            throw Exception('HTTP ${response.statusCode}: ${response.body}');
           }
         } catch (e) {
           print('❌ Ticket $localId failed: $e');
@@ -280,17 +288,15 @@ class SyncService {
         }
       }
 
-      // ── Step 2: Sync pending voyage clôtures ──────────────────────────────
+      // ── Step 2: Sync pending clôtures ─────────────────────────────────────
       if (failed > 0) {
         print('⚠️ Skipping clôtures — $failed ticket(s) still unsynced');
       } else {
         final pendingClotures = await VoyageDao.getPendingClotures();
-        print(
-            '🔄 Syncing ${pendingClotures.length} pending clôture(s)…');
+        print('🔄 Syncing ${pendingClotures.length} pending clôture(s)…');
 
         for (final cloture in pendingClotures) {
           final idVente = cloture['id_voyage'] as int;
-          // Skip if this is a local negative id — voyage not on server yet
           if (idVente < 0) continue;
 
           try {
@@ -302,8 +308,7 @@ class SyncService {
                 .timeout(ApiConstants.defaultTimeout);
 
             if (response.statusCode == 200) {
-              final data =
-                  jsonDecode(response.body) as Map<String, dynamic>;
+              final data = jsonDecode(response.body) as Map<String, dynamic>;
 
               if (data['success'] == true) {
                 await VoyageDao.markClotureSynced(idVente);
@@ -328,45 +333,41 @@ class SyncService {
       }
 
       // ── Step 3: Sync pending reopens ──────────────────────────────────────
-      // ── Step 3: Sync pending reopens ──────────────────────────────────────
-final pendingReopens = await VoyageDao.getPendingReopens();
-print('🔄 Syncing ${pendingReopens.length} pending reopen(s)…');
+      final pendingReopens = await VoyageDao.getPendingReopens();
+      print('🔄 Syncing ${pendingReopens.length} pending reopen(s)…');
 
-for (final reopen in pendingReopens) {
-  final idVente = reopen['id_voyage'] as int;
-  final scope   = reopen['scope'] as String? ?? 'single';
-  if (idVente < 0) continue;
+      for (final reopen in pendingReopens) {
+        final idVente = reopen['id_voyage'] as int;
+        final scope   = reopen['scope'] as String? ?? 'single';
+        if (idVente < 0) continue;
 
-  try {
-    final response = await http
-        .put(
-          Uri.parse(ApiConstants.reopenVoyage(idVente)),
-          headers: {'Content-Type': 'application/json'},
-        )
-        .timeout(ApiConstants.reopenTimeout);
+        try {
+          final response = await http
+              .put(
+                Uri.parse(ApiConstants.reopenVoyage(idVente)),
+                headers: {'Content-Type': 'application/json'},
+              )
+              .timeout(ApiConstants.reopenTimeout);
 
-    if (response.statusCode == 200 ||
-        response.statusCode == 409 ||
-        response.statusCode == 404 ||
-        response.statusCode == 400) {
-      // 200 = reopened ✅
-      // 409 = already active ✅ (our goal anyway)
-      // 400 = already active (some backends) ✅
-      // 404 = voyage deleted from server — clear it ✅
-      await VoyageDao.markReopenSynced(idVente);
-      await VoyageDao.clearVoyageStatut(idVente);
-      print('✅ Reopen synced for vente $idVente (scope=$scope, HTTP ${response.statusCode})');
-      synced++;
-    } else {
-      print('⚠️ Reopen HTTP ${response.statusCode} for vente $idVente');
-    }
-  } on TimeoutException {
-    // Server unreachable — leave pending, retry next sync
-    print('⏱ Reopen timeout for vente $idVente — will retry');
-  } catch (e) {
-    print('❌ Reopen sync failed for vente $idVente: $e');
-  }
-}
+          if (response.statusCode == 200 ||
+              response.statusCode == 409 ||
+              response.statusCode == 400 ||
+              response.statusCode == 404) {
+            await VoyageDao.markReopenSynced(idVente);
+            await VoyageDao.clearVoyageStatut(idVente);
+            print('✅ Reopen synced for vente $idVente '
+                '(scope=$scope, HTTP ${response.statusCode})');
+            synced++;
+          } else {
+            print('⚠️ Reopen HTTP ${response.statusCode} '
+                'for vente $idVente');
+          }
+        } on TimeoutException {
+          print('⏱ Reopen timeout for vente $idVente — will retry');
+        } catch (e) {
+          print('❌ Reopen sync failed for vente $idVente: $e');
+        }
+      }
 
       // ── Step 4: Sync pending scan logs ────────────────────────────────────
       final pendingScans = await TicketDao.getUnsyncedScanLogs();
@@ -375,10 +376,8 @@ for (final reopen in pendingReopens) {
       for (final scan in pendingScans) {
         final localId = scan['id'] as int;
 
-        if (_cachedMatricule == null &&
-            scan['matricule_agent'] != null) {
-          _cachedMatricule =
-              (scan['matricule_agent'] as num).toInt();
+        if (_cachedMatricule == null && scan['matricule_agent'] != null) {
+          _cachedMatricule = (scan['matricule_agent'] as num).toInt();
         }
 
         try {
@@ -403,19 +402,16 @@ for (final reopen in pendingReopens) {
               .timeout(ApiConstants.defaultTimeout);
 
           if (response.statusCode == 200) {
-            final data =
-                jsonDecode(response.body) as Map<String, dynamic>;
+            final data = jsonDecode(response.body) as Map<String, dynamic>;
 
             if (data['success'] == true) {
               await TicketDao.markScanLogSynced(localId);
               print('✅ Scan log $localId synced');
             } else {
-              throw Exception(
-                  data['error'] ?? 'Réponse serveur invalide');
+              throw Exception(data['error'] ?? 'Réponse serveur invalide');
             }
           } else {
-            throw Exception(
-                'HTTP ${response.statusCode}: ${response.body}');
+            throw Exception('HTTP ${response.statusCode}: ${response.body}');
           }
         } catch (e) {
           print('❌ Scan log $localId failed: $e');
@@ -434,17 +430,13 @@ for (final reopen in pendingReopens) {
 
   // ── Private: patch tickets after offline voyage is confirmed ──────────────
 
-  /// After an offline voyage is confirmed by the server, all tickets sold
-  /// against the local negative id must reference the real server id so that:
-  ///   • the next sync attempt POSTs them to the right voyage;
-  ///   • historical exports show the correct voyage id.
   static Future<void> _patchTicketVoyageId({
     required int localId,
     required int realId,
   }) async {
     if (localId == realId) return;
     try {
-      final db = await LocalDatabase.db;
+      final db    = await LocalDatabase.db;
       final count = await db.update(
         'ticket_vendu_local',
         {'id_voyage': realId},
@@ -452,8 +444,7 @@ for (final reopen in pendingReopens) {
         whereArgs: [localId],
       );
       if (count > 0) {
-        print('🔁 Patched $count ticket(s): '
-            'id_voyage $localId → $realId');
+        print('🔁 Patched $count ticket(s): id_voyage $localId → $realId');
       }
     } catch (e) {
       print('❌ _patchTicketVoyageId($localId → $realId): $e');
