@@ -84,6 +84,23 @@ class _TicketingPageState extends State<TicketingPage>
     _tabCtrl.animateTo(0);
   }
 
+  // ── Pull-to-refresh handler ───────────────────────────────
+  // Refreshes whichever tab is currently active.
+  // Tab 0 (Nouveau Ticket) and Tab 2 (Passage Gratuit) delegate
+  // to their respective GlobalKey states when possible; for now
+  // a simple setState rebuild is enough since those pages
+  // re-derive their data from the voyage/segment passed in.
+  // Tab 1 (NFC/Scan) does the same.
+  Future<void> _onRefresh() async {
+    // Trigger a rebuild — child pages that hold their own async
+    // state should expose a refresh method and be called here.
+    setState(() {
+      // Bump the gratuit key if we're on tab 2 so PassageSpecialPage
+      // fully reinitialises on pull-to-refresh.
+      if (_activeTab == 2 && _gratuitUnlocked) _gratuitKey++;
+    });
+  }
+
   String get _dep =>
       widget.segment['point_depart']  ?? widget.voyage['depart']  ?? '?';
   String get _arr =>
@@ -137,13 +154,15 @@ class _TicketingPageState extends State<TicketingPage>
         ],
 
         // ── The tab views live here; each child is wrapped in a
-        //    SingleChildScrollView so it participates in the NestedScrollView.
+        //    RefreshIndicator + SingleChildScrollView so it participates
+        //    in the NestedScrollView AND supports pull-to-refresh.
         body: TabBarView(
           controller: _tabCtrl,
           physics: const NeverScrollableScrollPhysics(),
           children: [
             // Tab 0 — Nouveau Ticket
-            _ScrollableTabBody(
+            _RefreshableTabBody(
+              onRefresh: _onRefresh,
               child: NouveauTicketPage(
                 key:    _nouveauKey,
                 voyage: {
@@ -159,7 +178,8 @@ class _TicketingPageState extends State<TicketingPage>
             ),
 
             // Tab 1 — NFC / Scan
-            _ScrollableTabBody(
+            _RefreshableTabBody(
+              onRefresh: _onRefresh,
               child: ScanTabPage(
                 voyage:  widget.voyage,
                 segment: widget.segment,
@@ -167,7 +187,8 @@ class _TicketingPageState extends State<TicketingPage>
             ),
 
             // Tab 2 — Passage Gratuit / Spécial
-            _ScrollableTabBody(
+            _RefreshableTabBody(
+              onRefresh: _onRefresh,
               child: _gratuitUnlocked
                   ? PassageSpecialPage(
                       key:            ValueKey(_gratuitKey),
@@ -369,26 +390,35 @@ class _TicketingPageState extends State<TicketingPage>
   }
 }
 
-// ── Scrollable wrapper for each tab body ──────────────────────
+// ── Refreshable scrollable wrapper for each tab body ─────────
 //
-// NestedScrollView requires each tab's body to use a scroll view
-// that registers with the outer coordinator. Using
-// BouncingScrollPhysics + AlwaysScrollableScrollPhysics ensures
-// the overscroll event bubbles up to collapse/expand the header.
+// Replaces the old _ScrollableTabBody. Wraps the child in a
+// RefreshIndicator so the user can pull down to refresh, while
+// still participating correctly in the NestedScrollView via
+// BouncingScrollPhysics + AlwaysScrollableScrollPhysics.
 
-class _ScrollableTabBody extends StatelessWidget {
+class _RefreshableTabBody extends StatelessWidget {
   final Widget child;
-  const _ScrollableTabBody({required this.child});
+  final Future<void> Function() onRefresh;
+
+  const _RefreshableTabBody({
+    required this.child,
+    required this.onRefresh,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      // Key makes Flutter keep each tab's scroll position independently
-      key: PageStorageKey(child.runtimeType),
-      physics: const BouncingScrollPhysics(
-        parent: AlwaysScrollableScrollPhysics(),
+    return RefreshIndicator(
+      color:        AppTheme.navyMid,
+      onRefresh:    onRefresh,
+      child: SingleChildScrollView(
+        // Key makes Flutter keep each tab's scroll position independently
+        key: PageStorageKey(child.runtimeType),
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
+        child: child,
       ),
-      child: child,
     );
   }
 }

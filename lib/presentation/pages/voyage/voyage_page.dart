@@ -321,6 +321,13 @@ class _VoyageProgrammePageState extends State<VoyageProgrammePage>
   }
 
   // ─────────────────────────────────────────────────────────────
+  // Pull-to-refresh — reloads both tabs
+  // ─────────────────────────────────────────────────────────────
+  Future<void> _onRefresh() async {
+    await Future.wait([_fetchProgrammes(), _fetchNonProgrammes()]);
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // Open "Ajouter voyage" sheet
   // ─────────────────────────────────────────────────────────────
   Future<void> _openAjouterVoyageSheet() async {
@@ -1792,55 +1799,69 @@ Fichiers joints : ${files.map((f) => f.path.split('/').last).join(', ')}
           ]),
         Expanded(
           child: voyagesProgrammes.isEmpty
-              ? _buildEmpty(t.aucunVoyageProgramme)
-              : ListView.builder(
-                  padding:   const EdgeInsets.fromLTRB(16, 14, 16, 40),
-                  itemCount: voyagesProgrammes.length,
-                  itemBuilder: (_, i) {
-                    final v         = voyagesProgrammes[i] as Map<String, dynamic>;
-                    final isCloture = v['statut'] == 'cloture';
-                    final isActive  = i == activeIdx;
-                    final isLocked  = !isCloture && !isActive;
+              ? RefreshIndicator(
+                  color:     AppTheme.navyMid,
+                  onRefresh: _onRefresh,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: SizedBox(
+                      height: MediaQuery.of(context).size.height * 0.5,
+                      child:  _buildEmpty(t.aucunVoyageProgramme),
+                    ),
+                  ),
+                )
+              : RefreshIndicator(
+                  color:     AppTheme.navyMid,
+                  onRefresh: _onRefresh,
+                  child: ListView.builder(
+                    padding:   const EdgeInsets.fromLTRB(16, 14, 16, 40),
+                    itemCount: voyagesProgrammes.length,
+                    itemBuilder: (_, i) {
+                      final v         = voyagesProgrammes[i] as Map<String, dynamic>;
+                      final isCloture = v['statut'] == 'cloture';
+                      final isActive  = i == activeIdx;
+                      final isLocked  = !isCloture && !isActive;
 
-                    final Color accent, bgColor, borderColor;
-                    if (isCloture) {
-                      accent      = Colors.grey;
-                      bgColor     = Colors.grey.shade50;
-                      borderColor = Colors.grey.shade200;
-                    } else if (isActive) {
-                      accent      = AppTheme.navyMid;
-                      bgColor     = const Color(0xFFEBF0FF);
-                      borderColor = AppTheme.navyLight;
-                    } else {
-                      accent      = Colors.orange.shade700;
-                      bgColor     = Colors.orange.shade50;
-                      borderColor = Colors.orange.shade200;
-                    }
+                      final Color accent, bgColor, borderColor;
+                      if (isCloture) {
+                        accent      = Colors.grey;
+                        bgColor     = Colors.grey.shade50;
+                        borderColor = Colors.grey.shade200;
+                      } else if (isActive) {
+                        accent      = AppTheme.navyMid;
+                        bgColor     = const Color(0xFFEBF0FF);
+                        borderColor = AppTheme.navyLight;
+                      } else {
+                        accent      = Colors.orange.shade700;
+                        bgColor     = Colors.orange.shade50;
+                        borderColor = Colors.orange.shade200;
+                      }
 
-                    return _buildVoyageCard(
-                      voyage:      v,
-                      accent:      accent,
-                      bgColor:     bgColor,
-                      borderColor: borderColor,
-                      isActive:    isActive,
-                      isCloture:   isCloture,
-                      isLocked:    isLocked,
-                      isPending:   false,
-                      onTap: isCloture
-                          ? () => _reopenVoyage(v)
-                          : isLocked
-                              ? _showLockedSnack
-                              : () => _openVoyage(v),
-                      extraLabel: isCloture
-                          ? t.appuyerReouvrirLabel
-                          : isLocked
-                              ? t.enAttenteVoyagePrecedent
-                              : null,
-                      extraLabelColor: isCloture
-                          ? Colors.grey.shade400
-                          : Colors.orange.shade600,
-                    );
-                  },
+                      return _buildVoyageCard(
+                        voyage:      v,
+                        accent:      accent,
+                        bgColor:     bgColor,
+                        borderColor: borderColor,
+                        isActive:    isActive,
+                        isCloture:   isCloture,
+                        isLocked:    isLocked,
+                        isPending:   false,
+                        onTap: isCloture
+                            ? () => _reopenVoyage(v)
+                            : isLocked
+                                ? _showLockedSnack
+                                : () => _openVoyage(v),
+                        extraLabel: isCloture
+                            ? t.appuyerReouvrirLabel
+                            : isLocked
+                                ? t.enAttenteVoyagePrecedent
+                                : null,
+                        extraLabelColor: isCloture
+                            ? Colors.grey.shade400
+                            : Colors.orange.shade600,
+                      );
+                    },
+                  ),
                 ),
         ),
       ],
@@ -1877,62 +1898,76 @@ Fichiers joints : ${files.map((f) => f.path.split('/').last).join(', ')}
               ]),
             Expanded(
               child: voyagesNonProgrammes.isEmpty
-                  ? _buildNonProgEmptyState()
-                  : ListView.builder(
-                      padding:   const EdgeInsets.fromLTRB(16, 14, 16, 100),
-                      itemCount: voyagesNonProgrammes.length,
-                      itemBuilder: (_, i) {
-                        final v         = voyagesNonProgrammes[i]
-                            as Map<String, dynamic>;
-                        final isCloture = v['statut'] == 'cloture';
-                        final isPending = v['_is_pending'] == true;
+                  ? RefreshIndicator(
+                      color:     const Color(0xFF0E7C5B),
+                      onRefresh: _onRefresh,
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        child: SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.5,
+                          child:  _buildNonProgEmptyState(),
+                        ),
+                      ),
+                    )
+                  : RefreshIndicator(
+                      color:     const Color(0xFF0E7C5B),
+                      onRefresh: _onRefresh,
+                      child: ListView.builder(
+                        padding:   const EdgeInsets.fromLTRB(16, 14, 16, 100),
+                        itemCount: voyagesNonProgrammes.length,
+                        itemBuilder: (_, i) {
+                          final v         = voyagesNonProgrammes[i]
+                              as Map<String, dynamic>;
+                          final isCloture = v['statut'] == 'cloture';
+                          final isPending = v['_is_pending'] == true;
 
-                        final Color accent, bgColor, borderColor;
-                        if (isPending) {
-                          accent      = Colors.amber.shade700;
-                          bgColor     = Colors.amber.shade50;
-                          borderColor = Colors.amber.shade200;
-                        } else if (isCloture) {
-                          accent      = Colors.grey;
-                          bgColor     = Colors.grey.shade50;
-                          borderColor = Colors.grey.shade200;
-                        } else {
-                          accent      = const Color(0xFF0E7C5B);
-                          bgColor     = const Color(0xFFE8F5F0);
-                          borderColor = const Color(0xFF6ECBAD);
-                        }
+                          final Color accent, bgColor, borderColor;
+                          if (isPending) {
+                            accent      = Colors.amber.shade700;
+                            bgColor     = Colors.amber.shade50;
+                            borderColor = Colors.amber.shade200;
+                          } else if (isCloture) {
+                            accent      = Colors.grey;
+                            bgColor     = Colors.grey.shade50;
+                            borderColor = Colors.grey.shade200;
+                          } else {
+                            accent      = const Color(0xFF0E7C5B);
+                            bgColor     = const Color(0xFFE8F5F0);
+                            borderColor = const Color(0xFF6ECBAD);
+                          }
 
-                        final String extraLabel;
-                        final Color  extraLabelColor;
-                        if (isPending) {
-                          extraLabel      = t.enAttenteSyncBadge;
-                          extraLabelColor = Colors.amber.shade700;
-                        } else if (isCloture) {
-                          extraLabel      = t.appuyerReouvrirLabel;
-                          extraLabelColor = Colors.grey.shade400;
-                        } else {
-                          final typeRaw = (v['type'] as String?) ?? '';
-                          extraLabel      =
-                              typeRaw.isNotEmpty ? typeRaw : t.spontane;
-                          extraLabelColor = accent;
-                        }
+                          final String extraLabel;
+                          final Color  extraLabelColor;
+                          if (isPending) {
+                            extraLabel      = t.enAttenteSyncBadge;
+                            extraLabelColor = Colors.amber.shade700;
+                          } else if (isCloture) {
+                            extraLabel      = t.appuyerReouvrirLabel;
+                            extraLabelColor = Colors.grey.shade400;
+                          } else {
+                            final typeRaw = (v['type'] as String?) ?? '';
+                            extraLabel      =
+                                typeRaw.isNotEmpty ? typeRaw : t.spontane;
+                            extraLabelColor = accent;
+                          }
 
-                        return _buildVoyageCard(
-                          voyage:      v,
-                          accent:      accent,
-                          bgColor:     bgColor,
-                          borderColor: borderColor,
-                          isActive:    !isCloture && !isPending,
-                          isCloture:   isCloture,
-                          isLocked:    false,
-                          isPending:   isPending,
-                          onTap: isCloture
-                              ? () => _reopenVoyage(v)
-                              : () => _openVoyage(v),
-                          extraLabel:      extraLabel,
-                          extraLabelColor: extraLabelColor,
-                        );
-                      },
+                          return _buildVoyageCard(
+                            voyage:      v,
+                            accent:      accent,
+                            bgColor:     bgColor,
+                            borderColor: borderColor,
+                            isActive:    !isCloture && !isPending,
+                            isCloture:   isCloture,
+                            isLocked:    false,
+                            isPending:   isPending,
+                            onTap: isCloture
+                                ? () => _reopenVoyage(v)
+                                : () => _openVoyage(v),
+                            extraLabel:      extraLabel,
+                            extraLabelColor: extraLabelColor,
+                          );
+                        },
+                      ),
                     ),
             ),
           ],
