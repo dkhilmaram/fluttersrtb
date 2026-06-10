@@ -39,6 +39,7 @@ dependencies:
 
   # Printing & PDF
   printing: ^5.13.1
+  sunmi_printer_plus: ^4.1.1   
   pdf: ^3.10.8
 
   # Database

@@ -1,11 +1,11 @@
 class ApiConstants {
   ApiConstants._();
 
-  static const String baseUrl     = 'http://192.168.1.20:8000';
+  static const String baseUrl     = 'http://server680404.ddns.net:8500';
   static const String billetterie = '$baseUrl/billetterie';
 
   // ── Web backend (Node.js)
-  static const String webBaseUrl     = 'http://192.168.1.20:5000'; 
+  static const String webBaseUrl     = 'http://server680404.ddns.net:5002'; 
   static const String agentHeartbeat = '$webBaseUrl/api/sync/heartbeat';
 
   // ── Tickets

@@ -91,9 +91,10 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
     });
   }
 
-void _openGratuit() {
-  widget.onOpenGratuit?.call();
-}
+  void _openGratuit() {
+    widget.onOpenGratuit?.call();
+  }
+
   // ── Toast ──────────────────────────────────────────────────────────────────
 
   void _showToast(String msg, {bool isError = false, bool isWarning = false}) {
@@ -137,9 +138,6 @@ void _openGratuit() {
 
     List<String>? segmentArrets;
 
-    // 1. Fetch voyage-specific ordered stops from the server.
-    //    These come from segment_voyage ordered by `ordre` ASC and are
-    //    already in the correct travel direction for this voyage.
     if (idVente != null) {
       try {
         final r = await http
@@ -155,10 +153,6 @@ void _openGratuit() {
       } catch (_) {}
     }
 
-    // 2. Fetch tarifs for the ligne (prix_map + tarif_types).
-    //    If we already have voyage-specific stops, inject them so the
-    //    server-returned arrets list (which may be template-order) is
-    //    overridden by the actual voyage direction.
     try {
       final r = await http
           .get(Uri.parse('${ApiConstants.billetterie}/ligne/$idLigne/tarifs'))
@@ -166,7 +160,6 @@ void _openGratuit() {
       if (r.statusCode == 200) {
         final d = jsonDecode(r.body) as Map<String, dynamic>;
         if (d['success'] == true) {
-          // Prefer voyage-specific stops; they carry the correct direction.
           if (segmentArrets != null && segmentArrets.isNotEmpty) {
             d['arrets'] = segmentArrets;
           }
@@ -177,10 +170,8 @@ void _openGratuit() {
       }
     } catch (_) {}
 
-    // 3. Offline fallback: use cached tarifs.
     final cached = await VoyageDao.getTarifs(idLigne);
     if (cached != null) {
-      // Try to get voyage-specific stops from the segment cache.
       if (segmentArrets == null && idVente != null) {
         final segCache = await VoyageDao.getSegments(idVente);
         if (segCache != null) {
@@ -214,16 +205,7 @@ void _openGratuit() {
 
   void _applyTarifs(Map<String, dynamic> data, {required bool fromCache}) {
     final rawArrets = List<String>.from(data['arrets'] as List);
-
-    // ── FIX: order stops by the voyage's travel direction ─────────────────
-    // The server now returns stops ordered by `ordre` ASC for the specific
-    // voyage, so they are already in the correct direction.
-    // _orderArretsByDirection only reverses when the last stop does NOT match
-    // the voyage destination — using case-insensitive, trimmed comparison to
-    // avoid spurious reversals caused by capitalisation differences in the DB
-    // (e.g. "Bizerte" vs "bizerte").
     final orderedArrets = _orderArretsByDirection(rawArrets);
-
     final allTarifTypes =
         List<Map<String, dynamic>>.from(data['tarif_types'] as List);
 
@@ -236,7 +218,6 @@ void _openGratuit() {
       );
       tarifTypes         = allTarifTypes;
       isLoading          = false;
-      // Always start from the first stop — index 0.
       _minDepartureIndex = 0;
       pointDepart        = orderedArrets.isNotEmpty ? orderedArrets.first : null;
       pointArrivee       = null;
@@ -258,15 +239,6 @@ void _openGratuit() {
     }
   }
 
-  /// Returns [raw] in the correct travel direction for this voyage.
-  ///
-  /// Comparison is **case-insensitive and trimmed** so that DB inconsistencies
-  /// like "Bizerte" vs "bizerte" never cause a spurious reversal.
-  ///
-  /// If the last element already matches the voyage destination → keep order.
-  /// If the first element matches the voyage destination → reverse.
-  /// Otherwise (no match at either end) → keep order as received from server,
-  /// which is already sorted by `ordre` ASC.
   List<String> _orderArretsByDirection(List<String> raw) {
     if (raw.isEmpty) return raw;
 
@@ -276,17 +248,8 @@ void _openGratuit() {
     final lastNorm  = raw.last.trim().toLowerCase();
     final firstNorm = raw.first.trim().toLowerCase();
 
-    if (lastNorm == dest) {
-      // Already in the right direction.
-      return raw;
-    }
-    if (firstNorm == dest) {
-      // List is reversed — flip it.
-      return raw.reversed.toList();
-    }
-
-    // Destination not found at either end — the stops may be a subset of
-    // the full route (partial voyage). Trust the server's ordre-sorted order.
+    if (lastNorm == dest) return raw;
+    if (firstNorm == dest) return raw.reversed.toList();
     return raw;
   }
 
@@ -295,7 +258,6 @@ void _openGratuit() {
   List<String> get _departureArrets {
     if (arrets.isEmpty) return [];
     final from = _minDepartureIndex.clamp(0, arrets.length - 1);
-    // Last stop can never be a departure (nothing after it).
     if (from >= arrets.length - 1) return [];
     return arrets.sublist(from, arrets.length - 1);
   }
@@ -351,96 +313,168 @@ void _openGratuit() {
       pointArrivee != null &&
       pointDepart != pointArrivee;
 
-
-// ══════════════════════════════════════════════════════════════════════════════
-// _saveTicket  —  full rewrite
-//
-// Key contract:
-//   • Each ticket unit (quantite=N → N units) gets its OWN DB row and its OWN
-//     numero_titre / QR payload.
-//   • Offline  → save each unit locally (pending), skip printing entirely.
-//   • Online   → print ALL units first (one print job, N stubs).
-//                 If printing fails → abort, nothing saved.
-//                 If printing ok   → save each unit individually to server.
-//   • montant_total stored per-row = prix_unitaire  (not the batch total).
-// ══════════════════════════════════════════════════════════════════════════════
-
-Future<void> _saveTicket({
-  required String snapDep,
-  required String snapArr,
-  required String snapTarif,
-  required int    snapQte,
-  required int    snapPrixU,
-  required int    snapPrixT,
-}) async {
-  final idVente   = widget.voyage['id']              as int?;
-  final matricule = widget.voyage['matricule_agent'] as int?;
-
-  if (idVente == null) {
-    OfflineToastNotification.show(context);
-    return;
-  }
-
-  if (!mounted) return;
-  setState(() => isSaving = true);
-
-  final snapDate  = DateTime.now();
-  final snapAgent = matricule ?? 0;
-  final t         = AppLocalizations.of(context)!;
-
-  // ── 1. Generate one unique ID + QR payload per physical ticket ──────────
-  //
-  // IDs are created here — before printing or saving — so the QR codes
-  // embedded on the printed stubs are identical to what ends up in the DB.
-  // We never call generateId() twice for the same ticket.
-
-  final List<Map<String, String>> ticketUnits = [];
-  for (int i = 0; i < snapQte; i++) {
-    final id      = await TicketData.generateId();
-    final payload = jsonEncode({
-      'id':    id,
-      'vente': idVente,
-      'seg':   0,
-      'dep':   snapDep,
-      'arr':   snapArr,
-      'tarif': snapTarif,
-      'pu':    snapPrixU,
-      'agent': snapAgent,
-      'date':  snapDate.toIso8601String(),
-      'idx':   i + 1,
-      'total': snapQte,
-    });
-    ticketUnits.add({'id': id, 'qr': payload});
-  }
-
-  // ── 2. Shared helper: build the per-unit payload for TicketRepository ───
-
-  Map<String, dynamic> _unitPayload(String numeroTitre) => {
-    'id_voyage':       idVente,
-    'id_segment':      0,
-    'point_depart':    snapDep,
-    'point_arrivee':   snapArr,
-    'type_tarif':      snapTarif,
-    'quantite':        1,          // always 1 — each row = one physical ticket
-    'prix_unitaire':   snapPrixU,
-    'montant_total':   snapPrixU,  // per-row total = unit price (not batch total)
-    'matricule_agent': snapAgent,
-    'numero_titre':    numeroTitre,
-  };
-
   // ══════════════════════════════════════════════════════════════════════════
-  // OFFLINE BRANCH
-  //
-  // No connectivity → queue every unit locally as 'pending'.
-  // Printing is deliberately skipped: an unconfirmed sale must not be printed.
+  // _saveTicket
   // ══════════════════════════════════════════════════════════════════════════
 
-  if (isOffline) {
+  Future<void> _saveTicket({
+    required String snapDep,
+    required String snapArr,
+    required String snapTarif,
+    required int    snapQte,
+    required int    snapPrixU,
+    required int    snapPrixT,
+  }) async {
+    final idVente   = widget.voyage['id']              as int?;
+    final matricule = widget.voyage['matricule_agent'] as int?;
+
+    if (idVente == null) {
+      OfflineToastNotification.show(context);
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() => isSaving = true);
+
+    final snapDate  = DateTime.now();
+    final snapAgent = matricule ?? 0;
+    final t         = AppLocalizations.of(context)!;
+
+    // ── 1. Generate one unique ID + QR payload per physical ticket ──────────
+    final List<Map<String, String>> ticketUnits = [];
+    for (int i = 0; i < snapQte; i++) {
+      final id      = await TicketData.generateId();
+      final payload = jsonEncode({
+        'id':    id,
+        'vente': idVente,
+        'seg':   0,
+        'dep':   snapDep,
+        'arr':   snapArr,
+        'tarif': snapTarif,
+        'pu':    snapPrixU,
+        'agent': snapAgent,
+        'date':  snapDate.toIso8601String(),
+        'idx':   i + 1,
+        'total': snapQte,
+      });
+      ticketUnits.add({'id': id, 'qr': payload});
+    }
+
+    // ── 2. Shared helper: per-unit payload for TicketRepository ─────────────
+    Map<String, dynamic> unitPayload(String numeroTitre) => {
+      'id_voyage':       idVente,
+      'id_segment':      0,
+      'point_depart':    snapDep,
+      'point_arrivee':   snapArr,
+      'type_tarif':      snapTarif,
+      'quantite':        1,
+      'prix_unitaire':   snapPrixU,
+      'montant_total':   snapPrixU,
+      'matricule_agent': snapAgent,
+      'numero_titre':    numeroTitre,
+    };
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // OFFLINE BRANCH — print first, then save locally
+    // ══════════════════════════════════════════════════════════════════════════
+    if (isOffline) {
+      // a) Build TicketData for the printer
+      final ticket = TicketData.fromVoyageMap(
+        voyage: widget.voyage,
+        dep:    snapDep,
+        arr:    snapArr,
+        tarif:  snapTarif,
+        qte:    snapQte,
+        prixU:  snapPrixU,
+        total:  snapPrixT,
+      );
+
+      // b) Print first
+      final printed = await PrinterService.instance.printTicket(
+        ticket:      ticket,
+        ticketUnits: ticketUnits,
+      );
+
+      // c) Print failed → abort, nothing saved
+      if (!printed) {
+        if (mounted) {
+          _showToast(t.impressionEchouee, isError: true);
+          setState(() => isSaving = false);
+        }
+        return;
+      }
+
+      // d) Print succeeded → save locally
+      bool    anyError  = false;
+      String? lastError;
+
+      for (final unit in ticketUnits) {
+        final result = await TicketRepository.saveTicket(unitPayload(unit['id']!));
+        if (!result.success) {
+          anyError  = true;
+          lastError = result.error;
+        }
+      }
+
+      if (!mounted) return;
+
+      if (!anyError) {
+        final usedIndex = arrets.indexOf(snapDep);
+        setState(() {
+          ticketsVendus += snapQte;
+          montantTotal  += snapPrixT;
+          if (usedIndex > _minDepartureIndex) _minDepartureIndex = usedIndex;
+          pointArrivee   = null;
+          quantite       = 1;
+          isOffline      = true;
+        });
+        _showToast(t.horsLigneTicketSauvegarde, isWarning: true);
+        widget.onTicketSold?.call();
+      } else {
+        _showToast(t.ticketErreur(lastError ?? t.inconnu), isError: true);
+      }
+
+      if (mounted) setState(() => isSaving = false);
+      return;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // ONLINE BRANCH — print FIRST, then persist
+    // ══════════════════════════════════════════════════════════════════════════
+
+    // a) Build TicketData for the printer (header/route metadata)
+    final ticket = TicketData.fromVoyageMap(
+      voyage: widget.voyage,
+      dep:    snapDep,
+      arr:    snapArr,
+      tarif:  snapTarif,
+      qte:    snapQte,
+      prixU:  snapPrixU,
+      total:  snapPrixT,
+    );
+
+    // b) Print — one job containing all N stubs.
+    //    No discoverPrinters() needed: SUNMI built-in printer is always present.
+    final printed = await PrinterService.instance.printTicket(
+      ticket:      ticket,
+      ticketUnits: ticketUnits,
+    );
+
+    // c) Print failed → abort, nothing saved.
+    if (!printed) {
+      if (mounted) {
+        _showToast(t.impressionEchouee, isError: true);
+        setState(() => isSaving = false);
+      }
+      return;
+    }
+
+    // d) Print succeeded → persist each unit as its own server row.
     bool   anyError = false;
     String? lastError;
 
     for (final unit in ticketUnits) {
-      final result = await TicketRepository.saveTicket(_unitPayload(unit['id']!));
+      final result = await TicketRepository.saveTicket(unitPayload(unit['id']!));
       if (!result.success) {
         anyError  = true;
         lastError = result.error;
@@ -457,102 +491,22 @@ Future<void> _saveTicket({
         if (usedIndex > _minDepartureIndex) _minDepartureIndex = usedIndex;
         pointArrivee   = null;
         quantite       = 1;
-        isOffline      = true;
+        isOffline      = false;
       });
-      _showToast(t.horsLigneTicketSauvegarde, isWarning: true);
+
+      _showToast(
+        snapPrixT == 0
+            ? t.passagesGratuitsEnregistres(snapQte)
+            : t.ticketsVendusToast(snapQte, snapPrixT),
+      );
       widget.onTicketSold?.call();
     } else {
       _showToast(t.ticketErreur(lastError ?? t.inconnu), isError: true);
     }
 
     if (mounted) setState(() => isSaving = false);
-    return;
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // ONLINE BRANCH — print FIRST, then persist each unit
-  //
-  // Flow:
-  //   a) Discover printer.
-  //   b) Print all units in one job (N stubs, each with its own QR).
-  //   c) Print failed → abort entirely (nothing is saved).
-  //   d) Print ok    → save each unit to the server individually.
-  //      • Save failed after print → warn agent but do NOT ask to reprint;
-  //        the ticket is already in the passenger's hand.
-  // ══════════════════════════════════════════════════════════════════════════
-
-  // a) Build the TicketData object for the printer (printer uses it for
-  //    header / route metadata; per-unit QRs come from ticketUnits).
-  final ticket = TicketData.fromVoyageMap(
-    voyage: widget.voyage,
-    dep:    snapDep,
-    arr:    snapArr,
-    tarif:  snapTarif,
-    qte:    snapQte,
-    prixU:  snapPrixU,
-    total:  snapPrixT,
-  );
-
-  final printers = await PrinterService.instance.discoverPrinters();
-  final printer  = printers.isNotEmpty ? printers.first : null;
-
-  // b) Print — one job containing all N stubs.
-  final printed = await PrinterService.instance.printTicket(
-    ticket:      ticket,
-    ticketUnits: ticketUnits,   // N units, each with its unique id + qr
-    printer:     printer,
-    format:      PaperFormat.ticket58mm,
-  );
-
-  // c) Printing failed → abort, nothing saved.
-  if (!printed) {
-    if (mounted) {
-      _showToast(t.impressionEchouee, isError: true);
-      setState(() => isSaving = false);
-    }
-    return;
-  }
-
-  // d) Print succeeded → persist each unit as its own server row.
-  bool   anyError = false;
-  String? lastError;
-
-  for (final unit in ticketUnits) {
-    final result = await TicketRepository.saveTicket(_unitPayload(unit['id']!));
-    if (!result.success) {
-      anyError  = true;
-      lastError = result.error;
-    }
-  }
-
-  if (!mounted) return;
-
-  if (!anyError) {
-    final usedIndex = arrets.indexOf(snapDep);
-    setState(() {
-      ticketsVendus += snapQte;
-      montantTotal  += snapPrixT;
-      if (usedIndex > _minDepartureIndex) _minDepartureIndex = usedIndex;
-      pointArrivee   = null;
-      quantite       = 1;
-      isOffline      = false;
-    });
-
-    _showToast(
-      snapPrixT == 0
-          ? t.passagesGratuitsEnregistres(snapQte)
-          : t.ticketsVendusToast(snapQte, snapPrixT),
-    );
-    widget.onTicketSold?.call();
-  } else {
-    // At least one unit failed to save server-side after a successful print.
-    // The stubs are already with the passengers — do NOT ask for a reprint.
-    // Log and show the error; the sync service will retry the failed units.
-    _showToast(t.ticketErreur(lastError ?? t.inconnu), isError: true);
-  }
-
-  if (mounted) setState(() => isSaving = false);
-}
   void _vendreTicket() {
     if (!_canValidate) return;
     final t = AppLocalizations.of(context)!;
@@ -703,9 +657,6 @@ Future<void> _saveTicket({
       ),
     );
   }
-
-
-  
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
@@ -1234,8 +1185,7 @@ Future<void> _saveTicket({
           color: enabled ? null : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color:
-                enabled ? accentGreen : Colors.grey.shade300,
+            color: enabled ? accentGreen : Colors.grey.shade300,
             width: 1.5,
           ),
           boxShadow: enabled
@@ -1255,8 +1205,7 @@ Future<void> _saveTicket({
                 enabled
                     ? Icons.card_membership_rounded
                     : Icons.lock_rounded,
-                color:
-                    enabled ? Colors.white : Colors.grey.shade400,
+                color: enabled ? Colors.white : Colors.grey.shade400,
                 size: 16,
               ),
               const SizedBox(width: 8),
@@ -1560,8 +1509,7 @@ class _PriceCard extends StatelessWidget {
               fontSize: 28,
               fontWeight: FontWeight.bold,
               letterSpacing: -0.5,
-              color:
-                  isFree ? const Color(0xFF16A34A) : navyDark,
+              color: isFree ? const Color(0xFF16A34A) : navyDark,
             ),
           ),
           if (quantite > 1 || discountPct > 0) ...[
@@ -1778,7 +1726,7 @@ class _PrintedTicketWidget extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Merci pour votre voyage',
+                  ' bon voyage',
                   style: TextStyle(
                       fontSize: 9,
                       color: Colors.grey.shade500,
