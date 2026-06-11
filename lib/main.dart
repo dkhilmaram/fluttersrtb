@@ -25,7 +25,7 @@ void main() async {
     print('❌ Error initializing database: $e');
   }
 
-  await PrinterService.instance.init(); // ← add this (binds SUNMI AIDL)
+  await PrinterService.instance.init();
   SyncService.startListening();
   runApp(const SRTBApp());
 }

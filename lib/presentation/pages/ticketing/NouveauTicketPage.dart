@@ -66,6 +66,7 @@ class NouveauTicketPageState extends State<NouveauTicketPage> {
   @override
   void initState() {
     super.initState();
+    debugPrint('🎫 VOYAGE RECU: ${widget.voyage}');
     _fetchData();
   }
 

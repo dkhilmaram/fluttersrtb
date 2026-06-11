@@ -113,20 +113,33 @@ class SegmentRepository:
 
     def copy_segments_from_ligne(self, id_voyage: int, id_ligne: int) -> int:
         """
-        Copy the template segments (id_voyage IS NULL) for a given ligne
-        into segment_voyage rows linked to the new voyage.
+        Copy segments into the new voyage by cloning from the most recent
+        existing voyage of the same ligne.
         Returns the number of segments copied.
         """
         conn = get_db()
         cursor = conn.cursor(dictionary=True)
         try:
-            # Fetch template segments for this ligne
+            # Find the most recent voyage for this ligne (excluding the new one)
+            cursor.execute("""
+                SELECT id_voyage FROM billetterie.segment_voyage
+                WHERE id_ligne = %s AND id_voyage != %s
+                ORDER BY id_voyage DESC LIMIT 1
+            """, (id_ligne, id_voyage))
+            row = cursor.fetchone()
+
+            if not row:
+                return 0
+
+            source_voyage = row['id_voyage']
+
+            # Fetch segments from that source voyage
             cursor.execute("""
                 SELECT id_ligne, point_depart, point_arrivee, ordre
                 FROM billetterie.segment_voyage
-                WHERE id_ligne = %s AND id_voyage IS NULL
+                WHERE id_voyage = %s
                 ORDER BY ordre ASC
-            """, (id_ligne,))
+            """, (source_voyage,))
             templates = cursor.fetchall()
 
             if not templates:

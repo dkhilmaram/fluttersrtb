@@ -1,7 +1,7 @@
 class ApiConstants {
   ApiConstants._();
 
-  static const String baseUrl     = 'http://server680404.ddns.net:8500';
+  static const String baseUrl     = 'http://192.168.1.20:8000';
   static const String billetterie = '$baseUrl/billetterie';
 
   // ── Web backend (Node.js)
@@ -57,4 +57,4 @@ class ApiConstants {
   static const Duration defaultTimeout = Duration(seconds: 6);
   static const Duration actionTimeout  = Duration(seconds: 10);
   static const Duration reopenTimeout  = Duration(seconds: 20);
-}
+} 

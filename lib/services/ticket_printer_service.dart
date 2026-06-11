@@ -4,7 +4,7 @@ import 'ticket_data.dart';
 export 'ticket_data.dart';
 
 import 'printer_service_stub.dart' as _stub;
-// ignore: uri_does_not_exist
+
 import 'printer_service_android.dart' as _droid;
 
 class PrinterService {

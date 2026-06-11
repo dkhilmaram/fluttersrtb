@@ -171,6 +171,7 @@ class _AjouterVoyageSheetState extends State<AjouterVoyageSheet> {
 
       if (res.statusCode == 200 || res.statusCode == 201) {
         final data = jsonDecode(res.body);
+        debugPrint('🚌 REPONSE CREATION VOYAGE: $data');
         if (data['success'] == true || data['id_voyage'] != null) {
           final vid = data['id_voyage'] as int?;
           if (vid != null) {
